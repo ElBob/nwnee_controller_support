@@ -337,4 +337,5 @@ The repo is public, under the MIT license.
 | 2026-09-28 | Public repo, MIT license. Agent rules live in `CLAUDE.md`. |
 | 2026-09-28 | SDL hooks go through SDL's dynamic API jump table, because the game links SDL 2.0.8 statically and symbol interposition can't reach it (re-notes F8). |
 | 2026-09-28 | Test isolation uses the game's `-userdirectory` option (re-notes F10). |
+| 2026-09-28 | Signature entries may name an exported symbol instead of a byte pattern (approved by Robert); patterns remain for code without symbols. Failure behavior is unchanged. |
 | 2026-09-28 | v1 is done when the automated suite passes and Robert signs off after play sessions on desktop and Deck. |

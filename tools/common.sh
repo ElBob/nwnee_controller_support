@@ -11,3 +11,22 @@ NWPAD_DISPLAY="${NWPAD_DISPLAY:-:0}"
 NWN_APPID="${NWN_APPID:-704450}"                  # Steam app id of NWN:EE
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# Import the Plasma session's D-Bus/Wayland/X environment (for kscreen-doctor,
+# kde-inhibit, and the game's XWayland connection) when running over SSH.
+session_env() {
+  local p kv
+  p="$(pgrep -u "$(id -u)" -x plasmashell | head -1)"
+  [ -n "$p" ] || return 1
+  while IFS= read -r -d '' kv; do
+    case "$kv" in DBUS_SESSION_BUS_ADDRESS=*|WAYLAND_DISPLAY=*|XAUTHORITY=*) export "${kv?}" ;; esac
+  done < "/proc/$p/environ"
+}
+
+# SIGTERM, then SIGKILL after a grace period. In a module the game ignores SIGTERM.
+stop_pid() {
+  local pid="$1" grace="${2:-15}"
+  kill "$pid" 2>/dev/null || return 0
+  for _ in $(seq "$((grace * 4))"); do kill -0 "$pid" 2>/dev/null || return 0; sleep 0.25; done
+  kill -9 "$pid" 2>/dev/null || true
+}

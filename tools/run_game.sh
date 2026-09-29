@@ -34,6 +34,13 @@ if ! grep -qx connected /sys/class/drm/card*-*/status 2>/dev/null; then
   echo "no display connected (monitor off or KVM switched away); not launching"; exit 13
 fi
 
+# KDE powers the monitor down when idle, and with the output off KWin doesn't map
+# the window either (re-notes: test box environment). Wake it before launching;
+# an inhibit below keeps it on while the game runs.
+session_env || die "no Plasma session found for $(id -un)"
+kscreen-doctor --dpms on >/dev/null 2>&1 || true
+for _ in $(seq 20); do grep -qx On /sys/class/drm/card*-*/dpms 2>/dev/null && break; sleep 0.25; done
+
 RUN="$NWPAD_STATE/runs/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN"
 
@@ -48,23 +55,22 @@ case "$ISOLATION" in
   *) die "unknown NWPAD_ISOLATION=$ISOLATION" ;;
 esac
 
-# SteamAppId stops the Steam API from relaunching the game through Steam, which
-# would drop the preload and the isolated user directory.
-if [ -z "${XAUTHORITY:-}" ]; then
-  XAUTHORITY="$(ls -t /run/user/"$(id -u)"/xauth_* 2>/dev/null | head -1 || true)"
-fi
-
 TOOLS="$(cd "$(dirname "$0")" && pwd)"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 rm -f "$XDG_RUNTIME_DIR/nwpad.sock"  # stale socket from an earlier run
 
+# SteamAppId stops the Steam API from relaunching the game through Steam, which
+# would drop the preload and the isolated user directory. The game runs on
+# XWayland, so it gets DISPLAY but not the session's WAYLAND_DISPLAY.
 cd "$(dirname "$NWN_BIN")"
-env "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="$XAUTHORITY" \
+env -u WAYLAND_DISPLAY "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="${XAUTHORITY:-}" \
     SteamAppId="$NWN_APPID" SteamGameId="$NWN_APPID" NWPAD_SOCKET=1 \
     LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" \
     "$NWN_BIN" "${GAME_ARGS[@]}" "$@" >"$RUN/game.log" 2>&1 9>&- &
 PID=$!
 echo "$PID" > "$RUN/pid"
+# Hold a screen/power inhibit exactly as long as the game runs.
+kde-inhibit --power --screenSaver tail --pid="$PID" -f /dev/null >/dev/null 2>&1 9>&- &
 
 # Readiness: the control socket answers a ping from the game's frame loop.
 for _ in $(seq "$TIMEOUT"); do
@@ -72,6 +78,6 @@ for _ in $(seq "$TIMEOUT"); do
   if "$TOOLS/nwpadctl" --timeout 3 ping >/dev/null 2>&1; then echo "$RUN"; exit 0; fi
   sleep 1
 done
-kill "$PID" 2>/dev/null || true
+stop_pid "$PID"
 echo "not ready after ${TIMEOUT}s; see $RUN/game.log"
 exit 11

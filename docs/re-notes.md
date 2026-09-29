@@ -12,6 +12,7 @@ Every function, global, offset, and signature the library uses must have an entr
 ## Test box environment
 
 - The game needs a connected monitor. With both DP connectors disconnected (the box's KVM switched away), KWin never maps the window: SDL 2.0.8's `SDL_CreateWindow` blocks in `XIfEvent`, or the game dies on an `XF86VidModeGetModeLine` BadValue X error. `tools/run_game.sh` refuses to launch in that state (exit 13). With the monitor connected, no SDL hints are needed.
+- The same hang happens when the monitor is connected but KDE has powered it down (DRM `dpms` = Off) after idle time. `run_game.sh` wakes it with `kscreen-doctor --dpms on` and holds a `kde-inhibit --power --screenSaver` for as long as the game runs.
 - Steam's launch option for NWN:EE on the box is not usable for tests (it points at an unrelated wrapper), so `run_game.sh` launches the binary directly with `SteamAppId=704450` to stop a relaunch through Steam.
 
 ## Entry template
