@@ -54,10 +54,10 @@ The window half-width starts at 10° and is tuned in feel testing. With only one
 **Device arbitration: last-used device wins.**
 
 - Mouse camera input (including trackpad or gyro mouse output from Steam Input) suspends stick camera control until the mouse has been idle for a short timeout.
-- Keyboard movement (WASD, QE) suspends stick movement until those keys are released.
+- Keyboard movement (WASD, QE) suspends stick movement until those keys are released. **On hold (Robert, 2026-09-29):** not committed for v1. The arbiter code exists but is untested and unsigned-off until Robert decides.
 - The stick takes over again as soon as it leaves the safety deadzone after the other device goes idle.
 
-**Game gating.** Stick movement is blocked in every situation where keyboard movement is blocked: dialog, cutscenes, text input focus, and incapacitating effects. The library injects at a layer where the game's own checks apply (§5). Where it can't, it replicates those checks and tests them explicitly.
+**Game gating: struck (Robert, 2026-09-29).** The library doesn't block stick movement in dialogs or cutscenes. In the game, walking away from a conversation ends it once you get far enough, which can have story consequences, so the stick should behave like the player's own movement. Whatever the game's own movement entry points refuse (F20, F21), they still refuse.
 
 ## 4. Reverse-engineering strategy and findings
 
@@ -117,7 +117,7 @@ These can start immediately, in parallel with M0. Tasks marked "agent" are headl
 
 ### 5.2 Common behavior
 
-- **Injection layer.** Call the same client function the keyboard handler calls, so client-side gating (§3) applies. If the gating lives above that function, replicate the checks and test them.
+- **Injection layer.** Call the same client functions the mouse and keyboard use (F20, F21), so the game's own checks apply. The library adds no gating of its own (§3).
 - **Send rate.** Send on meaningful change: a heading delta above a threshold, or a walk/run/stop transition. Add a keepalive at the cadence observed in `msglog` captures of real keyboard movement, and respect a hard rate cap.
 - **Stop.** Send `AbortDriveControl` (or the equivalent R1 identifies) exactly once when the stick enters the safety deadzone.
 - **Always Run.** Read the client's Always Run state (R7) every frame.
@@ -271,8 +271,7 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Walk/run | Rates match the game's walk and run speeds on either side of the threshold. With Always Run on, it runs at 0.3 deflection. |
 | Direction change | Stick rotation while moving updates the heading without a stop or stutter. |
 | Collision | Pushing into the wall stops progress, and re-steering away works. |
-| Gating | No movement during dialog, cutscene, or chat focus. |
-| Arbitration | Mouse camera movement via xdotool suspends the stick camera until idle. WASD suspends stick movement until released. |
+| Arbitration | Mouse movement suspends the stick camera until idle. (WASD suspending stick movement: on hold, §3.) |
 | Packet shape (Path D) | Our `WalkToWayPoint` messages have the same layout and cadence as captured mouse-drag packets, apart from the target point. |
 | Soak | 10 minutes of randomized input: no crash, no stuck movement, rate cap respected. |
 | End-to-end SDL | Heading and stop tests driven through `uinput_pad.py`. |
@@ -302,7 +301,7 @@ The agent stops and asks Robert:
 | **M1: Camera** | Camera via R7 handler findings; linear stick control; limits, locks, and cutscene honored; mouse arbitration. | Camera, limits, locks, and camera arbitration tests pass. |
 | **M2: Movement gate** | R3 senders located; `msglog` captures of real keyboard packets; hand-built bearing experiments; Path A or B recommendation. | Human checkpoint. |
 | **M3: Analog movement** | Drag-emulation movement (Path D), with stop and send-rate limiting. | Heading, non-quantization, facing-follows-movement, stop, and direction-change tests pass. |
-| **M4: Complete behavior** | Walk/run and Always Run, gating, keyboard arbitration, config file. | Full live suite and soak pass; overhead within budget; desktop feel sign-off. |
+| **M4: Complete behavior** | Walk/run and Always Run, config file. (Gating struck; keyboard arbitration on hold, §3.) | Full live suite and soak pass; overhead within budget; desktop feel sign-off. |
 | **M5: Release** | Release build; Steam Input layouts for Xbox and Deck; README (install, launch options, Steam Input setup, multiplayer note); Deck validation. | Game runs normally with all signatures deliberately broken (features off, logged). **v1 done:** Robert signs off after real play sessions on desktop and Deck. |
 
 ## 10. Deployment
@@ -335,7 +334,6 @@ The repo is public, under the MIT license.
 | Unattended loading doesn't work cleanly | Medium | Slow middle loop | Three approaches, timeboxed; xdotool as the last resort. |
 | EE client is stripped and version tracking matches poorly | Medium | More manual RE | 1.69 symbols; runtime tracing via `msglog` and Frida. |
 | Direct camera writes get overwritten | Medium | Extra hook needed | Hook the camera update function (§6.2). |
-| Client-side gating lives above the injection point | Medium | Movement in dialog or cutscenes | Replicate the checks; the gating tests catch it. |
 | Steam Deck behaves differently (gamescope, SDL build, input path) | Low–Medium | Deck target slips | Manual Deck validation in M5; passthrough layout. |
 | Game update lands mid-project | Low (no updates in years) | Signatures break | Hash check before every live session; the agent stops on change. |
 | Session contention with Robert's use of the box | Medium | Interrupted tests or play | Session lock; the agent refuses to launch if the game is already running. |
@@ -361,3 +359,4 @@ The repo is public, under the MIT license.
 | 2026-09-28 | M2 gate (Robert), refined: stick directions within a window around 90/180/270° from camera forward strafe or backpedal as the E/S/Q keys do, and everything else drags. From rest the first direction picks the mode, strafe/backpedal becomes drag when the stick leaves its window, and drag never switches back. |
 | 2026-09-29 | M3 (Robert, option (b)): the strafe/backpedal windows are measured from the character's facing, not the camera's; strafe and backpedal keep the character's facing, as the keys do. |
 | 2026-09-29 | Stop tolerance raised from 300 ms (an initial guess) to 450 ms to match the game (Robert). The stop measures 0.43 s; releasing the game's own movement keys takes about 0.37 s (re-notes F22). |
+| 2026-09-29 | Gating struck (Robert): stick movement isn't blocked in dialogs or cutscenes, because walking away from a conversation is a legitimate player action with story consequences. Keyboard arbitration (WASD suspends the stick) is on hold, not committed for v1. |
