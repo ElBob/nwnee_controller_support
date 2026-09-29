@@ -95,10 +95,32 @@ Every function, global, offset, and signature the library uses must have an entr
 - Use: R1 can start without `tools/fetch_server.sh`, and it's the same build as the client.
 - Confidence: confirmed.
 
+### F13: `+TestNewModule` loads a module unattended
+- Binary / hash: nwmain-linux 6d19c39b
+- What: `nwmain-linux +TestNewModule "<module name>"` starts the in-process server, loads the module, and drops a default character into it with no UI interaction. Other options present as strings: `+LoadNewModule`, `+connect`, `+password`, `+connect_lobby`, `-dmc`, `-noaliases`.
+- Evidence: run 20260928-213602 with `"Contest Of Champions 0492"` (a stock module in `data/mod`): the log shows `Loading Module`, and a screenshot (local `artifacts/` only) shows the character in the arena. Build v89.8193.37-17.
+- Use: unattended loading, approach 1 (plan §8.2). Answers the rest of Q7. A stock module is enough for camera work until `nwpad_test.mod` exists.
+- Note: once in a module, the game ignores SIGTERM (still running after 25 s), so the test fixture falls back to SIGKILL.
+- Confidence: confirmed.
+
+### F14: Client camera control (static analysis)
+- Binary / hash: nwmain-linux 6d19c39b
+- What:
+  - `CNWCModule::TurnCamera(float delta, int direct)` and `TiltCamera(float delta, int direct)` return immediately when bit 0x10 (yaw) or 0x20 (pitch) of the dword at `module+0x2bc` is set. These are the script camera locks.
+  - With `direct` = 1 the delta is added to the camera object's yaw at `+0x88` or pitch at `+0x8c`. This is the mouse path: `CClientExoAppInternal::PerformXMouseMoveAction` / `PerformYMouseMoveAction`. With `direct` = 0 it's added at `+0x58` / `+0x60`, which is the keyboard path from `CClientExoAppInternal::UpdateCamera`, driven by a rate the caller decays each frame. A nonzero delta sets bit 0 of `module+0x134` and `module+0x280` = 1.
+  - The camera object comes from `module+0xe8`, then virtual call `[0xf0](-1)`, then virtual call `[0x48]`.
+  - Units are degrees. The mouse turn delta is `dx × -75 × 0.2 / (screen_width / 1920 / 0.01)`, i.e. -0.15° per pixel at 1920 wide, so moving right decreases yaw.
+  - `CNWCModule::GetCameraMinPitch()` / `GetCameraMaxPitch()` read `module+0x2ac` / `+0x2b0`, with a fallback when the value is negative.
+- Module access: `g_pAppManager` (exported) points to a `CAppManager` whose first field is the `CClientExoApp*`. All 365 call sites of `CClientExoApp::GetModule()` load it as `mov rdi,[g_pAppManager]; mov rdi,[rdi]`. `CClientExoApp::GetModule()` and `GetModuleCamera()` forward to the internal app at `+0x8`.
+- Use: M1 can call `TurnCamera(delta, 1)` / `TiltCamera(delta, 1)` exactly as the mouse does. That uses the game's own setter, and the locks are honored for free.
+- Open: does the game clamp direct pitch to the limits? What distinguishes `+0x58` from `+0x88` (current vs. target)? Runtime confirmation is still pending (outer tier step 3).
+- Evidence: `objdump -d` of the functions named above; float constants read from `.rodata`.
+- Confidence: likely (static only).
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). Confirm the game's yaw direction and zero point in M1, and adapt in the backend rather than in the core.
-- **Right stick sign:** stick right currently decreases yaw (turns clockwise). Confirm against the game's camera in M1.
+- **Right stick sign:** stick right currently decreases yaw (turns clockwise). The game's mouse path also decreases yaw when moving right (F14), so the signs agree; confirm the feel in M1.
 
 ## Open questions
 
@@ -107,8 +129,8 @@ Every function, global, offset, and signature the library uses must have an entr
 | Q1 | Full `DriveControl` payload layout, including bit-packed fields | R1 |
 | Q2 | Does the server honor an arbitrary bearing, and can facing differ from movement direction? | R1, R8, M2 |
 | Q3 | ~~Does `nwmain-linux` export symbols?~~ Yes (F9) | R2 |
-| Q4 | Where does the client store camera yaw, pitch, limits, and locks? | R7 |
+| Q4 | Where does the client store camera yaw, pitch, limits, and locks? (Static answer in F14; runtime confirmation pending) | R7 |
 | Q5 | Where does the client store Always Run state? | R7 |
 | Q6 | ~~Is there dormant controller code from the console builds?~~ No (F11) | R6 |
-| Q7 | Command-line options for loading a save or module? (User directory: `-userdirectory`, F10) | R5 |
+| Q7 | ~~Command-line options for loading a save or module?~~ `+TestNewModule` (F13); user directory: `-userdirectory` (F10) | R5 |
 | Q8 | What does `m_fDriveModeMoveFactor` control? | R1 |
