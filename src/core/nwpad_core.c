@@ -15,6 +15,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->run_threshold = 0.6f;
     cfg->run_hysteresis = 0.05f;
     cfg->mouse_idle_ms = 300;
+    cfg->strafe_window_deg = 10.0f;
 }
 
 static const char *skip_ws(const char *s) {
@@ -55,6 +56,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
             else if (!strcmp(key, "run_threshold")) { cfg->run_threshold = (float)v; applied++; }
             else if (!strcmp(key, "run_hysteresis")) { cfg->run_hysteresis = (float)v; applied++; }
             else if (!strcmp(key, "mouse_idle_ms")) { cfg->mouse_idle_ms = (uint32_t)v; applied++; }
+            else if (!strcmp(key, "strafe_window")) { cfg->strafe_window_deg = (float)v; applied++; }
         }
         line = end ? end + 1 : NULL;
     }
@@ -287,4 +289,30 @@ const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_patt
         }
     }
     return first;
+}
+
+float nwpad_stick_angle_cw(nwpad_vec2 stick) {
+    return nwpad_wrap_deg(atan2f(stick.x, stick.y) * 57.29577951f);
+}
+
+static bool in_window(float angle, float center, float half) {
+    return fabsf(nwpad_angle_diff(angle, center)) <= half;
+}
+
+nwpad_move_style nwpad_move_style_update(nwpad_move_style prev, nwpad_vec2 stick,
+                                         const nwpad_config *cfg) {
+    if (nwpad_magnitude(stick) < NWPAD_SAFETY_DEADZONE) return NWPAD_STYLE_REST;
+    float a = nwpad_stick_angle_cw(stick), w = cfg->strafe_window_deg;
+    switch (prev) {
+    case NWPAD_STYLE_REST:
+        if (in_window(a, 90.0f, w)) return NWPAD_STYLE_STRAFE_RIGHT;
+        if (in_window(a, 180.0f, w)) return NWPAD_STYLE_BACKPEDAL;
+        if (in_window(a, 270.0f, w)) return NWPAD_STYLE_STRAFE_LEFT;
+        return NWPAD_STYLE_DRAG;
+    case NWPAD_STYLE_STRAFE_RIGHT: return in_window(a, 90.0f, w) ? prev : NWPAD_STYLE_DRAG;
+    case NWPAD_STYLE_BACKPEDAL: return in_window(a, 180.0f, w) ? prev : NWPAD_STYLE_DRAG;
+    case NWPAD_STYLE_STRAFE_LEFT: return in_window(a, 270.0f, w) ? prev : NWPAD_STYLE_DRAG;
+    case NWPAD_STYLE_DRAG: break;
+    }
+    return NWPAD_STYLE_DRAG;
 }

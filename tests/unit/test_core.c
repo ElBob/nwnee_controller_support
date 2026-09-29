@@ -198,6 +198,46 @@ static void test_pattern(void) {
     CHECK(nwpad_pattern_find(hay, 1, &p, &count) == NULL && count == 0); /* shorter than pattern */
 }
 
+static nwpad_vec2 at_cw(float deg) { /* unit stick at an angle clockwise from forward */
+    float r = deg * 0.017453292f;
+    return (nwpad_vec2){sinf(r), cosf(r)};
+}
+
+static void test_move_style(void) {
+    nwpad_move_style s;
+    NEAR(nwpad_stick_angle_cw(at_cw(90)), 90, 1e-3);
+    NEAR(nwpad_stick_angle_cw(at_cw(270)), 270, 1e-3);
+    /* From rest: windows pick strafe/backpedal, everything else drags. */
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(90), &cfg) == NWPAD_STYLE_STRAFE_RIGHT);
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(185), &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(262), &cfg) == NWPAD_STYLE_STRAFE_LEFT);
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(0), &cfg) == NWPAD_STYLE_DRAG);
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(45), &cfg) == NWPAD_STYLE_DRAG);
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(101), &cfg) == NWPAD_STYLE_DRAG); /* just outside */
+    /* Strafe holds inside its window, and leaving it becomes drag for good. */
+    s = nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(90), &cfg);
+    s = nwpad_move_style_update(s, at_cw(97), &cfg);
+    CHECK(s == NWPAD_STYLE_STRAFE_RIGHT);
+    s = nwpad_move_style_update(s, at_cw(120), &cfg);
+    CHECK(s == NWPAD_STYLE_DRAG);
+    s = nwpad_move_style_update(s, at_cw(90), &cfg); /* back into the window: stays drag */
+    CHECK(s == NWPAD_STYLE_DRAG);
+    s = nwpad_move_style_update(s, at_cw(180), &cfg);
+    CHECK(s == NWPAD_STYLE_DRAG);
+    /* Rest resets; a strafe can't hop straight to another window. */
+    s = nwpad_move_style_update(s, (nwpad_vec2){0.01f, 0}, &cfg);
+    CHECK(s == NWPAD_STYLE_REST);
+    s = nwpad_move_style_update(s, at_cw(270), &cfg);
+    CHECK(s == NWPAD_STYLE_STRAFE_LEFT);
+    s = nwpad_move_style_update(s, at_cw(180), &cfg);
+    CHECK(s == NWPAD_STYLE_DRAG);
+    /* Window width follows the config. */
+    nwpad_config wide = cfg;
+    wide.strafe_window_deg = 30;
+    CHECK(nwpad_move_style_update(NWPAD_STYLE_REST, at_cw(115), &wide) == NWPAD_STYLE_STRAFE_RIGHT);
+    CHECK(nwpad_config_parse(&wide, "strafe_window = 15\n") == 1 && wide.strafe_window_deg == 15);
+}
+
 int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
@@ -210,6 +250,7 @@ int main(void) {
     test_config();
     test_json();
     test_pattern();
+    test_move_style();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

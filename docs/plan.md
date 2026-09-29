@@ -143,6 +143,7 @@ The library has few settings, because tuning lives in Steam Input. The file is `
 | `run_threshold` | 0.6 | Raw magnitude where walk turns into run. |
 | `run_hysteresis` | 0.05 | Band around the threshold. |
 | `mouse_idle_ms` | 300 | Idle time before the stick regains the camera. |
+| `strafe_window` | 10° | Half-width of the strafe/backpedal windows around 90/180/270° (§3). |
 
 The safety deadzone is fixed at 0.05 raw magnitude and isn't configurable. The values above are starting points, confirmed during feel sign-off (M4).
 

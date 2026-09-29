@@ -18,6 +18,7 @@ typedef struct {
     float run_threshold;      /* raw magnitude where walk becomes run */
     float run_hysteresis;     /* total band width around the threshold */
     uint32_t mouse_idle_ms;   /* mouse idle time before the stick regains the camera */
+    float strafe_window_deg;  /* half-width of the strafe/backpedal windows (plan §3) */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);
@@ -57,6 +58,25 @@ nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick_after_deadzone,
                                             float camera_yaw_deg, bool always_run,
                                             nwpad_move_mode prev_mode,
                                             const nwpad_config *cfg);
+
+/* ---- Movement style (plan §3, decided at the M2 gate) ----
+ * DRAG walks along the stick and faces it (like holding the mouse on the
+ * ground). The others keep facing the camera, as the E / S / Q keys do. */
+typedef enum {
+    NWPAD_STYLE_REST = 0,
+    NWPAD_STYLE_DRAG,
+    NWPAD_STYLE_STRAFE_RIGHT,
+    NWPAD_STYLE_BACKPEDAL,
+    NWPAD_STYLE_STRAFE_LEFT,
+} nwpad_move_style;
+
+/* Stick angle clockwise from forward, in [0, 360): right 90, back 180, left 270. */
+float nwpad_stick_angle_cw(nwpad_vec2 stick);
+/* From rest, the first direction picks the style (inside a window: strafe or
+ * backpedal; otherwise drag). Strafe/backpedal becomes drag when the stick
+ * leaves its window; drag stays drag; the deadzone returns to rest. */
+nwpad_move_style nwpad_move_style_update(nwpad_move_style prev, nwpad_vec2 stick_after_deadzone,
+                                         const nwpad_config *cfg);
 
 /* ---- Send-rate limiting (plan §5.2) ---- */
 typedef struct {
