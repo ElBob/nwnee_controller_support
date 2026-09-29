@@ -189,3 +189,46 @@ def test_strafe_turns_into_drag_and_drag_stays_drag(home):
     home("release")
     time.sleep(0.6)
     assert home("state")["move_style"] == "rest"
+
+
+def steady_speed(ctl, stick=None, walk_to_mode=None, secs=1.4):
+    """Server-side speed between 0.6 s and secs, pushing straight ahead."""
+    _, c0, _ = snapshot(ctl)
+    if stick is not None:
+        ctl("stick", **stick)
+    else:
+        f = math.radians(c0["facing"])
+        ctl("walk_to", x=c0["x"] + 8 * math.cos(f), y=c0["y"] + 8 * math.sin(f), mode=walk_to_mode)
+    time.sleep(0.6)
+    d, a, _ = snapshot(ctl)
+    t_a = d["t_ms"]
+    time.sleep(secs - 0.6)
+    d, b, _ = snapshot(ctl)
+    mode = d["move_mode"]
+    ctl("release")
+    time.sleep(0.6)
+    return math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / ((d["t_ms"] - t_a) / 1000.0), mode
+
+
+@pytest.mark.parametrize("always_run", [False, True])
+def test_walk_run(home, always_run):
+    """Stick magnitude picks walk or run at the game's own speeds; Always Run runs
+    at any deflection (plan §3, re-notes F21, F23)."""
+    ctl = home
+    ctl("always_run", on=int(always_run))
+    time.sleep(0.3)
+    assert ctl("state")["always_run"] is always_run
+    try:
+        walk_ref, _ = steady_speed(ctl, walk_to_mode=1)
+        ctl("release")
+        run_ref, _ = steady_speed(ctl, walk_to_mode=2)
+        assert walk_ref < 0.7 * run_ref, (walk_ref, run_ref)
+        low, low_mode = steady_speed(ctl, stick={"ly": 0.3})
+        high, high_mode = steady_speed(ctl, stick={"ly": 0.9})
+        assert high_mode == "run" and high == pytest.approx(run_ref, rel=0.10), (high, run_ref)
+        if always_run:
+            assert low_mode == "run" and low == pytest.approx(run_ref, rel=0.10), (low, run_ref)
+        else:
+            assert low_mode == "walk" and low == pytest.approx(walk_ref, rel=0.10), (low, walk_ref)
+    finally:
+        ctl("always_run", on=0)

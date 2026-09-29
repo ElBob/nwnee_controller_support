@@ -51,5 +51,7 @@ bool nwpad_backend_debug_walk_to(float x, float y, int mode);
 /* Debug surface (M3 RE): set the client's drive key state as if W/S/Q/E were
  * held (re-notes F20). */
 bool nwpad_backend_debug_drive_keys(bool w, bool s, bool q, bool e);
+/* Debug surface (tests): set the game's Always Run option (re-notes F23). */
+bool nwpad_backend_debug_set_always_run(bool on);
 
 #endif

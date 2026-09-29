@@ -244,6 +244,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
             snprintf(out, cap, "{\"ok\":false,\"error\":\"drive unavailable\"}");
         else
             snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "always_run") == 0) {
+        /* {"cmd":"always_run","on":1} (tests) */
+        double on = 0;
+        nwpad_json_get_number(request, "on", &on);
+        if (!nwpad_backend_debug_set_always_run(on != 0))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"options unavailable\"}");
+        else
+            snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "release") == 0) {
         g.virt.active = false;
         snprintf(out, cap, "{\"ok\":true}");
@@ -264,9 +272,12 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
         static const char *styles[] = {"rest", "drag", "strafe_right", "backpedal", "strafe_left"};
+        static const char *modes[] = {"idle", "walk", "run"};
         float pf, px, py;
         if (n > 0 && (size_t)n < cap)
-            n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\"", styles[g.move_style]);
+            n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
+                          styles[g.move_style], modes[g.move_mode],
+                          nwpad_backend_always_run() ? "true" : "false");
         if (n > 0 && (size_t)n < cap && nwpad_backend_player_facing(&pf) &&
             nwpad_backend_player_pos(&px, &py))
             n += snprintf(out + n, cap - (size_t)n,

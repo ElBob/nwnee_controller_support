@@ -96,7 +96,31 @@ bool nwpad_backend_in_game(void) {
 /* Gating (dialog, cutscene, text focus) is M4. The keyboard handler already
  * applies its own checks to strafe/backpedal. */
 bool nwpad_backend_movement_gated(void) { return false; }
-bool nwpad_backend_always_run(void) { return false; }
+typedef void *(*client_options_fn)(void *client_app);
+typedef void (*set_always_run_fn)(void *client_options, int on);
+#define OPTIONS_ALWAYS_RUN 0x4 /* int (re-notes F23) */
+
+static void *client_options(void) {
+    client_options_fn get = (client_options_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_CLIENT_OPTIONS);
+    if (!get || !b.app_manager || !*b.app_manager) return NULL;
+    void *app = *(void **)*b.app_manager;
+    return app ? get(app) : NULL;
+}
+
+bool nwpad_backend_always_run(void) {
+    void *opt = client_options();
+    int32_t v = 0;
+    if (opt) memcpy(&v, (char *)opt + OPTIONS_ALWAYS_RUN, sizeof v);
+    return v != 0;
+}
+
+bool nwpad_backend_debug_set_always_run(bool on) {
+    void *opt = client_options();
+    set_always_run_fn set = (set_always_run_fn)nwpad_sig(NWPAD_SIG_CLIENT_SET_ALWAYS_RUN);
+    if (!opt || !set) return false;
+    set(opt, on);
+    return true;
+}
 
 bool nwpad_backend_camera_get(nwpad_camera *cam, nwpad_camera_limits *lim) {
     void *mod = module();

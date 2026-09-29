@@ -211,6 +211,12 @@ Every function, global, offset, and signature the library uses must have an entr
 - Client vs. server facing: after moves, the client's facing can settle several degrees off the server's (83.7 vs. 90, 96.6 vs. 90). The drive uses the client's copy.
 - Confidence: confirmed.
 
+### F23: Always Run
+- Binary / hash: nwmain-linux 6d19c39b
+- What: `CClientOptions::SetAlwaysRun(int)` (Ghidra) stores the value at `CClientOptions+0x4`, but only after `SendPlayerToServerInput_AlwaysRun` succeeds. `CClientExoApp::GetClientOptions()` returns the options object. The console command `setalwaysrun <n>` calls the same setter. `UpdateDriveMode` reads `[*internal]+4` to choose the W drive flags (F20), which suggests the internal app's first field is the same `CClientOptions*`.
+- Use: the backend reads `+0x4` for Always Run (plan §3). The walk/run choice for drag is ours: WalkPlayerToPoint mode 1 walks, mode 2 runs (F21). Strafe and backpedal speed stays whatever the game's keys do.
+- Confidence: likely (decompile); runtime check pending.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

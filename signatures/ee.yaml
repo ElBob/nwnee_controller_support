@@ -57,3 +57,9 @@ signatures:
   client_stop_drag_mode:       # CNWCMessage::SendPlayerToServerInput_StopDragMode()
     note: F22
     symbol: _ZN11CNWCMessage36SendPlayerToServerInput_StopDragModeEv
+  client_get_client_options:   # CClientExoApp::GetClientOptions() -> CClientOptions*
+    note: F23
+    symbol: _ZN13CClientExoApp16GetClientOptionsEv
+  client_set_always_run:       # CClientOptions::SetAlwaysRun(int) (tests only)
+    note: F23
+    symbol: _ZN14CClientOptions12SetAlwaysRunEi
