@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Compile signatures/ee.yaml into a C header for the library (run by CMake).
 
-Usage: tools/gen_signatures.py <ee.yaml> <out.h>
+Usage: tools/gen_signatures.py <ee.yaml> <out.h> [--release]
+
+--release leaves out entries marked `debug: true` (control-socket surfaces).
 
 Validates entry shape the same way at build time that sigcheck does offline, so
 a malformed entry fails the build instead of silently disabling a feature.
@@ -39,6 +41,8 @@ def load(path):
             errors.append(f"{key}: needs exactly one of 'symbol' or 'pattern'")
         if "symbol" in sig and ("offset" in sig or "expect" in sig):
             errors.append(f"{key}: 'offset'/'expect' apply to patterns only")
+        if "debug" in sig and not isinstance(sig["debug"], bool):
+            errors.append(f"{key}: 'debug' must be true or false")
     if errors:
         sys.exit("signatures/ee.yaml:\n  " + "\n  ".join(errors))
     return doc.get("binary_sha256"), sigs
@@ -46,7 +50,10 @@ def load(path):
 
 def main():
     src, out = sys.argv[1], sys.argv[2]
+    release = "--release" in sys.argv[3:]
     sha, sigs = load(src)
+    if release:
+        sigs = {k: v for k, v in sigs.items() if not v.get("debug")}
     lines = [
         "/* Generated from signatures/ee.yaml by tools/gen_signatures.py. Do not edit. */",
         "#ifndef NWPAD_SIGNATURES_GEN_H",

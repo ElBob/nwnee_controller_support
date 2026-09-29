@@ -16,3 +16,4 @@ __pycache__/
 *.hak
 nwmain*
 nwserver*
+build-release/

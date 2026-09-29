@@ -12,6 +12,9 @@
 #   <key>:
 #     note: F<n>
 #     pattern: "55 48 89 e5 ?? ?? 41 57"      # hex bytes, "??" for wildcards
+#
+# Add `debug: true` to entries used only by the control socket; release builds
+# (NWPAD_DEBUG_SURFACES=OFF) leave them out entirely.
 #     offset: 0                   # added to the match address
 #     expect: 1                   # required number of matches
 #
@@ -38,12 +41,15 @@ signatures:
     symbol: _ZN13CClientExoApp13GetNWCMessageEv
   cheat_run_script_chunk:  # CNWCMessage::SendPlayerToServerCheat_RunScriptChunk(CExoString const&, unsigned int, int)
     note: F17
+    debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN11CNWCMessage38SendPlayerToServerCheat_RunScriptChunkERK10CExoStringji
   server_first_pc:         # CServerExoApp::GetFirstPCObject() -> object id (0x7f000000 if none)
     note: F19
+    debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN13CServerExoApp16GetFirstPCObjectEv
   server_creature_by_id:   # CServerExoApp::GetCreatureByGameObjectID(unsigned int) -> CNWSCreature*
     note: F19
+    debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN13CServerExoApp25GetCreatureByGameObjectIDEj
   client_get_player_creature:  # CClientExoApp::GetPlayerCreature() -> CNWCCreature*
     note: F20
@@ -62,4 +68,5 @@ signatures:
     symbol: _ZN13CClientExoApp16GetClientOptionsEv
   client_set_always_run:       # CClientOptions::SetAlwaysRun(int) (tests only)
     note: F23
+    debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN14CClientOptions12SetAlwaysRunEi

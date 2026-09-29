@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Launch NWN:EE on the test box with libnwpad.so, under the session lock.
-#   tools/run_game.sh [--timeout SECS] [--lib PATH] [-- extra game args]
+#   tools/run_game.sh [--timeout SECS] [--lib PATH] [--ready socket|log] [-- extra game args]
+# --ready log waits for the library's "first frame" log line instead of a socket
+# ping, for release builds (which have no control socket).
 # Prints the run directory (log, pid) on success. Exit codes:
 #   0 ready, 10 lock held / game already running, 11 not ready before timeout, 12 exited early,
 #   13 no display connected
@@ -8,11 +10,13 @@ set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
 TIMEOUT=120
+READY=socket
 LIB="$HOME/$NWPAD_REMOTE_DIR/build/libnwpad.so"
 while [ $# -gt 0 ]; do
   case "$1" in
     --timeout) TIMEOUT="$2"; shift 2 ;;
     --lib) LIB="$2"; shift 2 ;;
+    --ready) READY="$2"; shift 2 ;;
     --) shift; break ;;
     *) die "unknown option $1" ;;
   esac
@@ -78,7 +82,9 @@ kde-inhibit --power --screenSaver tail --pid="$PID" -f /dev/null >/dev/null 2>&1
 # Readiness: the control socket answers a ping from the game's frame loop.
 for _ in $(seq "$TIMEOUT"); do
   if ! kill -0 "$PID" 2>/dev/null; then echo "game exited early; see $RUN/game.log"; exit 12; fi
-  if "$TOOLS/nwpadctl" --timeout 3 ping >/dev/null 2>&1; then echo "$RUN"; exit 0; fi
+  if [ "$READY" = log ]; then
+    grep -qa '\[nwpad\] first frame' "$RUN/game.log" && { echo "$RUN"; exit 0; }
+  elif "$TOOLS/nwpadctl" --timeout 3 ping >/dev/null 2>&1; then echo "$RUN"; exit 0; fi
   sleep 1
 done
 stop_pid "$PID"

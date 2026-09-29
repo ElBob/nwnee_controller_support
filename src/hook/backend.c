@@ -28,6 +28,9 @@ typedef void *(*get_module_fn)(void *client_app);
 typedef void (*turn_fn)(void *module, float delta_deg, int direct);
 typedef void *(*vcall_int_fn)(void *self, int arg);
 typedef void *(*vcall_fn)(void *self);
+typedef void *(*get_nwc_message_fn)(void *client_app);
+
+#define OBJECT_INVALID 0x7f000000u
 
 static const int camera_sigs[] = {
     NWPAD_SIG_APP_MANAGER, NWPAD_SIG_CLIENT_GET_MODULE, NWPAD_SIG_CAMERA_TURN,
@@ -114,6 +117,7 @@ bool nwpad_backend_always_run(void) {
     return v != 0;
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
 bool nwpad_backend_debug_set_always_run(bool on) {
     void *opt = client_options();
     set_always_run_fn set = (set_always_run_fn)nwpad_sig(NWPAD_SIG_CLIENT_SET_ALWAYS_RUN);
@@ -121,6 +125,7 @@ bool nwpad_backend_debug_set_always_run(bool on) {
     set(opt, on);
     return true;
 }
+#endif
 
 bool nwpad_backend_camera_get(nwpad_camera *cam, nwpad_camera_limits *lim) {
     void *mod = module();
@@ -147,16 +152,15 @@ bool nwpad_backend_camera_set(const nwpad_camera *next) {
     return true;
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
 /* CExoString as the game lays it out (re-notes F17). */
 typedef struct {
     const char *str;
     uint32_t len;
 } exo_string;
 
-typedef void *(*get_nwc_message_fn)(void *client_app);
 typedef void (*run_script_chunk_fn)(void *nwc_message, const exo_string *code, uint32_t oid, int wrap);
 
-#define OBJECT_INVALID 0x7f000000u
 
 bool nwpad_backend_run_script_chunk(const char *code) {
     get_nwc_message_fn get_msg = (get_nwc_message_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_NWC_MESSAGE);
@@ -170,7 +174,24 @@ bool nwpad_backend_run_script_chunk(const char *code) {
     send(msg, &s, OBJECT_INVALID, 1); /* the sender copies the string */
     return true;
 }
+#endif
 
+typedef void *(*player_creature_fn)(void *client_app);
+typedef int (*walk_to_point_fn)(void *client_internal, float x, float y, float z, int mode,
+                                uint32_t target_oid, int ring);
+
+/* CNWCCreature position (re-notes F20). */
+#define CLIENT_CREATURE_POS_Z 0x40
+
+static void *client_internal(void) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    void *app = app_manager && *app_manager ? *(void **)*app_manager : NULL;
+    return app ? *(void **)((char *)app + 0x8) : NULL;
+}
+
+static void *player_creature(void);
+
+#ifdef NWPAD_DEBUG_SURFACES
 typedef uint32_t (*first_pc_fn)(void *server_app);
 typedef void *(*creature_by_id_fn)(void *server_app, uint32_t oid);
 
@@ -202,13 +223,6 @@ bool nwpad_backend_creature(float *x, float *y, float *facing_deg) {
     return true;
 }
 
-typedef void *(*player_creature_fn)(void *client_app);
-typedef int (*walk_to_point_fn)(void *client_internal, float x, float y, float z, int mode,
-                                uint32_t target_oid, int ring);
-
-/* CNWCCreature position (re-notes F20). */
-#define CLIENT_CREATURE_POS_Z 0x40
-
 bool nwpad_backend_debug_walk_to(float x, float y, int mode) {
     player_creature_fn get_pc = (player_creature_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_PLAYER_CREATURE);
     walk_to_point_fn walk = (walk_to_point_fn)nwpad_sig(NWPAD_SIG_CLIENT_WALK_PLAYER_TO_POINT);
@@ -228,12 +242,6 @@ bool nwpad_backend_debug_walk_to(float x, float y, int mode) {
 #define DRIVE_KEY_Q 0x1c8
 #define DRIVE_KEY_E 0x1cc
 
-static void *client_internal(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    void *app = app_manager && *app_manager ? *(void **)*app_manager : NULL;
-    return app ? *(void **)((char *)app + 0x8) : NULL;
-}
-
 static void write_int(void *base, size_t offset, int32_t v) { memcpy((char *)base + offset, &v, sizeof v); }
 
 bool nwpad_backend_debug_drive_keys(bool w, bool s, bool q, bool e) {
@@ -246,8 +254,6 @@ bool nwpad_backend_debug_drive_keys(bool w, bool s, bool q, bool e) {
     return true;
 }
 
-static void *player_creature(void);
-
 void *nwpad_backend_debug_object(const char *name) {
     void *mod = module();
     if (strcmp(name, "server_pc") == 0) return server_pc();
@@ -257,6 +263,7 @@ void *nwpad_backend_debug_object(const char *name) {
     if (strcmp(name, "camera") == 0) return mod ? camera_object(mod) : NULL;
     return NULL;
 }
+#endif /* NWPAD_DEBUG_SURFACES */
 
 /* ---- Movement (M3) ---- */
 

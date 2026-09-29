@@ -1,0 +1,45 @@
+# Every entry deliberately broken, for the M5 acceptance test (plan §9).
+binary_sha256: 6d19c39bc646af5ddbc333ff31797a4acd9019506bcb45ef1b93b1bd5925e700
+signatures:
+  app_manager:
+    note: F14
+    symbol: _ZN6nwpad6broken11app_managerEv
+  client_get_module:
+    note: F14
+    symbol: _ZN6nwpad6broken17client_get_moduleEv
+  camera_turn:
+    note: F15
+    symbol: _ZN6nwpad6broken11camera_turnEv
+  camera_tilt:
+    note: F15
+    symbol: _ZN6nwpad6broken11camera_tiltEv
+  client_get_nwc_message:
+    note: F17
+    symbol: _ZN6nwpad6broken22client_get_nwc_messageEv
+  cheat_run_script_chunk:
+    note: F17
+    symbol: _ZN6nwpad6broken22cheat_run_script_chunkEv
+  server_first_pc:
+    note: F19
+    symbol: _ZN6nwpad6broken15server_first_pcEv
+  server_creature_by_id:
+    note: F19
+    symbol: _ZN6nwpad6broken21server_creature_by_idEv
+  client_get_player_creature:
+    note: F20
+    symbol: _ZN6nwpad6broken26client_get_player_creatureEv
+  client_walk_player_to_point:
+    note: F20
+    symbol: _ZN6nwpad6broken27client_walk_player_to_pointEv
+  client_handle_input_event:
+    note: F21
+    symbol: _ZN6nwpad6broken25client_handle_input_eventEv
+  client_stop_drag_mode:
+    note: F22
+    symbol: _ZN6nwpad6broken21client_stop_drag_modeEv
+  client_get_client_options:
+    note: F23
+    symbol: _ZN6nwpad6broken25client_get_client_optionsEv
+  client_set_always_run:
+    note: F23
+    symbol: _ZN6nwpad6broken21client_set_always_runEv

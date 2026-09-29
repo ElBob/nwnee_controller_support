@@ -26,7 +26,7 @@ add_custom_command(
   OUTPUT ${NWPAD_SIG_HEADER}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/gen
   COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/gen_signatures.py
-          ${NWPAD_SIGNATURES} ${NWPAD_SIG_HEADER}
+          ${NWPAD_SIGNATURES} ${NWPAD_SIG_HEADER} $<$<NOT:$<BOOL:${NWPAD_DEBUG_SURFACES}>>:--release>
   DEPENDS ${NWPAD_SIGNATURES} ${CMAKE_SOURCE_DIR}/tools/gen_signatures.py
   COMMENT "Generating signatures_gen.h from ${NWPAD_SIGNATURES}")
 
@@ -40,6 +40,9 @@ target_link_libraries(nwpad PRIVATE nwpad_core dl Threads::Threads)
 target_compile_definitions(nwpad PRIVATE NWPAD_VERSION="${PROJECT_VERSION}"
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:NWPAD_DEBUG_SURFACES=1>)
 set_target_properties(nwpad PROPERTIES C_VISIBILITY_PRESET hidden)
+if(NOT NWPAD_DEBUG_SURFACES AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_link_options(nwpad PRIVATE -s) # release: no symbol names either
+endif()
 
 enable_testing()
 add_executable(test_core tests/unit/test_core.c)
