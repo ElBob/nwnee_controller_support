@@ -19,6 +19,7 @@ typedef struct {
     float run_hysteresis;     /* total band width around the threshold */
     uint32_t mouse_idle_ms;   /* mouse idle time before the stick regains the camera */
     float strafe_window_deg;  /* half-width of the strafe/backpedal windows (plan §3) */
+    bool hide_cursor;         /* hide the mouse cursor while the sticks are in use */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);

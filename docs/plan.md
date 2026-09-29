@@ -144,6 +144,7 @@ The library has few settings, because tuning lives in Steam Input. The file is `
 | `run_hysteresis` | 0.125 | Width of the band around the threshold. |
 | `mouse_idle_ms` | 300 | Idle time before the stick regains the camera. |
 | `strafe_window` | 10° | Half-width of the strafe/backpedal windows around 90/180/270° (§3). |
+| `hide_cursor` | 1 | Hide the mouse cursor while the sticks are in use; the first mouse motion brings it back (re-notes F24). |
 
 The safety deadzone is fixed at 0.15 raw magnitude and isn't configurable. It was 0.05 until Robert's Xbox Series pad test: after a small push the left stick can settle at 0.084 and keep the character walking until the pad is bumped. The values above are starting points, confirmed during feel sign-off (M4).
 
@@ -364,3 +365,4 @@ The repo is public, under the MIT license.
 | 2026-09-29 | Overhead budget, provisionally (Robert): p99 under 0.1 ms applies to the library's own logic (measured ≤ 20 µs in the soak). Time inside the game functions it calls (≤ 110 µs p99 in total) is reported and revisited later for further improvement. |
 | 2026-09-29 | Feel testing on an Xbox Series pad (Robert): safety deadzone 0.05 → 0.15 (the stick can rest at 0.084 off-centre); run band 0.575–0.625 → 0.725–0.85 (start running above 0.85, back to walking below 0.725). Stopping from a walk re-targets the current position, because the forward tap runs and surged about 1.7 m. |
 | 2026-09-29 | Stop test, walk case (Robert): measure the on-screen stop (450 ms) plus the server reaching the same spot within 1 s. At walking speed the server trails the client and catches up forward, with no surge and no slide-back. |
+| 2026-09-29 | Cursor hiding (Robert): the mouse cursor hides while the sticks are in use and returns on mouse motion, honoring the game's own show/hide requests (config `hide_cursor`, default on). |

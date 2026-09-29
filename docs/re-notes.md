@@ -221,6 +221,13 @@ Every function, global, offset, and signature the library uses must have an entr
 - Runtime: toggling it with `SetAlwaysRun` through the test socket changes `+0x4`, and with it on, a 0.3 deflection runs at the game's run speed (live `test_walk_run`).
 - Confidence: confirmed.
 
+### F24: The game's mouse cursor
+- Binary / hash: nwmain-linux 6d19c39b
+- What: the game uses SDL's hardware cursor: one `SDL_CreateColorCursor` and one `SDL_SetCursor` call site. `SDL_ShowCursor` has four direct call sites: `main` (hide at startup), `CGuiMan::ShowMouse()` (1), `CGuiMan::HideMouse()` (0), and `CCachedMouseCursorManager::SetMouseCursor(...)` (1). The last shows the cursor again every time its shape changes, for example when hovering a door or NPC.
+- Use: the library hooks `SDL_ShowCursor` through the dynamic-API jump table (like F8) and records what the game asks for. While a stick is in use it keeps the cursor hidden and holds back the game's show requests. The first real mouse motion restores the game's last request. `hide_cursor = 0` in the config turns this off.
+- Evidence: `objdump` call-site survey. At runtime (run 20260929-112305), a virtual stick hid the cursor with `game_wants` still true, it stayed hidden after release, and uinput mouse motion restored it. Robert confirmed it visually.
+- Confidence: confirmed.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

@@ -17,6 +17,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->run_hysteresis = 0.125f;
     cfg->mouse_idle_ms = 300;
     cfg->strafe_window_deg = 10.0f;
+    cfg->hide_cursor = true;
 }
 
 static const char *skip_ws(const char *s) {
@@ -58,6 +59,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
             else if (!strcmp(key, "run_hysteresis")) { cfg->run_hysteresis = (float)v; applied++; }
             else if (!strcmp(key, "mouse_idle_ms")) { cfg->mouse_idle_ms = (uint32_t)v; applied++; }
             else if (!strcmp(key, "strafe_window")) { cfg->strafe_window_deg = (float)v; applied++; }
+            else if (!strcmp(key, "hide_cursor")) { cfg->hide_cursor = v != 0; applied++; }
         }
         line = end ? end + 1 : NULL;
     }

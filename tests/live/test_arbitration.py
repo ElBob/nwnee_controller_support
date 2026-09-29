@@ -37,3 +37,26 @@ def test_mouse_suspends_stick_camera(ctl):
     d = ctl("state")
     assert c["camera_owner"] == d["camera_owner"] == "stick", (c, d)
     assert d["camera"]["yaw"] != c["camera"]["yaw"]
+
+
+def test_stick_hides_cursor_until_mouse_moves(ctl):
+    """The cursor hides while a stick is used and returns on mouse motion, back to
+    whatever the game last asked for (Robert's request; re-notes F24)."""
+    assert ctl("state")["cursor"]["hooked"], "SDL_ShowCursor not hooked"
+    x, y = game_window_center()
+    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(x), str(y), "--jiggle", "4"],
+                   check=True, capture_output=True)
+    time.sleep(0.3)
+    c = ctl("state")["cursor"]
+    assert c["shown"] and not c["stick_hidden"], c
+    ctl("stick", rx=0.5)
+    time.sleep(0.3)
+    ctl("release")
+    time.sleep(0.3)
+    c = ctl("state")["cursor"]
+    assert c["stick_hidden"] and not c["shown"], c  # stays hidden after release
+    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(x), str(y), "--jiggle", "4"],
+                   check=True, capture_output=True)
+    time.sleep(0.3)
+    c = ctl("state")["cursor"]
+    assert not c["stick_hidden"] and c["shown"] == c["game_wants"], c

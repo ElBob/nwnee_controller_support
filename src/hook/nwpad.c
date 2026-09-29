@@ -52,6 +52,7 @@ static uint64_t now_ms(void) {
 static struct {
     void (*SwapWindow)(SDL_Window *);  /* original jump-table targets */
     int (*PollEvent)(SDL_Event *);
+    int (*ShowCursor)(int);            /* NULL if not hooked (cursor hiding off) */
     int (*InitSubSystem)(uint32_t);
     int (*NumJoysticks)(void);
     int (*IsGameController)(int);
@@ -95,6 +96,7 @@ static bool dynapi_hook(const char *name, void *hook, void **orig) {
 
 static void nwpad_SwapWindow(SDL_Window *window);
 static int nwpad_PollEvent(SDL_Event *event);
+static int nwpad_ShowCursor(int toggle);
 
 static bool install_hooks(void) {
     void (*get_version)(SDL_version *) =
@@ -115,6 +117,10 @@ static bool install_hooks(void) {
     }
     sdl.SwapWindow = (void (*)(SDL_Window *))swap;
     sdl.PollEvent = (int (*)(SDL_Event *))poll;
+    /* Optional: hiding the cursor while the sticks are in use. */
+    void *show;
+    if (dynapi_hook("SDL_ShowCursor", (void *)nwpad_ShowCursor, &show))
+        sdl.ShowCursor = (int (*)(int))show;
     return true;
 }
 
@@ -134,6 +140,10 @@ static struct {
     nwpad_move_mode move_mode;
     nwpad_move_style move_style;
     nwpad_vec2 last_left, last_right; /* deadzoned sticks this frame (state reports them) */
+    struct {             /* cursor hidden while the sticks are in use (Robert's request) */
+        bool game_wants; /* what the game last asked SDL_ShowCursor for */
+        bool stick_hidden;
+    } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
     struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
@@ -313,8 +323,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
         static const char *modes[] = {"idle", "walk", "run"};
         float pf, px, py;
         if (n > 0 && (size_t)n < cap)
-            n += snprintf(out + n, cap - (size_t)n, ",\"sticks\":{\"left\":%.3f,\"right\":%.3f}",
-                          nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right));
+            n += snprintf(out + n, cap - (size_t)n,
+                          ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
+                          "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s}",
+                          nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
+                          sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
+                          g.cursor.game_wants ? "true" : "false",
+                          sdl.ShowCursor && sdl.ShowCursor(SDL_QUERY) == SDL_ENABLE ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],
@@ -443,6 +458,11 @@ static void nwpad_frame(void) {
 
     g.last_left = left;
     g.last_right = right;
+    if (sdl.ShowCursor && g.cfg.hide_cursor && !g.cursor.stick_hidden &&
+        (nwpad_magnitude(left) > 0 || nwpad_magnitude(right) > 0)) {
+        g.cursor.stick_hidden = true;
+        sdl.ShowCursor(SDL_DISABLE);
+    }
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;
@@ -513,6 +533,18 @@ static void nwpad_SwapWindow(SDL_Window *window) {
     sdl.SwapWindow(window);
 }
 
+/* The game shows the cursor itself whenever its shape changes (hovering a door
+ * or NPC), so while the sticks hide it, remember the game's requests instead of
+ * applying them (re-notes F24). Queries report the game's own view. */
+static int nwpad_ShowCursor(int toggle) {
+    if (toggle == SDL_ENABLE || toggle == SDL_DISABLE) g.cursor.game_wants = toggle == SDL_ENABLE;
+    if (g.cursor.stick_hidden) {
+        if (toggle == SDL_QUERY) return g.cursor.game_wants ? SDL_ENABLE : SDL_DISABLE;
+        return sdl.ShowCursor(SDL_DISABLE) >= 0 ? toggle : -1;
+    }
+    return sdl.ShowCursor(toggle);
+}
+
 static int nwpad_PollEvent(SDL_Event *event) {
     for (;;) {
         int r = sdl.PollEvent(event);
@@ -526,6 +558,10 @@ static int nwpad_PollEvent(SDL_Event *event) {
         if (type == SDL_MOUSEMOTION) {
             g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
+            if (g.cursor.stick_hidden) { /* the mouse is back: show what the game wants */
+                g.cursor.stick_hidden = false;
+                sdl.ShowCursor(g.cursor.game_wants ? SDL_ENABLE : SDL_DISABLE);
+            }
         } else if (type == SDL_KEYDOWN || type == SDL_KEYUP) {
             g.events.keys++;
         }

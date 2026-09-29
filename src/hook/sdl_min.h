@@ -32,6 +32,7 @@ enum {
 };
 
 enum { SDL_INIT_GAMECONTROLLER = 0x00002000u };
+enum { SDL_QUERY = -1, SDL_DISABLE = 0, SDL_ENABLE = 1 };
 
 enum {
     SDL_CONTROLLER_AXIS_LEFTX = 0,
