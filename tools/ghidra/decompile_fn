@@ -19,7 +19,8 @@ if [ -f "$MARKER" ]; then
   "$GHIDRA_HOME/support/analyzeHeadless" "$PROJ" nwpad -process "$NAME" -noanalysis "${SCRIPT_ARGS[@]}" \
     >"$OUT/last-run.log" 2>&1
 else
-  "$GHIDRA_HOME/support/analyzeHeadless" "$PROJ" nwpad -import "$BIN" -overwrite "${SCRIPT_ARGS[@]}" \
+  "$GHIDRA_HOME/support/analyzeHeadless" "$PROJ" nwpad -import "$BIN" -overwrite \
+    -preScript DisableNonReturning.java "${SCRIPT_ARGS[@]}" \
     >"$OUT/last-run.log" 2>&1
   touch "$MARKER"
 fi

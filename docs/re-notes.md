@@ -132,6 +132,18 @@ Every function, global, offset, and signature the library uses must have an entr
 - Use: the M1 backend reads yaw and pitch from `cam+0x54` / `+0x5c`, the limits from the getters, and the locks from `module+0x2bc`, and applies per-frame deltas through `TurnCamera` / `TiltCamera` with `direct` = 1.
 - Confidence: confirmed.
 
+### F16: What the client sends for each kind of movement
+- Binary / hash: nwmain-linux 6d19c39b, nwserver-linux d6d95282
+- Server handler (disassembly of `CNWSMessage::HandlePlayerToServerInputDriveControl`): it reads `float x, float y` (32 bits each), `ReadOBJECTIDServer`, `ReadWORD(12 bits)`, `ReadBYTE`, `ReadBYTE`. The object id must equal the creature's current area id. It then clears actions and calls `AddDriveAction(0xffff, {x, y, 0}, word, byte1, byte2, 2)`. The client sender `SendPlayerToServerInput_DriveControl(Vector const&, uint, ushort, uchar, uchar)` writes the same fields in the same order (major 6, minor 0x1d). Its only caller is `CClientExoAppInternal::UpdateDriveMode`.
+- Runtime capture (gdb breakpoint on the client sender, keys held with xdotool, in `Contest Of Champions 0492`):
+  - The word is the bearing in tenths of a degree (900 = 90.0°), and it equals the camera yaw: 900 at spawn with the camera at 90°, 1416 after the camera was turned. It doesn't change while strafing or backpedaling.
+  - byte1 is a per-packet sequence number. byte2 is the drive flags: W = 3, S = 2, Q = 4, E = 8, and W+Q = 7. The packet `x, y` is the creature's current position.
+  - Packets repeat about every 0.1 s while a key is held. With bearing 90: W moved +Y, S −Y, Q −X, E +X.
+  - So keyboard driving means "face the camera yaw; move forward, back, or strafe relative to it". Free facing exists in the protocol, but relative movement directions come only from the flag combinations.
+- Mouse: holding the left button on the ground (Robert: click-and-drag moves in any direction) sends `SendPlayerToServerInput_WalkToWayPoint` about every 0.14 s, not DriveControl. That's pathfinding to a point, with the character facing its path. In this capture all 24 packets had the same target, so whether the synthetic pointer moved during the drag isn't settled. A/D send `SendPlayerToServerInput_TurnOnSpot` with a continuous facing vector.
+- Bearing override (gdb rewriting the bearing and flags of keyboard packets): inconclusive. The packet positions are the client's own prediction, which uses its real bearing, so client and server disagree. Bearing 0 + W moved +X, and bearing 0 + S moved −X, but 90 / 180 / 45 gave inconsistent directions. Settling this needs the server-side creature position (R4, the socket `state`) and a clear area.
+- Confidence: layout and keyboard semantics confirmed; arbitrary-bearing honoring open.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). Confirm the game's yaw direction and zero point in M1, and adapt in the backend rather than in the core.
@@ -141,7 +153,7 @@ Every function, global, offset, and signature the library uses must have an entr
 
 | ID | Question | Task |
 |---|---|---|
-| Q1 | Full `DriveControl` payload layout, including bit-packed fields | R1 |
+| Q1 | ~~Full `DriveControl` payload layout~~ F16 | R1 |
 | Q2 | Does the server honor an arbitrary bearing, and can facing differ from movement direction? | R1, R8, M2 |
 | Q3 | ~~Does `nwmain-linux` export symbols?~~ Yes (F9) | R2 |
 | Q4 | Where does the client store camera yaw, pitch, limits, and locks? (Static answer in F14; runtime confirmation pending) | R7 |

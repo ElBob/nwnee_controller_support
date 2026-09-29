@@ -7,9 +7,12 @@ uinput device shaped like a QEMU USB tablet (absolute X/Y plus buttons), which
 KWin treats as a real pointer.
 
   tools/uinput_mouse.py --to X Y [--jiggle N] [--interval S]
+  tools/uinput_mouse.py --to X Y --drag DX DY [--hold S]
 
 X Y are X-screen pixel coordinates (as xdotool reports them). --jiggle moves
 the pointer back and forth N times around the target, one event per interval.
+--drag presses the left button at X Y, moves to X+DX Y+DY, holds for S
+seconds, and releases (NWN's click-and-drag movement).
 """
 import argparse
 import os
@@ -38,6 +41,8 @@ def main() -> int:
     ap.add_argument("--to", nargs=2, type=int, metavar=("X", "Y"), required=True)
     ap.add_argument("--jiggle", type=int, default=0)
     ap.add_argument("--interval", type=float, default=0.02)
+    ap.add_argument("--drag", nargs=2, type=int, metavar=("DX", "DY"))
+    ap.add_argument("--hold", type=float, default=1.0, help="drag: seconds to hold at the end point")
     ap.add_argument("--settle", type=float, default=1.0, help="wait for the compositor to add the device")
     a = ap.parse_args()
 
@@ -60,6 +65,17 @@ def main() -> int:
         for i in range(a.jiggle):
             time.sleep(a.interval)
             move(x + (8 if i % 2 == 0 else 0), y)
+        if a.drag:
+            time.sleep(0.1)
+            ui.write(e.EV_KEY, e.BTN_LEFT, 1)
+            ui.syn()
+            steps = 10
+            for i in range(1, steps + 1):
+                time.sleep(a.interval)
+                move(x + a.drag[0] * i / steps, y + a.drag[1] * i / steps)
+            time.sleep(a.hold)
+            ui.write(e.EV_KEY, e.BTN_LEFT, 0)
+            ui.syn()
         time.sleep(0.1)  # let the last events drain before the device goes away
     return 0
 
