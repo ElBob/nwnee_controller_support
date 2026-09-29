@@ -19,8 +19,9 @@ jobs:
         run: cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DNWPAD_DEBUG_SURFACES=OFF && cmake --build build-release -j
       - name: Release library is portable (nothing newer than GLIBC_2.17)
         run: |
-          objdump -T build-release/libnwpad.so | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tee /tmp/glibc
-          ! grep -vxE 'GLIBC_2\.(2\.5|3|4|17)' /tmp/glibc
+          newest=$(objdump -T build-release/libnwpad.so | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -1)
+          echo "newest glibc symbol version: $newest"
+          [ "$(printf '%s\nGLIBC_2.17\n' "$newest" | sort -V | tail -1)" = GLIBC_2.17 ]
       - name: Upload the release library
         uses: actions/upload-artifact@v4
         with:
