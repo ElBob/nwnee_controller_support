@@ -267,7 +267,7 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Facing follows movement | From rest, stick at 45° (drag): displacement matches the stick direction, and facing ends within 5° of the displacement direction. |
 | Strafe and backpedal | From rest, with the stick right, back, and left of the character's facing (inside the windows): displacement matches the stick direction, and facing stays within 5° of its starting value. |
 | Mode transitions | Strafe then rotate the stick out of its window: switches to drag. Drag then rotate into a window: stays drag. |
-| Stop | The character stops within 300 ms of release, and position is stable for 1 s. |
+| Stop | The character stops within 450 ms of release, and position is stable for 1 s. |
 | Walk/run | Rates match the game's walk and run speeds on either side of the threshold. With Always Run on, it runs at 0.3 deflection. |
 | Direction change | Stick rotation while moving updates the heading without a stop or stutter. |
 | Collision | Pushing into the wall stops progress, and re-steering away works. |
@@ -360,3 +360,4 @@ The repo is public, under the MIT license.
 | 2026-09-28 | M2 gate (Robert): the character faces where it walks, like the game's click-and-drag. Free facing is dropped for v1. Movement uses Path D, drag emulation through `WalkToWayPoint` (re-notes F16). |
 | 2026-09-28 | M2 gate (Robert), refined: stick directions within a window around 90/180/270° from camera forward strafe or backpedal as the E/S/Q keys do, and everything else drags. From rest the first direction picks the mode, strafe/backpedal becomes drag when the stick leaves its window, and drag never switches back. |
 | 2026-09-29 | M3 (Robert, option (b)): the strafe/backpedal windows are measured from the character's facing, not the camera's; strafe and backpedal keep the character's facing, as the keys do. |
+| 2026-09-29 | Stop tolerance raised from 300 ms (an initial guess) to 450 ms to match the game (Robert). The stop measures 0.43 s; releasing the game's own movement keys takes about 0.37 s (re-notes F22). |

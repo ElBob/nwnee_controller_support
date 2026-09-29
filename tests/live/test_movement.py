@@ -12,7 +12,7 @@ import pytest
 
 HEADING_TOL = 5.0   # degrees (plan §8.6)
 FACING_TOL = 5.0
-STOP_MS = 300
+STOP_MS = 450  # raised from 300 by Robert to match the game's own keys (plan decision log)
 
 
 def snapshot(ctl):
