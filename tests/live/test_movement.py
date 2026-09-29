@@ -61,6 +61,11 @@ CLIENT_FACING_SETTLE = 10.0  # reset check only; not a test tolerance
 def home(ctl):
     """Put the character back at the spawn point facing 90°, with the camera facing
     the same way (NWScript over the control socket, re-notes F17)."""
+    reset(ctl)
+    return ctl
+
+
+def reset(ctl):
     ctl("release")
     x, y, f = HOME
 
@@ -88,7 +93,6 @@ def home(ctl):
     # re-sent, and the client's copy can differ by a few degrees.
     jump(f + 45)
     jump(f)
-    return ctl
 
 
 def expected_direction(stick_world, facing, style):
@@ -192,7 +196,9 @@ def test_strafe_turns_into_drag_and_drag_stays_drag(home):
 
 
 def steady_speed(ctl, stick=None, walk_to_mode=None, secs=1.4):
-    """Server-side speed between 0.6 s and secs, pushing straight ahead."""
+    """Server-side speed between 0.6 s and secs, pushing straight ahead from the
+    spawn point (reset first, so the arena wall is never in the way)."""
+    reset(ctl)
     _, c0, _ = snapshot(ctl)
     if stick is not None:
         ctl("stick", **stick)
@@ -220,7 +226,6 @@ def test_walk_run(home, always_run):
     assert ctl("state")["always_run"] is always_run
     try:
         walk_ref, _ = steady_speed(ctl, walk_to_mode=1)
-        ctl("release")
         run_ref, _ = steady_speed(ctl, walk_to_mode=2)
         assert walk_ref < 0.7 * run_ref, (walk_ref, run_ref)
         low, low_mode = steady_speed(ctl, stick={"ly": 0.3})

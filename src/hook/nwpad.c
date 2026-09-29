@@ -139,8 +139,10 @@ static void load_config(void) {
     nwpad_config_defaults(&g.cfg);
     const char *home = getenv("HOME");
     const char *xdg = getenv("XDG_CONFIG_HOME");
+    const char *explicit_path = getenv("NWPAD_CONFIG"); /* tests use their own file */
     char path[512];
-    if (xdg && *xdg) snprintf(path, sizeof path, "%s/nwpad/config.toml", xdg);
+    if (explicit_path && *explicit_path) snprintf(path, sizeof path, "%s", explicit_path);
+    else if (xdg && *xdg) snprintf(path, sizeof path, "%s/nwpad/config.toml", xdg);
     else if (home) snprintf(path, sizeof path, "%s/.config/nwpad/config.toml", home);
     else return;
 
@@ -261,14 +263,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
         bool have = nwpad_backend_camera_get(&cam, &lim);
         int n = snprintf(out, cap,
                          "{\"ok\":true,\"frame\":%llu,\"t_ms\":%llu,\"in_game\":%s,"
-                         "\"virtual_stick\":%s,\"camera_owner\":\"%s\",\"movement_owner\":\"%s\","
+                         "\"virtual_stick\":%s,\"camera_owner\":\"%s\","
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
                          "\"filtered\":%llu}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
                          g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
-                         g.arbiter.movement_owned_by_stick ? "stick" : "keyboard",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
         static const char *styles[] = {"rest", "drag", "strafe_right", "backpedal", "strafe_left"};
@@ -400,7 +401,7 @@ static void nwpad_frame(void) {
         }
     }
 
-    nwpad_arbiter_update(&g.arbiter, left, right, t, &g.cfg);
+    nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;
 
@@ -415,7 +416,7 @@ static void nwpad_frame(void) {
     }
 
     float facing;
-    if (!have_cam || !g.arbiter.movement_owned_by_stick || !nwpad_backend_player_facing(&facing))
+    if (!have_cam || !nwpad_backend_player_facing(&facing))
         return;
     nwpad_vec2 move = nwpad_backend_movement_gated() ? (nwpad_vec2){0, 0} : left;
     nwpad_move_intent intent = nwpad_move_intent_compute(
@@ -438,18 +439,6 @@ static void nwpad_SwapWindow(SDL_Window *window) {
     sdl.SwapWindow(window);
 }
 
-static uint8_t move_key_bit(int32_t scancode) {
-    switch (scancode) {
-    case SDL_SCANCODE_W: return NWPAD_KEY_W;
-    case SDL_SCANCODE_A: return NWPAD_KEY_A;
-    case SDL_SCANCODE_S: return NWPAD_KEY_S;
-    case SDL_SCANCODE_D: return NWPAD_KEY_D;
-    case SDL_SCANCODE_Q: return NWPAD_KEY_Q;
-    case SDL_SCANCODE_E: return NWPAD_KEY_E;
-    default: return 0;
-    }
-}
-
 static int nwpad_PollEvent(SDL_Event *event) {
     for (;;) {
         int r = sdl.PollEvent(event);
@@ -463,10 +452,8 @@ static int nwpad_PollEvent(SDL_Event *event) {
         if (type == SDL_MOUSEMOTION) {
             g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
-        } else if ((type == SDL_KEYDOWN || type == SDL_KEYUP) && !event->key.repeat) {
+        } else if (type == SDL_KEYDOWN || type == SDL_KEYUP) {
             g.events.keys++;
-            uint8_t bit = move_key_bit(event->key.scancode);
-            if (bit) nwpad_arbiter_move_key(&g.arbiter, bit, type == SDL_KEYDOWN);
         }
         return r;
     }

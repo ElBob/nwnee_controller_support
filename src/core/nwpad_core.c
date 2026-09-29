@@ -178,7 +178,6 @@ nwpad_camera nwpad_camera_step(nwpad_camera cam, nwpad_vec2 stick, float dt_s,
 void nwpad_arbiter_init(nwpad_arbiter *a) {
     memset(a, 0, sizeof *a);
     a->camera_owned_by_stick = true;
-    a->movement_owned_by_stick = true;
 }
 
 void nwpad_arbiter_mouse_motion(nwpad_arbiter *a, uint64_t now_ms) {
@@ -187,25 +186,12 @@ void nwpad_arbiter_mouse_motion(nwpad_arbiter *a, uint64_t now_ms) {
     a->camera_owned_by_stick = false;
 }
 
-void nwpad_arbiter_move_key(nwpad_arbiter *a, uint8_t key_bit, bool down) {
-    if (down) {
-        a->move_keys_held |= key_bit;
-        a->movement_owned_by_stick = false;
-    } else {
-        a->move_keys_held &= (uint8_t)~key_bit;
-    }
-}
-
-void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
-                          uint64_t now_ms, const nwpad_config *cfg) {
+void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 right, uint64_t now_ms,
+                          const nwpad_config *cfg) {
     if (!a->camera_owned_by_stick) {
         bool mouse_idle = !a->mouse_seen || now_ms - a->last_mouse_ms >= cfg->mouse_idle_ms;
         if (mouse_idle && nwpad_magnitude(right) >= NWPAD_SAFETY_DEADZONE)
             a->camera_owned_by_stick = true;
-    }
-    if (!a->movement_owned_by_stick) {
-        if (a->move_keys_held == 0 && nwpad_magnitude(left) >= NWPAD_SAFETY_DEADZONE)
-            a->movement_owned_by_stick = true;
     }
 }
 

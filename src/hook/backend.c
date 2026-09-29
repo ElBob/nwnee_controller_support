@@ -278,7 +278,7 @@ float nwpad_backend_camera_forward(const nwpad_camera *cam) {
 #define STOP_TAP_MS 60           /* long enough for one drive packet to go out */
 #define WALK_MODE_WALK 1
 #define WALK_MODE_RUN 2
-#define DRAG_LOOKAHEAD 2.0f      /* metres ahead of the character, like a held cursor */
+#define DRAG_LOOKAHEAD 5.0f      /* metres ahead; nearer targets make the server ease off (re-notes F22) */
 /* CClientExoAppInternal input mode byte: 1 while the mouse drags (re-notes F22). */
 #define INPUT_MODE 0x140
 #define INPUT_MODE_NONE 0

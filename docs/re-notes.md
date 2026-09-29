@@ -209,13 +209,15 @@ Every function, global, offset, and signature the library uses must have an entr
   - StopDragMode alone doesn't stop the walk: the character still goes to the last target (1.3–2.4 m with a 2 m lookahead).
   - Robert's method, a forward key tap after ending the drag (`HandleInputEvent(0x5a, 1)`, then `(0x5a, 0)` 60 ms later, which sends AbortDriveControl): server and client stop together (final gap 0.01 m, no slide-back) at 0.43 s, after 1.1–1.75 m of running momentum. That's about the same as releasing the real keys (0.37 s).
 - Client vs. server facing: after moves, the client's facing can settle several degrees off the server's (83.7 vs. 90, 96.6 vs. 90). The drive uses the client's copy.
+- Drag lookahead: with the target 2 m ahead of the (lagging) client position, full stick ran at 2.9–3.0 m/s against 4.0 m/s for a far WalkPlayerToPoint target; the server eases off near its target. With 5 m ahead, the stick runs at the game's full speed. The stop tap makes the lookahead irrelevant on release.
 - Confidence: confirmed.
 
 ### F23: Always Run
 - Binary / hash: nwmain-linux 6d19c39b
 - What: `CClientOptions::SetAlwaysRun(int)` (Ghidra) stores the value at `CClientOptions+0x4`, but only after `SendPlayerToServerInput_AlwaysRun` succeeds. `CClientExoApp::GetClientOptions()` returns the options object. The console command `setalwaysrun <n>` calls the same setter. `UpdateDriveMode` reads `[*internal]+4` to choose the W drive flags (F20), which suggests the internal app's first field is the same `CClientOptions*`.
 - Use: the backend reads `+0x4` for Always Run (plan §3). The walk/run choice for drag is ours: WalkPlayerToPoint mode 1 walks, mode 2 runs (F21). Strafe and backpedal speed stays whatever the game's keys do.
-- Confidence: likely (decompile); runtime check pending.
+- Runtime: toggling it with `SetAlwaysRun` through the test socket changes `+0x4`, and with it on, a 0.3 deflection runs at the game's run speed (live `test_walk_run`).
+- Confidence: confirmed.
 
 ## Conventions to confirm
 

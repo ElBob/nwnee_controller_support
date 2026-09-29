@@ -11,6 +11,12 @@ def test_library_loaded(game):
     assert "[nwpad] version" in log
 
 
+def test_config_applied(game):
+    from conftest import TEST_CONFIG_KEYS
+    log = open(os.path.join(game, "game.log"), errors="replace").read()
+    assert f"config.toml: {TEST_CONFIG_KEYS} setting(s) applied" in log, log[:2000]
+
+
 def test_sigcheck_clean():
     r = subprocess.run(["python3", os.path.join(ROOT, "tools", "sigcheck")],
                        capture_output=True, text=True)

@@ -117,24 +117,20 @@ nwpad_camera nwpad_camera_step(nwpad_camera cam, nwpad_vec2 stick_after_deadzone
                                float dt_s, const nwpad_config *cfg,
                                const nwpad_camera_limits *lim);
 
-/* ---- Device arbitration: last-used device wins (plan §3) ---- */
+/* ---- Camera arbitration: last-used device wins (plan §3) ----
+ * Only the camera is arbitrated. Keyboard vs stick movement is left to the
+ * engine, which gets both through its own entry points (decision log). */
 typedef struct {
     uint64_t last_mouse_ms;
     bool mouse_seen;
-    uint8_t move_keys_held; /* bitmask of WASDQE held */
     bool camera_owned_by_stick;
-    bool movement_owned_by_stick;
 } nwpad_arbiter;
-
-enum { NWPAD_KEY_W = 1, NWPAD_KEY_A = 2, NWPAD_KEY_S = 4, NWPAD_KEY_D = 8,
-       NWPAD_KEY_Q = 16, NWPAD_KEY_E = 32 };
 
 void nwpad_arbiter_init(nwpad_arbiter *a);
 void nwpad_arbiter_mouse_motion(nwpad_arbiter *a, uint64_t now_ms);
-void nwpad_arbiter_move_key(nwpad_arbiter *a, uint8_t key_bit, bool down);
-/* Call once per frame with the deadzoned sticks; updates ownership flags. */
-void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
-                          uint64_t now_ms, const nwpad_config *cfg);
+/* Call once per frame with the deadzoned right stick; updates camera ownership. */
+void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 right, uint64_t now_ms,
+                          const nwpad_config *cfg);
 
 /* ---- Byte patterns (signatures/ee.yaml) ---- */
 #define NWPAD_PATTERN_MAX 64

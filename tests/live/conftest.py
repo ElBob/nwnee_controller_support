@@ -51,9 +51,27 @@ class Ctl:
         self.sock.close()
 
 
+# The library config the tests assume: explicit defaults (plan §6.3), so Robert's
+# own ~/.config/nwpad/config.toml never affects a run. run_game.sh passes this file
+# through NWPAD_CONFIG.
+TEST_CONFIG = """# written by tests/live/conftest.py
+camera_yaw_speed = 180
+camera_pitch_speed = 90
+run_threshold = 0.6
+run_hysteresis = 0.05
+mouse_idle_ms = 300
+strafe_window = 10
+"""
+TEST_CONFIG_KEYS = 6
+
+
 @pytest.fixture(scope="session")
 def game():
     """Launch the game into TEST_MODULE once per session and stop it afterwards."""
+    state = os.environ.get("NWPAD_STATE", os.path.expanduser("~/.nwpad"))
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(state, "config.toml"), "w") as f:
+        f.write(TEST_CONFIG)
     proc = subprocess.run([os.path.join(ROOT, "tools", "run_game.sh"), "--", "+TestNewModule", TEST_MODULE],
                           capture_output=True, text=True)
     if proc.returncode != 0:

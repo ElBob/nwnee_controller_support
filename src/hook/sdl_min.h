@@ -40,9 +40,5 @@ enum {
     SDL_CONTROLLER_AXIS_RIGHTY = 3,
 };
 
-enum { /* SDL_Scancode values for movement keys */
-    SDL_SCANCODE_A = 4, SDL_SCANCODE_D = 7, SDL_SCANCODE_E = 8,
-    SDL_SCANCODE_Q = 20, SDL_SCANCODE_S = 22, SDL_SCANCODE_W = 26,
-};
 
 #endif

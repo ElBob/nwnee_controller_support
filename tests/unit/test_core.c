@@ -140,24 +140,16 @@ static void test_camera(void) {
 static void test_arbitration(void) {
     nwpad_arbiter a; nwpad_arbiter_init(&a);
     nwpad_vec2 zero = {0, 0}, push = {0.8f, 0};
-    CHECK(a.camera_owned_by_stick && a.movement_owned_by_stick);
+    CHECK(a.camera_owned_by_stick);
 
     nwpad_arbiter_mouse_motion(&a, 1000);
     CHECK(!a.camera_owned_by_stick);
-    nwpad_arbiter_update(&a, zero, push, 1100, &cfg); /* mouse not idle yet */
+    nwpad_arbiter_update(&a, push, 1100, &cfg); /* mouse not idle yet */
     CHECK(!a.camera_owned_by_stick);
-    nwpad_arbiter_update(&a, zero, zero, 1400, &cfg); /* idle but stick centered */
+    nwpad_arbiter_update(&a, zero, 1400, &cfg); /* idle but stick centered */
     CHECK(!a.camera_owned_by_stick);
-    nwpad_arbiter_update(&a, zero, push, 1400, &cfg); /* idle + stick deflected */
+    nwpad_arbiter_update(&a, push, 1400, &cfg); /* idle + stick deflected */
     CHECK(a.camera_owned_by_stick);
-
-    nwpad_arbiter_move_key(&a, NWPAD_KEY_W, true);
-    CHECK(!a.movement_owned_by_stick);
-    nwpad_arbiter_update(&a, push, zero, 2000, &cfg); /* key still held */
-    CHECK(!a.movement_owned_by_stick);
-    nwpad_arbiter_move_key(&a, NWPAD_KEY_W, false);
-    nwpad_arbiter_update(&a, push, zero, 2010, &cfg);
-    CHECK(a.movement_owned_by_stick);
 }
 
 static void test_config(void) {

@@ -67,6 +67,7 @@ rm -f "$XDG_RUNTIME_DIR/nwpad.sock"  # stale socket from an earlier run
 cd "$(dirname "$NWN_BIN")"
 env -u WAYLAND_DISPLAY "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="${XAUTHORITY:-}" \
     SteamAppId="$NWN_APPID" SteamGameId="$NWN_APPID" NWPAD_SOCKET=1 \
+    NWPAD_CONFIG="${NWPAD_CONFIG:-$NWPAD_STATE/config.toml}" \
     LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" \
     "$NWN_BIN" "${GAME_ARGS[@]}" "$@" >"$RUN/game.log" 2>&1 9>&- &
 PID=$!

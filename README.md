@@ -19,7 +19,7 @@ Steam Input stays on and is the controller layer. It handles buttons, trackpads,
    LD_PRELOAD="$HOME/.local/lib/nwpad/libnwpad.so:$LD_PRELOAD" %command%
    ```
    Make sure the game runs as the native Linux build, not under Proton.
-4. Optional: tweak `~/.config/nwpad/config.toml` (`camera_yaw_speed`, `camera_pitch_speed`, `run_threshold`, `run_hysteresis`, `mouse_idle_ms`, `strafe_window`).
+4. Optional: tweak `~/.config/nwpad/config.toml` (or point `NWPAD_CONFIG` at another file) (`camera_yaw_speed`, `camera_pitch_speed`, `run_threshold`, `run_hysteresis`, `mouse_idle_ms`, `strafe_window`).
 
 The game log shows a `[nwpad] version ... loaded` line when the library is active. Set `NWPAD_DISABLE=1` to load it inert. To uninstall, remove the launch option.
 
