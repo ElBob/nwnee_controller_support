@@ -1,11 +1,17 @@
-# Byte signatures for nwmain-linux, resolved at load time and checked offline by tools/sigcheck.
+# Signatures for nwmain-linux, resolved at load time and checked offline by tools/sigcheck.
 # Every entry must reference a finding in docs/re-notes.md (CLAUDE.md rule 4).
+# tools/gen_signatures.py compiles this file into the library at build time.
 #
-# Pattern syntax: space-separated hex bytes, "??" for wildcards.
-# Entry shape:
-#   <key>:
+# Each entry is either a symbol or a byte pattern. Prefer symbols: the client
+# exports its C++ symbols (re-notes F9). Use patterns only for code with no symbol.
+#
+#   <key>:                        # lower_snake_case; becomes NWPAD_SIG_<KEY> in C
 #     note: F<n>                  # re-notes finding id
-#     pattern: "55 48 89 e5 ?? ?? 41 57"
+#     symbol: _ZN10CNWCModule10TurnCameraEfi   # exported (mangled) name, resolved with dlsym
+#
+#   <key>:
+#     note: F<n>
+#     pattern: "55 48 89 e5 ?? ?? 41 57"      # hex bytes, "??" for wildcards
 #     offset: 0                   # added to the match address
 #     expect: 1                   # required number of matches
 #

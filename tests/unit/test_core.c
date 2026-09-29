@@ -174,6 +174,25 @@ static void test_json(void) {
           strcmp(v, "ok") == 0); /* "cmd" as a value is skipped */
 }
 
+static void test_pattern(void) {
+    nwpad_pattern p;
+    CHECK(nwpad_pattern_parse("55 48 ?? e5", &p) && p.len == 4 && p.mask[2] == 0 && p.bytes[3] == 0xe5);
+    CHECK(nwpad_pattern_parse("  AB ?  cd ", &p) && p.len == 3 && p.bytes[0] == 0xab && p.mask[1] == 0);
+    CHECK(!nwpad_pattern_parse("", &p));
+    CHECK(!nwpad_pattern_parse("5", &p));
+    CHECK(!nwpad_pattern_parse("zz", &p));
+    CHECK(!nwpad_pattern_parse("555", &p));
+    static const uint8_t hay[] = {0x00, 0x55, 0x48, 0x89, 0xe5, 0x55, 0x48, 0x00, 0xe5, 0x55};
+    int count;
+    nwpad_pattern_parse("55 48 ?? e5", &p);
+    CHECK(nwpad_pattern_find(hay, sizeof hay, &p, &count) == hay + 1 && count == 2);
+    nwpad_pattern_parse("e5 55", &p);
+    CHECK(nwpad_pattern_find(hay, sizeof hay, &p, &count) == hay + 4 && count == 2); /* match at the end */
+    nwpad_pattern_parse("12 34", &p);
+    CHECK(nwpad_pattern_find(hay, sizeof hay, &p, &count) == NULL && count == 0);
+    CHECK(nwpad_pattern_find(hay, 1, &p, &count) == NULL && count == 0); /* shorter than pattern */
+}
+
 int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
@@ -185,6 +204,7 @@ int main(void) {
     test_arbitration();
     test_config();
     test_json();
+    test_pattern();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

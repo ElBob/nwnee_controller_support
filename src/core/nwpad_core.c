@@ -225,3 +225,50 @@ bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t 
     }
     return false;
 }
+
+static int hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+bool nwpad_pattern_parse(const char *text, nwpad_pattern *out) {
+    out->len = 0;
+    const char *p = text;
+    for (;;) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        if (out->len == NWPAD_PATTERN_MAX) return false;
+        const char *tok = p;
+        while (*p && *p != ' ') p++;
+        size_t tlen = (size_t)(p - tok);
+        if ((tlen == 1 && tok[0] == '?') || (tlen == 2 && tok[0] == '?' && tok[1] == '?')) {
+            out->bytes[out->len] = 0;
+            out->mask[out->len] = 0;
+        } else if (tlen == 2 && hex_nibble(tok[0]) >= 0 && hex_nibble(tok[1]) >= 0) {
+            out->bytes[out->len] = (uint8_t)(hex_nibble(tok[0]) << 4 | hex_nibble(tok[1]));
+            out->mask[out->len] = 0xff;
+        } else {
+            return false;
+        }
+        out->len++;
+    }
+    return out->len > 0;
+}
+
+const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_pattern *p,
+                                  int *count) {
+    const uint8_t *first = NULL;
+    *count = 0;
+    if (p->len == 0 || n < p->len) return NULL;
+    for (size_t i = 0; i + p->len <= n; i++) {
+        size_t j = 0;
+        while (j < p->len && (hay[i + j] & p->mask[j]) == p->bytes[j]) j++;
+        if (j == p->len) {
+            if (!first) first = hay + i;
+            (*count)++;
+        }
+    }
+    return first;
+}

@@ -45,6 +45,8 @@ CLAUDE.md            rules for the Claude Code agent loop
 
 ## Development
 
+Building needs CMake, a C11 compiler, and Python 3 with PyYAML (the signature table is generated from `signatures/ee.yaml`).
+
 ```
 cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
 tools/install_hooks.sh   # pre-commit check that blocks game-derived files

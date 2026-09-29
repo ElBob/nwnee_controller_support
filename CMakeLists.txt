@@ -18,9 +18,23 @@ target_include_directories(nwpad_core PUBLIC src/core)
 target_link_libraries(nwpad_core PUBLIC m)
 set_target_properties(nwpad_core PROPERTIES C_VISIBILITY_PRESET hidden)
 
+# Signatures, compiled from signatures/ee.yaml (override to test other entries).
+set(NWPAD_SIGNATURES ${CMAKE_SOURCE_DIR}/signatures/ee.yaml CACHE FILEPATH "Signature file")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(NWPAD_SIG_HEADER ${CMAKE_BINARY_DIR}/gen/signatures_gen.h)
+add_custom_command(
+  OUTPUT ${NWPAD_SIG_HEADER}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/gen
+  COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/gen_signatures.py
+          ${NWPAD_SIGNATURES} ${NWPAD_SIG_HEADER}
+  DEPENDS ${NWPAD_SIGNATURES} ${CMAKE_SOURCE_DIR}/tools/gen_signatures.py
+  COMMENT "Generating signatures_gen.h from ${NWPAD_SIGNATURES}")
+
 # The preload library.
-add_library(nwpad SHARED src/hook/nwpad.c src/hook/backend_stub.c
+add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend_stub.c
+  ${NWPAD_SIG_HEADER}
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:src/hook/control.c>)
+target_include_directories(nwpad PRIVATE ${CMAKE_BINARY_DIR}/gen)
 find_package(Threads REQUIRED)
 target_link_libraries(nwpad PRIVATE nwpad_core dl Threads::Threads)
 target_compile_definitions(nwpad PRIVATE NWPAD_VERSION="${PROJECT_VERSION}"

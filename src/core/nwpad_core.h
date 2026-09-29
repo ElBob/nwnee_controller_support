@@ -113,6 +113,21 @@ void nwpad_arbiter_move_key(nwpad_arbiter *a, uint8_t key_bit, bool down);
 void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
                           uint64_t now_ms, const nwpad_config *cfg);
 
+/* ---- Byte patterns (signatures/ee.yaml) ---- */
+#define NWPAD_PATTERN_MAX 64
+typedef struct {
+    uint8_t bytes[NWPAD_PATTERN_MAX];
+    uint8_t mask[NWPAD_PATTERN_MAX]; /* 0xff = must match, 0 = wildcard */
+    size_t len;
+} nwpad_pattern;
+
+/* Parse "55 48 ?? e5" ("?" or "??" is a wildcard). False on bad syntax, empty
+ * input, or more than NWPAD_PATTERN_MAX bytes. */
+bool nwpad_pattern_parse(const char *text, nwpad_pattern *out);
+/* Count matches in hay[0..n) and return the first, or NULL if none. */
+const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_pattern *p,
+                                  int *count);
+
 /* ---- Control socket protocol helpers (plan §8.3) ---- */
 /* Copy the string value of "key" from a flat JSON object into out. Handles \"
  * and \\ escapes only. Returns false if the key is missing, not a string, or

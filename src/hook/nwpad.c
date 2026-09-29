@@ -17,6 +17,7 @@
 #include "../core/nwpad_core.h"
 #include "backend.h"
 #include "control.h"
+#include "sigs.h"
 #include "sdl_min.h"
 
 #ifndef NWPAD_VERSION
@@ -168,13 +169,16 @@ static void control_handler(const char *request, char *out, size_t cap) {
                  (unsigned long long)g.frames);
     } else if (strcmp(cmd, "status") == 0) {
         nwpad_backend_status bs = nwpad_backend_status_get();
+        char sigs[1024];
+        nwpad_sigs_json(sigs, sizeof sigs);
         snprintf(out, cap,
                  "{\"ok\":true,\"version\":\"%s\",\"frame\":%llu,\"hooks\":true,"
                  "\"controller\":\"%s\",\"in_game\":%s,"
-                 "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":{}}",
+                 "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":%s}",
                  NWPAD_VERSION, (unsigned long long)g.frames, controller_state(),
                  nwpad_backend_in_game() ? "true" : "false",
-                 bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false");
+                 bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false",
+                 sigs);
     } else {
         snprintf(out, cap, "{\"ok\":false,\"error\":\"unknown cmd\"}");
     }
@@ -193,6 +197,7 @@ __attribute__((constructor)) static void nwpad_init(void) {
         nwpad_log("version %s loaded; inactive", NWPAD_VERSION);
         return;
     }
+    nwpad_sigs_resolve();
     load_config();
     nwpad_send_policy_defaults(&g.send_policy);
     nwpad_arbiter_init(&g.arbiter);
