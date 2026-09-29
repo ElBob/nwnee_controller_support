@@ -116,7 +116,20 @@ Every function, global, offset, and signature the library uses must have an entr
 - Use: M1 can call `TurnCamera(delta, 1)` / `TiltCamera(delta, 1)` exactly as the mouse does. That uses the game's own setter, and the locks are honored for free.
 - Open: does the game clamp direct pitch to the limits? What distinguishes `+0x58` from `+0x88` (current vs. target)? Runtime confirmation is still pending (outer tier step 3).
 - Evidence: `objdump -d` of the functions named above; float constants read from `.rodata`.
-- Confidence: likely (static only).
+- Confidence: confirmed at runtime (F15).
+
+### F15: Camera control confirmed at runtime
+- Binary / hash: nwmain-linux 6d19c39b
+- What (all degrees; offsets on this build):
+  - The access path from F14 works in a module: `*g_pAppManager` then `CClientExoApp::GetModule()` gives the module, and `module+0xe8` then vcall `[0xf0](-1)` then vcall `[0x48]` gives the camera object.
+  - `cam+0x88` / `+0x8c` (and `+0x58` / `+0x60`) are pending deltas: `TurnCamera(45, 1)` left 45 at `+0x88` while the game was stopped, and the next frame consumed it (back to 0).
+  - Absolute yaw is at `cam+0x54` (mirrored at `module+0x12c`), and absolute pitch at `cam+0x5c` (mirrored at `module+0x130`). A +30 turn moved yaw 90 → 120.
+  - Pitch runs from 1 (top-down) to 89 (head-on). With the limit fields unset (`module+0x2ac` / `+0x2b0` = -1), `GetCameraMinPitch()` / `GetCameraMaxPitch()` return 1 / 89.
+  - The game clamps direct tilts to those limits (11 + 100 → 89; 50 − 200 → 1). One oddity: +200 from 50 left pitch at 50. That's irrelevant to us, because the core clamps before sending.
+  - The lock dword `module+0x2bc` was 0 with no script locks.
+- Evidence: gdb attach (batch) in `Contest Of Champions 0492`, calling the functions above and diffing 1 KiB dumps of the camera and module objects across each call. Robert watched the view jump 45°, then 30°, then go head-on and top-down.
+- Use: the M1 backend reads yaw and pitch from `cam+0x54` / `+0x5c`, the limits from the getters, and the locks from `module+0x2bc`, and applies per-frame deltas through `TurnCamera` / `TiltCamera` with `direct` = 1.
+- Confidence: confirmed.
 
 ## Conventions to confirm
 

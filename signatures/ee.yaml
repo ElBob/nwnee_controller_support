@@ -20,4 +20,22 @@
 
 binary_sha256: 6d19c39bc646af5ddbc333ff31797a4acd9019506bcb45ef1b93b1bd5925e700   # buildid 20277208
 
-signatures: {}
+signatures:
+  app_manager:        # CAppManager* global; first field is the CClientExoApp*
+    note: F14
+    symbol: g_pAppManager
+  client_get_module:  # CClientExoApp::GetModule()
+    note: F14
+    symbol: _ZN13CClientExoApp9GetModuleEv
+  camera_turn:        # CNWCModule::TurnCamera(float, int)
+    note: F15
+    symbol: _ZN10CNWCModule10TurnCameraEfi
+  camera_tilt:        # CNWCModule::TiltCamera(float, int)
+    note: F15
+    symbol: _ZN10CNWCModule10TiltCameraEfi
+  camera_min_pitch:   # CNWCModule::GetCameraMinPitch()
+    note: F15
+    symbol: _ZN10CNWCModule17GetCameraMinPitchEv
+  camera_max_pitch:   # CNWCModule::GetCameraMaxPitch()
+    note: F15
+    symbol: _ZN10CNWCModule17GetCameraMaxPitchEv
