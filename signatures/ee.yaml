@@ -12,6 +12,6 @@
 # binary_sha256 is the nwmain-linux hash these signatures were built against.
 # sigcheck exits non-zero if the installed binary differs (CLAUDE.md rule 7).
 
-binary_sha256: null   # recorded in M0
+binary_sha256: 6d19c39bc646af5ddbc333ff31797a4acd9019506bcb45ef1b93b1bd5925e700   # buildid 20277208
 
 signatures: {}

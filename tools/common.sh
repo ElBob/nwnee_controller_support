@@ -8,5 +8,6 @@ NWPAD_STATE="${NWPAD_STATE:-$HOME/.nwpad}"            # lock, userdir, logs on t
 NWN_ROOT="${NWN_ROOT:-$HOME/.local/share/Steam/steamapps/common/Neverwinter Nights}"
 NWN_BIN="${NWN_BIN:-$NWN_ROOT/bin/linux-x86/nwmain-linux}"
 NWPAD_DISPLAY="${NWPAD_DISPLAY:-:0}"
+NWN_APPID="${NWN_APPID:-704450}"                  # Steam app id of NWN:EE
 
 die() { echo "error: $*" >&2; exit 1; }
