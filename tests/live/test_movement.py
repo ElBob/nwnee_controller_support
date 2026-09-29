@@ -6,6 +6,7 @@ facing, with the windows measured from that facing (plan §3). Each test starts
 from the arena's spawn point (the `home` fixture).
 """
 import math
+import os
 import time
 
 import pytest
@@ -70,8 +71,13 @@ def reset(ctl):
     x, y, f = HOME
 
     def jump(facing):
+        # Recover from anything the arena can do to the character first: death,
+        # combat, or being made uncommandable.
         ctl("script_chunk", code=(
-            f"object pc = GetFirstPC(); AssignCommand(pc, ClearAllActions());"
+            f"object pc = GetFirstPC();"
+            f"if (GetIsDead(pc)) ApplyEffectToObject(DURATION_TYPE_INSTANT, EffectResurrection(), pc);"
+            f"ApplyEffectToObject(DURATION_TYPE_INSTANT, EffectHeal(GetMaxHitPoints(pc)), pc);"
+            f"SetCommandable(TRUE, pc); AssignCommand(pc, ClearAllActions(TRUE));"
             f"AssignCommand(pc, JumpToLocation(Location(GetArea(pc), Vector({x}, {y}, 0.0), {facing})));"
             f"AssignCommand(pc, SetCameraFacing({f}, -1.0, -1.0, CAMERA_TRANSITION_TYPE_SNAP));"))
         deadline = time.monotonic() + 5
@@ -86,13 +92,28 @@ def reset(ctl):
                     and abs(ang_diff(fwd, f)) < 1.0):
                 return
             if time.monotonic() > deadline:
-                pytest.fail(f"couldn't reset: server {c}, client {cl}, camera forward {fwd:.1f}")
+                shot = capture_failure(ctl, "reset")
+                pytest.fail(f"couldn't reset: server {c}, client {cl}, camera forward {fwd:.1f}; screenshot {shot}")
             time.sleep(0.1)
 
     # Jump twice so the facing always changes; an unchanged server facing isn't
     # re-sent, and the client's copy can differ by a few degrees.
     jump(f + 45)
     jump(f)
+
+
+def capture_failure(ctl, label):
+    """Screenshot and state dump into artifacts/ (pulled back by remote.sh; never committed)."""
+    import json
+    import subprocess
+    from conftest import ROOT
+    out = os.path.join(ROOT, "artifacts", f"{label}-{int(time.time())}")
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "state.json"), "w") as f:
+        json.dump(ctl("state"), f, indent=1)
+    subprocess.run(["spectacle", "-b", "-n", "-f", "-o", os.path.join(out, "screen.png")],
+                   timeout=15, check=False, capture_output=True)
+    return out
 
 
 def expected_direction(stick_world, facing, style):

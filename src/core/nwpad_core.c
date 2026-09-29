@@ -127,7 +127,7 @@ nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_forwa
 void nwpad_send_policy_defaults(nwpad_send_policy *p) {
     p->heading_threshold_deg = 2.0f;
     p->keepalive_ms = 150;   /* matches the mouse-drag resend cadence (re-notes F16) */
-    p->min_interval_ms = 33; /* hard cap, ~30 Hz */
+    p->min_interval_ms = 100; /* hard cap; the mouse drag re-targets about every 140 ms (re-notes F16) */
 }
 
 nwpad_send_action nwpad_send_decide(nwpad_send_state *st, const nwpad_send_policy *p,

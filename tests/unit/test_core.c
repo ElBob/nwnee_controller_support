@@ -100,11 +100,12 @@ static void test_send_rate(void) {
     nwpad_move_intent small = mv; small.bearing_deg = 91;
     CHECK(nwpad_send_decide(&st, &p, &small, 200) == NWPAD_SEND_NONE); /* below threshold */
     nwpad_move_intent turn = mv; turn.bearing_deg = 100;
-    CHECK(nwpad_send_decide(&st, &p, &turn, 110 + 5) == NWPAD_SEND_NONE); /* rate cap */
-    CHECK(nwpad_send_decide(&st, &p, &turn, 140) == NWPAD_SEND_MOVE);
-    CHECK(nwpad_send_decide(&st, &p, &turn, 140 + p.keepalive_ms) == NWPAD_SEND_MOVE); /* keepalive */
+    uint64_t cap_end = 100 + p.min_interval_ms;
+    CHECK(nwpad_send_decide(&st, &p, &turn, cap_end - 1) == NWPAD_SEND_NONE); /* rate cap */
+    CHECK(nwpad_send_decide(&st, &p, &turn, cap_end) == NWPAD_SEND_MOVE);
+    CHECK(nwpad_send_decide(&st, &p, &turn, cap_end + p.keepalive_ms) == NWPAD_SEND_MOVE); /* keepalive */
     /* stop exactly once, even immediately after a send */
-    uint64_t t = 140 + p.keepalive_ms + 1;
+    uint64_t t = cap_end + p.keepalive_ms + 1;
     CHECK(nwpad_send_decide(&st, &p, &idle, t) == NWPAD_SEND_STOP);
     CHECK(nwpad_send_decide(&st, &p, &idle, t + 1000) == NWPAD_SEND_NONE);
     CHECK(nwpad_send_decide(&st, &p, &mv, t + 1001) == NWPAD_SEND_MOVE); /* restart not capped */

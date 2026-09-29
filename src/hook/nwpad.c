@@ -35,6 +35,12 @@ static void nwpad_log(const char *fmt, ...) {
     va_end(ap);
 }
 
+static uint64_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+
 static uint64_t now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -128,6 +134,11 @@ static struct {
     nwpad_move_mode move_mode;
     nwpad_move_style move_style;
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
+    struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
+    struct { /* per-frame library cost (plan §7 budget), 10 us buckets up to 2.55 ms */
+        uint32_t bucket[256];
+        uint64_t frames, max_ns;
+    } cost;
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
         nwpad_vec2 left, right;
@@ -163,6 +174,16 @@ static void load_config(void) {
 
 #ifdef NWPAD_DEBUG_SURFACES
 /* ---- Control socket commands (plan §8.3); main thread only ---- */
+
+/* Upper edge (us) of the bucket holding the given percentile of frame costs. */
+static unsigned cost_percentile_us(double pct) {
+    uint64_t need = (uint64_t)(g.cost.frames * pct / 100.0 + 0.5), seen = 0;
+    for (unsigned i = 0; i < 256; i++) {
+        seen += g.cost.bucket[i];
+        if (seen >= need && seen) return (i + 1) * 10;
+    }
+    return 2560;
+}
 
 static const char *controller_state(void) {
     if (g.controller_init_failed) return "unavailable";
@@ -254,6 +275,9 @@ static void control_handler(const char *request, char *out, size_t cap) {
             snprintf(out, cap, "{\"ok\":false,\"error\":\"options unavailable\"}");
         else
             snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "reset_cost") == 0) {
+        memset(&g.cost, 0, sizeof g.cost);
+        snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "release") == 0) {
         g.virt.active = false;
         snprintf(out, cap, "{\"ok\":true}");
@@ -272,6 +296,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
+        if (n > 0 && (size_t)n < cap)
+            n += snprintf(out + n, cap - (size_t)n,
+                          ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu}"
+                          ",\"sends\":{\"moves\":%llu,\"stops\":%llu,\"min_gap_ms\":%llu,\"cap_ms\":%u}",
+                          cost_percentile_us(50), cost_percentile_us(99), (double)g.cost.max_ns / 1000.0,
+                          (unsigned long long)g.cost.frames, (unsigned long long)g.sends.moves,
+                          (unsigned long long)g.sends.stops, (unsigned long long)g.sends.min_gap_ms,
+                          (unsigned)g.send_policy.min_interval_ms);
         static const char *styles[] = {"rest", "drag", "strafe_right", "backpedal", "strafe_left"};
         static const char *modes[] = {"idle", "walk", "run"};
         float pf, px, py;
@@ -424,9 +456,22 @@ static void nwpad_frame(void) {
         g.move_style, &g.cfg);
     g.move_mode = intent.mode;
     g.move_style = intent.style;
+    nwpad_move_style sent_style = g.send_state.last_sent.style;
     switch (nwpad_send_decide(&g.send_state, &g.send_policy, &intent, t)) {
-    case NWPAD_SEND_MOVE: nwpad_backend_send_move(&intent); break;
-    case NWPAD_SEND_STOP: nwpad_backend_send_stop(); break;
+    case NWPAD_SEND_MOVE:
+        /* Style changes are exempt from the cap (core); count only same-style gaps. */
+        if (g.sends.moves && intent.style == sent_style) {
+            uint64_t gap = t - g.sends.last_move_ms;
+            if (!g.sends.min_gap_ms || gap < g.sends.min_gap_ms) g.sends.min_gap_ms = gap;
+        }
+        g.sends.moves++;
+        g.sends.last_move_ms = t;
+        nwpad_backend_send_move(&intent);
+        break;
+    case NWPAD_SEND_STOP:
+        g.sends.stops++;
+        nwpad_backend_send_stop();
+        break;
     case NWPAD_SEND_NONE: break;
     }
 }
@@ -434,7 +479,12 @@ static void nwpad_frame(void) {
 /* ---- Interposed SDL functions ---- */
 
 static void nwpad_SwapWindow(SDL_Window *window) {
+    uint64_t t0 = now_ns();
     nwpad_frame();
+    uint64_t ns = now_ns() - t0; /* control-socket servicing is debug-only; not counted */
+    g.cost.bucket[ns / 10000 < 255 ? ns / 10000 : 255]++;
+    g.cost.frames++;
+    if (ns > g.cost.max_ns) g.cost.max_ns = ns;
     nwpad_control_service();
     sdl.SwapWindow(window);
 }
