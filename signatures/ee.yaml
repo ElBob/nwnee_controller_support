@@ -33,9 +33,9 @@ signatures:
   camera_tilt:        # CNWCModule::TiltCamera(float, int)
     note: F15
     symbol: _ZN10CNWCModule10TiltCameraEfi
-  camera_min_pitch:   # CNWCModule::GetCameraMinPitch()
-    note: F15
-    symbol: _ZN10CNWCModule17GetCameraMinPitchEv
-  camera_max_pitch:   # CNWCModule::GetCameraMaxPitch()
-    note: F15
-    symbol: _ZN10CNWCModule17GetCameraMaxPitchEv
+  client_get_nwc_message:  # CClientExoApp::GetNWCMessage()
+    note: F17
+    symbol: _ZN13CClientExoApp13GetNWCMessageEv
+  cheat_run_script_chunk:  # CNWCMessage::SendPlayerToServerCheat_RunScriptChunk(CExoString const&, unsigned int, int)
+    note: F17
+    symbol: _ZN11CNWCMessage38SendPlayerToServerCheat_RunScriptChunkERK10CExoStringji

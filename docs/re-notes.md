@@ -108,7 +108,7 @@ Every function, global, offset, and signature the library uses must have an entr
 ### F14: Client camera control (static analysis)
 - Binary / hash: nwmain-linux 6d19c39b
 - What:
-  - `CNWCModule::TurnCamera(float delta, int direct)` and `TiltCamera(float delta, int direct)` return immediately when bit 0x10 (yaw) or 0x20 (pitch) of the dword at `module+0x2bc` is set. These are the script camera locks.
+  - `CNWCModule::TurnCamera(float delta, int direct)` and `TiltCamera(float delta, int direct)` return immediately when bit 0x10 (yaw) or 0x20 (pitch) of the dword at `module+0x2bc` is set. (These are not the script camera locks; see F18.)
   - With `direct` = 1 the delta is added to the camera object's yaw at `+0x88` or pitch at `+0x8c`. This is the mouse path: `CClientExoAppInternal::PerformXMouseMoveAction` / `PerformYMouseMoveAction`. With `direct` = 0 it's added at `+0x58` / `+0x60`, which is the keyboard path from `CClientExoAppInternal::UpdateCamera`, driven by a rate the caller decays each frame. A nonzero delta sets bit 0 of `module+0x134` and `module+0x280` = 1.
   - The camera object comes from `module+0xe8`, then virtual call `[0xf0](-1)`, then virtual call `[0x48]`.
   - Units are degrees. The mouse turn delta is `dx × -75 × 0.2 / (screen_width / 1920 / 0.01)`, i.e. -0.15° per pixel at 1920 wide, so moving right decreases yaw.
@@ -144,6 +144,28 @@ Every function, global, offset, and signature the library uses must have an entr
 - Bearing override (gdb rewriting the bearing and flags of keyboard packets): inconclusive. The packet positions are the client's own prediction, which uses its real bearing, so client and server disagree. Bearing 0 + W moved +X, and bearing 0 + S moved −X, but 90 / 180 / 45 gave inconsistent directions. Settling this needs the server-side creature position (R4, the socket `state`) and a clear area.
 - Camera coupling: with W held and every packet's bearing rewritten to the keyboard bearing − 45° (run 20260928-232916), the camera yaw stayed at 0.0 for the whole 2 s. In the default camera mode, driving doesn't rotate the camera. Chase-cam mode (`CNWCModule::UpdateCameraModeChaseCam`) is untested. The character moved at about 64°, between the client's 90° and the rewritten 45°, which is the same client-prediction conflict as above.
 - Confidence: layout and keyboard semantics confirmed; arbitrary-bearing honoring open.
+
+### F17: Script chunks from the client (cheat message 0x1d)
+- Binary / hash: nwserver-linux d6d95282, nwmain-linux 6d19c39b
+- What:
+  - Server: `CNWSMessage::HandlePlayerToServerCheatMessage` (Ghidra, `re-work/`) refuses cheat minors with "Cheat/debug command not allowed: Not a DM, or not in DebugMode" unless `CServerExoApp::GetDebugMode()` is on, or the player is a DM (net-layer player info +0x24), or `g_pAppManager+0x28` is 0 and the minor isn't one of two special-cased minors (table at 0xc4f06d, not yet read).
+  - Minor 0x1d reads a `CExoString` chunk, an object id, and a BOOL, then calls `CVirtualMachine::RunScriptChunk(chunk, oid, valid, wrap)`.
+  - Client: `CNWCMessage::SendPlayerToServerCheat_RunScriptChunk(CExoString const&, unsigned int oid, int wrap)` builds that message. `CClientExoApp::GetNWCMessage()` returns `internal->[+0x208]`. `CExoString` is `{char *str; uint32 len}` (the sender reads `[+0]` and `[+8]`).
+- Use: a debug-only `script_chunk` socket command, so tests can apply camera locks and cutscenes without a custom module. Whether single-player sessions pass the gate is being checked at runtime.
+- Evidence: Ghidra decompile of the server handler; disassembly of the client sender and getter.
+- Confidence: confirmed (the single-player gate passes; F18).
+
+### F18: Camera locks and effective limits live in the camera object
+- Binary / hash: nwmain-linux 6d19c39b
+- What: script locks collapse ranges in the camera object (floats, degrees):
+  - Yaw: `cam+0x68` / `+0x6c`, 0 / 360 unlocked. `LockCameraDirection(TRUE)` sets both to about 2.5e-6, and `cam+0x64` goes 0 → 1.0 while locked.
+  - Pitch: `cam+0x74` / `+0x78`, 1 / 89 unlocked. `LockCameraPitch(TRUE)` sets both to the current pitch (50).
+  - Distance: `cam+0x80` / `+0x84`, 1 / 25 unlocked. `LockCameraDistance(TRUE)` sets both to 20.
+  - Unlocking restores the defaults.
+- Corrects F14: bits 0x10 / 0x20 of `module+0x2bc` didn't change under any of these locks, so they're something else (open). `GetCameraMinPitch()` / `GetCameraMaxPitch()` aren't needed: the backend reads the effective pitch range from the camera and treats a collapsed range as locked.
+- Also: script chunks run in a single-player `+TestNewModule` session (F17's gate passes). `SetCameraFacing(45.0, 10.0, 30.0, SNAP)` moved the yaw field to -45.0 and pitch to 30.0, so the F15 yaw field is the negative of the NWScript facing (degrees counter-clockwise from east).
+- Evidence: socket `read` dumps (1 KiB of module and camera) diffed across script lock toggles, run 20260928-234244.
+- Confidence: confirmed.
 
 ## Conventions to confirm
 

@@ -27,4 +27,11 @@ bool nwpad_backend_camera_set(const nwpad_camera *cam);
 bool nwpad_backend_send_move(const nwpad_move_intent *intent);
 bool nwpad_backend_send_stop(void);
 
+/* Debug surface: send a NWScript chunk (wrapped in main) to the server, as the
+ * cheat console does (re-notes F17). The server may refuse it. */
+bool nwpad_backend_run_script_chunk(const char *code);
+/* Debug surface: base address of a named game object for the socket's read
+ * command ("module" or "camera"), or NULL. */
+void *nwpad_backend_debug_object(const char *name);
+
 #endif

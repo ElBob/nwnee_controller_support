@@ -26,7 +26,9 @@ mkdir -p "$NWPAD_STATE/runs"
 [ -f "$NWPAD_STATE/session.held" ] && { echo "lock held: $(cat "$NWPAD_STATE/session.held")"; exit 10; }
 exec 9>"$NWPAD_STATE/session.lock"
 flock -n 9 || { echo "another agent session holds the lock"; exit 10; }
-if pgrep -f nwmain-linux >/dev/null; then echo "nwmain-linux already running; not launching"; exit 10; fi
+# The game process itself (by name, so tools with the binary path in their arguments,
+# like Ghidra, don't match), live only: a killed game can linger as a zombie.
+if pgrep -r R,S,D -x nwmain-linux >/dev/null; then echo "nwmain-linux already running; not launching"; exit 10; fi
 
 # With no monitor connected (the box's KVM switched away), KWin never maps the
 # window and SDL_CreateWindow blocks forever. Report it as an environment failure.

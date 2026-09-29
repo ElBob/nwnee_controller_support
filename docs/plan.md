@@ -34,7 +34,18 @@ Steam Input is the controller layer. The library does not replace it, and the pr
 
 ## 3. Behavior specification
 
-**Movement.** The left stick direction, rotated by the current camera yaw, gives the world-space movement direction. While the stick is deflected, the character walks that way and turns to face it, exactly like holding the left mouse button on the ground. When the stick returns to the safety deadzone, the character stops and keeps its current facing. (Before the M2 gate the spec required free facing, with strafe and backpedal while facing the camera; Robert replaced it at the gate, see the decision log.)
+**Movement.** The left stick direction, rotated by the current camera yaw, gives the world-space movement direction. There are two movement modes (Robert, M2 gate):
+
+- **Drag:** the character walks in the stick direction and turns to face it, exactly like holding the left mouse button on the ground.
+- **Strafe/backpedal:** when the stick points within a small window around 90°, 180°, or 270° from camera forward (right, back, left), the character keeps facing the camera and strafes or backpedals, exactly like holding E, S, or Q.
+
+Mode selection is asymmetric:
+- From rest, the stick's first direction outside the deadzone picks the mode: inside a window means strafe/backpedal; anything else, including forward, means drag.
+- Strafe/backpedal turns into drag as soon as the stick leaves its window.
+- Drag stays drag: moving into a window doesn't switch it.
+- Returning to the deadzone goes back to rest.
+
+The window half-width starts at 10° and is tuned in feel testing. With only one sticky transition, no extra hysteresis is needed. When the stick returns to the safety deadzone, the character stops and keeps its current facing. (Before the M2 gate the spec required free facing, with strafe and backpedal while facing the camera; Robert replaced it at the gate, see the decision log.)
 
 **Walk and run.** With the game's Always Run setting off, magnitude below the run threshold walks and magnitude above it runs, with hysteresis. With Always Run on, any deflection outside the safety deadzone runs.
 
@@ -99,7 +110,10 @@ These can start immediately, in parallel with M0. Tasks marked "agent" are headl
 - **Path A** is used if R1 plus a runtime check show that the server honors an arbitrary bearing *and* supports moving along that bearing while facing a different direction. The library calls the client-side `DriveControl` sender (from R3) with the world movement direction and keeps facing on the camera's forward direction, using `TurnOnSpot` if the drive message doesn't carry facing. This is client-only and works on any server.
 - **Path B** is used otherwise. The library hooks the in-process server's `HandlePlayerToServerInputDriveControl` or `AddDriveAction` and substitutes the analog bearing and facing before they reach the creature. This is single-player and self-hosted only, and multiplayer is revisited after v1.
 
-**Decided at the gate (2026-09-28): Path D, drag emulation.** The game's click-and-drag movement resends `WalkToWayPoint` toward the cursor while the button is held (re-notes F16), and the character faces where it walks. The library produces the same stream toward a point ahead of the character along the stick direction, entering through the client function the mouse-drag path uses. This is client-only and works on any server. Paths A and B above are kept for reference. Free facing is out of scope for v1.
+**Decided at the gate (2026-09-28): Path D, drag emulation plus key-equivalent strafe/backpedal.**
+- Drag mode (§3) mirrors the game's click-and-drag movement, which resends `WalkToWayPoint` toward the cursor while the button is held (re-notes F16). The library produces the same stream toward a point ahead of the character along the stick direction, entering through the client function the mouse-drag path uses.
+- Strafe/backpedal mode drives the client's own keyboard drive state (`UpdateDriveMode`) as if S, Q, or E were held. The bearing then comes from the camera, exactly as for the keys, so the client's prediction and the server agree (unlike rewriting packets, F16).
+- Both modes are client-only and work on any server. Paths A and B above are kept for reference. Free facing in arbitrary directions is out of scope for v1.
 
 ### 5.2 Common behavior
 
@@ -249,7 +263,9 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Camera limits and locks | Pitch stays within the game limits. With a script-applied yaw or pitch lock, the stick has no effect on that axis. |
 | Heading accuracy | 16 stick angles × 3 camera yaws: displacement direction after 1 s is within 5° of expected. |
 | Non-quantization | Headings at 22.5° offsets give distinct displacement directions. |
-| Facing follows movement | For stick right and stick down, displacement matches the stick direction, and facing ends within 5° of the displacement direction. |
+| Facing follows movement | From rest, stick at 45° (drag): displacement matches the stick direction, and facing ends within 5° of the displacement direction. |
+| Strafe and backpedal | From rest, stick right, down, and left (inside the windows): displacement matches the stick direction, and facing stays within 5° of camera forward. |
+| Mode transitions | Strafe then rotate the stick out of its window: switches to drag. Drag then rotate into a window: stays drag. |
 | Stop | The character stops within 300 ms of release, and position is stable for 1 s. |
 | Walk/run | Rates match the game's walk and run speeds on either side of the threshold. With Always Run on, it runs at 0.3 deflection. |
 | Direction change | Stick rotation while moving updates the heading without a stop or stutter. |
@@ -341,3 +357,4 @@ The repo is public, under the MIT license.
 | 2026-09-28 | Signature entries may name an exported symbol instead of a byte pattern (approved by Robert); patterns remain for code without symbols. Failure behavior is unchanged. |
 | 2026-09-28 | v1 is done when the automated suite passes and Robert signs off after play sessions on desktop and Deck. |
 | 2026-09-28 | M2 gate (Robert): the character faces where it walks, like the game's click-and-drag. Free facing is dropped for v1. Movement uses Path D, drag emulation through `WalkToWayPoint` (re-notes F16). |
+| 2026-09-28 | M2 gate (Robert), refined: stick directions within a window around 90/180/270° from camera forward strafe or backpedal as the E/S/Q keys do, and everything else drags. From rest the first direction picks the mode, strafe/backpedal becomes drag when the stick leaves its window, and drag never switches back. |

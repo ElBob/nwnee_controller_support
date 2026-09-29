@@ -1,6 +1,6 @@
-"""M1 camera scenarios (plan §8.6): linearity and pitch limits.
+"""M1 camera scenarios (plan §8.6): linearity, pitch limits, and script locks.
 
-Locks need a script-driven test module and aren't covered yet.
+Locks are applied with NWScript chunks over the control socket (re-notes F17, F18).
 """
 import time
 
@@ -58,3 +58,37 @@ def test_pitch_stays_within_limits(ctl, ry, limit):
         time.sleep(0.05)
     ctl("release")
     assert cam["pitch"] == pytest.approx(cam[limit], abs=1e-3)
+
+
+LOCKS = {
+    "yaw": ("LockCameraDirection", {"rx": 1.0}, "yaw"),
+    "pitch": ("LockCameraPitch", {"ry": 1.0}, "pitch"),
+}
+
+
+@pytest.mark.parametrize("axis", ["yaw", "pitch"])
+def test_script_lock_blocks_stick(ctl, axis):
+    fn, stick, field = LOCKS[axis]
+    # Start pitch mid-range so an unlocked stick would visibly move it.
+    ctl("script_chunk", code="AssignCommand(GetFirstPC(), SetCameraFacing(-1.0, -1.0, 45.0, CAMERA_TRANSITION_TYPE_SNAP));")
+    time.sleep(0.5)
+    ctl("script_chunk", code=f"{fn}(GetFirstPC(), TRUE);")
+    try:
+        time.sleep(0.5)
+        before = ctl("state")["camera"]
+        assert before[f"{axis}_locked"], before
+        ctl("stick", **stick)
+        time.sleep(0.5)
+        after = ctl("state")["camera"]
+        ctl("release")
+        assert after[field] == pytest.approx(before[field], abs=0.01), (before, after)
+    finally:
+        ctl("script_chunk", code=f"{fn}(GetFirstPC(), FALSE);")
+    time.sleep(0.5)
+    unlocked = ctl("state")["camera"]
+    assert not unlocked[f"{axis}_locked"], unlocked
+    ctl("stick", **stick)
+    time.sleep(0.3)
+    moved = ctl("state")["camera"]
+    ctl("release")
+    assert moved[field] != pytest.approx(unlocked[field], abs=0.5), (unlocked, moved)

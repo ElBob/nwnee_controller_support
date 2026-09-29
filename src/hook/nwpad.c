@@ -196,6 +196,32 @@ static void control_handler(const char *request, char *out, size_t cap) {
                               ? now_ms() + (uint64_t)v : 0;
         g.virt.active = true;
         snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "script_chunk") == 0) {
+        /* {"cmd":"script_chunk","code":"LockCameraPitch(GetFirstPC(), TRUE);"} */
+        char code[768];
+        if (!nwpad_json_get_string(request, "code", code, sizeof code))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"missing code\"}");
+        else if (!nwpad_backend_run_script_chunk(code))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"script chunks unavailable\"}");
+        else
+            snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "read") == 0) {
+        /* {"cmd":"read","base":"module|camera","offset":0,"len":256} -> hex bytes (RE only) */
+        char base_name[16];
+        double off = 0, len = 0;
+        void *base = nwpad_json_get_string(request, "base", base_name, sizeof base_name)
+                         ? nwpad_backend_debug_object(base_name) : NULL;
+        nwpad_json_get_number(request, "offset", &off);
+        nwpad_json_get_number(request, "len", &len);
+        size_t n = len > 0 ? (size_t)len : 0, max = (cap - 64) / 2;
+        if (!base || off < 0 || n == 0 || n > max) {
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"bad base, offset, or len (max %zu)\"}", max);
+        } else {
+            int k = snprintf(out, cap, "{\"ok\":true,\"hex\":\"");
+            const uint8_t *p = (const uint8_t *)base + (size_t)off;
+            for (size_t i = 0; i < n; i++) k += snprintf(out + k, cap - (size_t)k, "%02x", p[i]);
+            snprintf(out + k, cap - (size_t)k, "\"}");
+        }
     } else if (strcmp(cmd, "release") == 0) {
         g.virt.active = false;
         snprintf(out, cap, "{\"ok\":true}");
