@@ -240,9 +240,15 @@ Every function, global, offset, and signature the library uses must have an entr
 - What: with `camera.edge-turning = true` (settings.tml; the INI calls it "ScreenEdgeCameraTurn") in fullscreen, the camera turns at about 75°/s while the pointer is on the outermost pixel column. At x = 0 it turns; from x = 1 on it doesn't (measured one pixel at a time at 3840×2160). Windowed mode doesn't edge-turn.
 - The check uses the game's own record of the pointer: `CClientExoAppInternal+0x120` / `+0x124` (int x, y). `PerformXMouseMoveAction` / `PerformYMouseMoveAction` store them from mouse input, clamped to the GUI size at `g_pGuiMan+0xb8` / `+0xbc`. They were the only fields of the internal object that changed between centre and edge.
 - `SDL_WarpMouseInWindow` doesn't help under KWin's XWayland: SDL records the new position, but the real pointer stays put, the camera keeps turning, and SDL's position then sticks.
-- Use: while a stick is in use, if the recorded pointer is on an outermost row or column, the library moves the record one pixel in. The camera stops, the OS pointer isn't touched, and the next real mouse motion overwrites the record (Robert's request).
+- Use: while a stick is in use, if the recorded pointer is on the leftmost or rightmost column, the library moves the record one pixel in (only left and right: edge turning does nothing at the top or bottom, per Robert). The camera stops, the OS pointer isn't touched, and the next real mouse motion overwrites the record (Robert's request).
 - Evidence: runs 20260929-120909 to -121641. Before the fix, the left edge kept turning after a stick release; after it, the record read x = 1 and the turn rate was 0.
-- Confidence: confirmed for the left edge; the right edge couldn't be reached with the test tablet (x = 3838 max through the 1.35 desktop scale), and the code treats all four edges alike.
+- Confidence: confirmed for both edges (the right edge after F27).
+
+### F27: Right-edge turning is unreachable under 2x desktop scaling
+- What: on the box (TV output at scale 2, `kwinrc [Xwayland] Scale=2`, X screen 3840×2160) the real pointer never gets past X = 3838. A relative mouse pushed right, even one unit at a time, stops there, and the game records x = 3838. The game's right-edge turning needs x = 3839 (width − 1), so it can never trigger; the left edge (0) works. KWin keeps the pointer in whole logical pixels (0–1919), and XWayland doubles them, so X coordinates are even. Robert saw the same with his own mouse.
+- Fix (library): in the PollEvent hook, a mouse-motion event at x = width − 2 moving right (xrel > 0) is reported to the game as x = width − 1. `state.events.right_edge_fixes` counts them. Where the last pixel is reachable, the only effect is a 2-px right edge zone. The alternative, the TV at 100% scale, would shrink the whole desktop.
+- Evidence: run 20260929-124722 and after: right edge turns at −76°/s (game pointer 3839), and a stick turn plus release stops it (record nudged to 3838).
+- Confidence: confirmed.
 
 ## Conventions to confirm
 

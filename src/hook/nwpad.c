@@ -145,7 +145,7 @@ static struct {
         bool stick_hidden;
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
-    struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
+    struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
     struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
         uint32_t bucket[256], own_bucket[256]; /* all work / excluding game functions we call */
@@ -302,13 +302,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "{\"ok\":true,\"frame\":%llu,\"t_ms\":%llu,\"in_game\":%s,"
                          "\"virtual_stick\":%s,\"camera_owner\":\"%s\","
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
-                         "\"filtered\":%llu}",
+                         "\"filtered\":%llu,\"right_edge_fixes\":%llu}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
                          g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
-                         (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
+                         (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered,
+                         (unsigned long long)g.events.right_edge_fixes);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -562,6 +563,14 @@ static int nwpad_PollEvent(SDL_Event *event) {
             continue; /* the game never sees controller events; Steam Input covers buttons */
         }
         if (type == SDL_MOUSEMOTION) {
+            /* Under 2x desktop scaling, X pointer coordinates are even, so the last
+             * column (width-1), where the game's right-edge turning triggers, can't be
+             * reached. Moving right onto width-2 counts as reaching it (re-notes F27). */
+            int w = nwpad_backend_gui_width();
+            if (w > 2 && event->motion.x == w - 2 && event->motion.xrel > 0) {
+                event->motion.x = w - 1;
+                g.events.right_edge_fixes++;
+            }
             g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
             if (g.cursor.stick_hidden) { /* the mouse is back: show what the game wants */

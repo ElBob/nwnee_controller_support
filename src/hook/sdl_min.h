@@ -20,6 +20,10 @@ typedef union SDL_Event {
         uint16_t mod;
         uint32_t unused;
     } key;
+    struct { /* SDL_MouseMotionEvent */
+        uint32_t type, timestamp, windowID, which, state;
+        int32_t x, y, xrel, yrel;
+    } motion;
     uint8_t padding[56];
 } SDL_Event;
 

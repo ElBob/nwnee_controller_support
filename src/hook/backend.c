@@ -267,10 +267,8 @@ void *nwpad_backend_debug_object(const char *name) {
 
 /* ---- Edge nudge (re-notes F26) ---- */
 
-#define INTERNAL_POINTER_X 0x120 /* int: the game's recorded pointer position */
-#define INTERNAL_POINTER_Y 0x124
-#define GUI_WIDTH 0xb8           /* int, on CGuiMan */
-#define GUI_HEIGHT 0xbc
+#define INTERNAL_POINTER_X 0x120 /* int: the game's recorded pointer position (y at +0x124) */
+#define GUI_WIDTH 0xb8           /* int, on CGuiMan (height at +0xbc) */
 
 static int32_t read_int(void *base, size_t offset) {
     int32_t v;
@@ -278,19 +276,23 @@ static int32_t read_int(void *base, size_t offset) {
     return v;
 }
 
+int nwpad_backend_gui_width(void) {
+    void **gui_var = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
+    void *gui = gui_var ? *gui_var : NULL;
+    return gui ? read_int(gui, GUI_WIDTH) : 0;
+}
+
 bool nwpad_backend_nudge_pointer_off_edge(void) {
     void **gui_var = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
     void *in = client_internal();
     void *gui = gui_var ? *gui_var : NULL;
     if (!in || !gui) return false;
-    int32_t w = read_int(gui, GUI_WIDTH), h = read_int(gui, GUI_HEIGHT);
-    int32_t x = read_int(in, INTERNAL_POINTER_X), y = read_int(in, INTERNAL_POINTER_Y);
-    if (w < 3 || h < 3) return false;
+    /* Only left and right: edge turning does nothing at the top or bottom (Robert). */
+    int32_t w = read_int(gui, GUI_WIDTH), x = read_int(in, INTERNAL_POINTER_X);
+    if (w < 3) return false;
     int32_t nx = x <= 0 ? 1 : x >= w - 1 ? w - 2 : x;
-    int32_t ny = y <= 0 ? 1 : y >= h - 1 ? h - 2 : y;
-    if (nx == x && ny == y) return false;
+    if (nx == x) return false;
     memcpy((char *)in + INTERNAL_POINTER_X, &nx, sizeof nx);
-    memcpy((char *)in + INTERNAL_POINTER_Y, &ny, sizeof ny);
     return true;
 }
 
