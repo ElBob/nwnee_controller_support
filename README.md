@@ -71,6 +71,8 @@ CLAUDE.md            rules for the Claude Code agent loop
 
 Building needs CMake, a C11 compiler, and Python 3 with PyYAML (the signature table is generated from `signatures/ee.yaml`).
 
+Build options: `NWPAD_DEBUG_SURFACES` (control socket and test commands; off for releases) and, on Linux, `NWPAD_XWAYLAND_EDGE_FIX` (default on: lets right-edge camera turning work under scaled XWayland desktops, see `docs/re-notes.md` F27).
+
 ```
 cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
 tools/install_hooks.sh   # pre-commit check that blocks game-derived files

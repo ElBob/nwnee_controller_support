@@ -147,7 +147,9 @@ static struct {
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
-    bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27) */
+    int last_motion_x, last_motion_xrel; /* as SDL reported them (state shows them) */
+    bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27;
+                             * only with NWPAD_XWAYLAND_EDGE_FIX) */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
     struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
         uint32_t bucket[256], own_bucket[256]; /* all work / excluding game functions we call */
@@ -304,14 +306,16 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "{\"ok\":true,\"frame\":%llu,\"t_ms\":%llu,\"in_game\":%s,"
                          "\"virtual_stick\":%s,\"camera_owner\":\"%s\","
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
-                         "\"filtered\":%llu,\"right_edge_fixes\":%llu}",
+                         "\"filtered\":%llu,\"right_edge_fixes\":%llu,\"right_edge_pinned\":%s,"
+                         "\"last_motion_x\":%d,\"last_motion_xrel\":%d}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
                          g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered,
-                         (unsigned long long)g.events.right_edge_fixes);
+                         (unsigned long long)g.events.right_edge_fixes,
+                         g.right_edge_pinned ? "true" : "false", g.last_motion_x, g.last_motion_xrel);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -471,10 +475,9 @@ static void nwpad_frame(void) {
     }
     /* With edge turning on, a pointer left on the outermost pixel spins the camera
      * once the stick is released; move the game's recorded pointer one pixel in. */
-    if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) {
-        g.cursor.nudges++;
-        g.right_edge_pinned = false; /* only a new rightward push re-pins it */
-    }
+    /* The pin (right_edge_pinned) stays: like the left edge, the next mouse motion,
+     * even purely vertical, reports the edge again and edge turning resumes. */
+    if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) g.cursor.nudges++;
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;
@@ -568,14 +571,18 @@ static int nwpad_PollEvent(SDL_Event *event) {
             continue; /* the game never sees controller events; Steam Input covers buttons */
         }
         if (type == SDL_MOUSEMOTION) {
-            /* Under 2x desktop scaling, X pointer coordinates are even, so the last
-             * column (width-1), where the game's right-edge turning triggers, can't be
-             * reached. Moving right onto width-2 counts as reaching it (re-notes F27). */
+            g.last_motion_x = event->motion.x;
+            g.last_motion_xrel = event->motion.xrel;
+#ifdef NWPAD_XWAYLAND_EDGE_FIX
+            /* Under 2x desktop scaling on XWayland, X pointer coordinates are even,
+             * so the last column (width-1), where the game's right-edge turning
+             * triggers, can't be reached. Moving right onto width-2 counts as reaching
+             * it (re-notes F27). */
             int w = nwpad_backend_gui_width();
-            if (w > 2 && event->motion.x == w - 2) {
-                /* Sticky: a real mouse pressed against the edge keeps sending
-                 * zero-movement events there; keep reporting the edge until it
-                 * moves left. */
+            if (w > 2 && event->motion.x >= w - 2) {
+                /* Sticky: a mouse pressed against the edge keeps sending events on
+                 * the last two columns (sub-pixel rounding lands on either), so keep
+                 * reporting the edge until the pointer moves further left. */
                 if (event->motion.xrel > 0 && !g.right_edge_pinned) {
                     g.right_edge_pinned = true;
                     g.events.right_edge_fixes++;
@@ -584,6 +591,7 @@ static int nwpad_PollEvent(SDL_Event *event) {
             } else {
                 g.right_edge_pinned = false;
             }
+#endif
             g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
             if (g.cursor.stick_hidden) { /* the mouse is back: show what the game wants */

@@ -16,6 +16,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64
 endif()
 
 option(NWPAD_DEBUG_SURFACES "Build the control socket and RE commands (never in release)" ON)
+# Right-edge camera turning under scaled XWayland desktops (re-notes F27). Linux
+# only: the workaround is about how XWayland scales X11 pointer coordinates.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  option(NWPAD_XWAYLAND_EDGE_FIX "Let the pointer reach the right edge under scaled XWayland" ON)
+endif()
 
 # Pure logic: no SDL, no game, no I/O. Unit-tested.
 add_library(nwpad_core STATIC src/core/nwpad_core.c)
@@ -43,7 +48,8 @@ target_include_directories(nwpad PRIVATE ${CMAKE_BINARY_DIR}/gen)
 find_package(Threads REQUIRED)
 target_link_libraries(nwpad PRIVATE nwpad_core dl Threads::Threads)
 target_compile_definitions(nwpad PRIVATE NWPAD_VERSION="${PROJECT_VERSION}"
-  $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:NWPAD_DEBUG_SURFACES=1>)
+  $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:NWPAD_DEBUG_SURFACES=1>
+  $<$<BOOL:${NWPAD_XWAYLAND_EDGE_FIX}>:NWPAD_XWAYLAND_EDGE_FIX=1>)
 set_target_properties(nwpad PROPERTIES C_VISIBILITY_PRESET hidden)
 if(NOT NWPAD_DEBUG_SURFACES AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_options(nwpad PRIVATE -s) # release: no symbol names either
