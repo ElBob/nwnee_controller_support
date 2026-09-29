@@ -228,6 +228,13 @@ Every function, global, offset, and signature the library uses must have an entr
 - Evidence: `objdump` call-site survey. At runtime (run 20260929-112305), a virtual stick hid the cursor with `game_wants` still true, it stayed hidden after release, and uinput mouse motion restored it. Robert confirmed it visually.
 - Confidence: confirmed.
 
+### F25: Launching through Steam
+- Binary / hash: nwmain-linux 6d19c39b (Steam buildid 20277208)
+- What: with the launch option `LD_PRELOAD="$HOME/.local/lib/nwpad/libnwpad.so:$LD_PRELOAD" %command%`, Steam runs the native client inside Steam Linux Runtime **soldier** (pressure-vessel: `reaper` → `srt-bwrap` → `pv-adverb` → `nwmain-linux`). The preload reaches the game ahead of Steam's own `gameoverlayrenderer.so`, and the library loads, hooks SDL 2.0.8, and resolves 10/10 signatures. Its log lines go to `~/.local/share/Steam/logs/console-linux.txt`. The container's helper processes inherit the preload too; they log "game SDL2 not found; hooks not installed" and stay inert.
+- Portability: built on glibc 2.44, the library first required GLIBC_2.43 (`atan2f`), 2.38 (`fmodf`), and 2.34 (`dlsym`, `dladdr`). pressure-vessel uses the newer of the host's and the runtime's glibc, so on an older host such as the Steam Deck it would fail to load. `src/glibc_compat.h` pins those symbols to the x86-64 baseline (GLIBC_2.2.5), leaving GLIBC_2.17 as the newest requirement; CI checks this.
+- Evidence: run through `steam -applaunch 704450` on the box (2026-09-29): `/proc/<pid>/maps`, environ, process ancestry, and the Steam console log.
+- Confidence: confirmed.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

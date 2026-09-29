@@ -9,6 +9,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_compile_options(-Wall -Wextra -Werror)
+# Portable glibc symbol versions (src/glibc_compat.h), so the library also
+# loads on systems older than the build machine, e.g. the Steam Deck.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+  add_compile_options(-include ${CMAKE_SOURCE_DIR}/src/glibc_compat.h)
+endif()
 
 option(NWPAD_DEBUG_SURFACES "Build the control socket and RE commands (never in release)" ON)
 

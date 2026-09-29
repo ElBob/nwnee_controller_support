@@ -17,5 +17,14 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Release build (no debug surfaces)
         run: cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DNWPAD_DEBUG_SURFACES=OFF && cmake --build build-release -j
+      - name: Release library is portable (nothing newer than GLIBC_2.17)
+        run: |
+          objdump -T build-release/libnwpad.so | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tee /tmp/glibc
+          ! grep -vxE 'GLIBC_2\.(2\.5|3|4|17)' /tmp/glibc
+      - name: Upload the release library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libnwpad-release
+          path: build-release/libnwpad.so
       - name: Script syntax
         run: bash -n tools/*.sh tools/ghidra/decompile_fn && python3 -m py_compile tools/sigcheck tools/nwpadctl

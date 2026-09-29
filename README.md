@@ -12,11 +12,9 @@ Steam Input stays on and is the controller layer. It handles buttons, trackpads,
 
 ## Install
 
-1. Build and install the release library (needs CMake, a C compiler, and Python 3 with PyYAML):
-   ```
-   tools/install.sh
-   ```
-   This puts `libnwpad.so` in `~/.local/lib/nwpad/`. `tools/install.sh --uninstall` removes it.
+1. Get the release library into `~/.local/lib/nwpad/libnwpad.so`, either way:
+   - **Build it** (needs CMake, a C compiler, and Python 3 with PyYAML): `tools/install.sh`. `tools/install.sh --uninstall` removes it.
+   - **Download it** (Steam Deck, or anywhere without build tools): the `libnwpad-release` artifact of the latest CI run on GitHub, copied to that path. The library runs on any x86-64 Linux with glibc 2.17 or newer.
 2. In Steam, set NWN:EE's launch options (Properties → General → Launch Options) to:
    ```
    LD_PRELOAD="$HOME/.local/lib/nwpad/libnwpad.so:$LD_PRELOAD" %command%
