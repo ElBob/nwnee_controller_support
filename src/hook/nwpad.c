@@ -16,6 +16,7 @@
 
 #include "../core/nwpad_core.h"
 #include "backend.h"
+#include "control.h"
 #include "sdl_min.h"
 
 #ifndef NWPAD_VERSION
@@ -117,6 +118,7 @@ static struct {
     bool controller_ready;
     bool controller_init_failed;
     SDL_GameController *pad;
+    uint64_t frames;
     uint64_t last_frame_ms, last_scan_ms;
     nwpad_config cfg;
     nwpad_send_policy send_policy;
@@ -149,6 +151,36 @@ static void load_config(void) {
     }
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
+/* ---- Control socket commands (plan §8.3); main thread only ---- */
+
+static const char *controller_state(void) {
+    if (g.controller_init_failed) return "unavailable";
+    return g.pad ? "open" : "none";
+}
+
+static void control_handler(const char *request, char *out, size_t cap) {
+    char cmd[32];
+    if (!nwpad_json_get_string(request, "cmd", cmd, sizeof cmd)) {
+        snprintf(out, cap, "{\"ok\":false,\"error\":\"missing cmd\"}");
+    } else if (strcmp(cmd, "ping") == 0) {
+        snprintf(out, cap, "{\"ok\":true,\"version\":\"%s\",\"frame\":%llu}", NWPAD_VERSION,
+                 (unsigned long long)g.frames);
+    } else if (strcmp(cmd, "status") == 0) {
+        nwpad_backend_status bs = nwpad_backend_status_get();
+        snprintf(out, cap,
+                 "{\"ok\":true,\"version\":\"%s\",\"frame\":%llu,\"hooks\":true,"
+                 "\"controller\":\"%s\",\"in_game\":%s,"
+                 "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":{}}",
+                 NWPAD_VERSION, (unsigned long long)g.frames, controller_state(),
+                 nwpad_backend_in_game() ? "true" : "false",
+                 bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false");
+    } else {
+        snprintf(out, cap, "{\"ok\":false,\"error\":\"unknown cmd\"}");
+    }
+}
+#endif
+
 __attribute__((constructor)) static void nwpad_init(void) {
     const char *dis = getenv("NWPAD_DISABLE");
     g.disabled = dis && *dis && strcmp(dis, "0") != 0;
@@ -169,6 +201,9 @@ __attribute__((constructor)) static void nwpad_init(void) {
     nwpad_log("version %s loaded; camera backend: %s, movement backend: %s", NWPAD_VERSION,
               bs.camera_available ? "available" : "unavailable",
               bs.movement_available ? "available" : "unavailable");
+#ifdef NWPAD_DEBUG_SURFACES
+    nwpad_control_start(control_handler);
+#endif
 }
 
 /* ---- Controller ---- */
@@ -220,7 +255,7 @@ static float axis(int a) {
 
 static void nwpad_frame(void) {
     uint64_t t = now_ms();
-    if (!g.last_frame_ms) nwpad_log("first frame");
+    if (!g.frames++) nwpad_log("first frame");
     float dt = g.last_frame_ms ? (float)(t - g.last_frame_ms) / 1000.0f : 0.0f;
     if (dt > 0.1f) dt = 0.1f; /* hitch guard: never jump more than 100 ms of motion */
     g.last_frame_ms = t;
@@ -264,6 +299,7 @@ static void nwpad_frame(void) {
 
 static void nwpad_SwapWindow(SDL_Window *window) {
     nwpad_frame();
+    nwpad_control_service();
     sdl.SwapWindow(window);
 }
 

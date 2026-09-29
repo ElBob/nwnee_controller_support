@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static int failures, checks;
 
@@ -159,6 +160,20 @@ static void test_config(void) {
     CHECK(nwpad_config_parse(&bad, "camera_yaw_speed = fast\n") == -1);
 }
 
+static void test_json(void) {
+    char v[16];
+    CHECK(nwpad_json_get_string("{\"cmd\":\"ping\"}", "cmd", v, sizeof v) && strcmp(v, "ping") == 0);
+    CHECK(nwpad_json_get_string("{ \"x\": 1, \"cmd\" : \"status\" }", "cmd", v, sizeof v) &&
+          strcmp(v, "status") == 0);
+    CHECK(nwpad_json_get_string("{\"cmd\":\"a\\\"b\"}", "cmd", v, sizeof v) && strcmp(v, "a\"b") == 0);
+    CHECK(!nwpad_json_get_string("{\"cmdx\":\"ping\"}", "cmd", v, sizeof v));  /* key prefix */
+    CHECK(!nwpad_json_get_string("{\"cmd\":1}", "cmd", v, sizeof v));           /* not a string */
+    CHECK(!nwpad_json_get_string("{\"cmd\":\"ping", "cmd", v, sizeof v));        /* unterminated */
+    CHECK(!nwpad_json_get_string("{\"cmd\":\"0123456789abcdefg\"}", "cmd", v, sizeof v)); /* too long */
+    CHECK(nwpad_json_get_string("{\"a\":\"cmd\",\"cmd\":\"ok\"}", "cmd", v, sizeof v) &&
+          strcmp(v, "ok") == 0); /* "cmd" as a value is skipped */
+}
+
 int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
@@ -169,6 +184,7 @@ int main(void) {
     test_camera();
     test_arbitration();
     test_config();
+    test_json();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

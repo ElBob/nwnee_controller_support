@@ -200,3 +200,28 @@ void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
             a->movement_owned_by_stick = true;
     }
 }
+
+bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap) {
+    size_t klen = strlen(key);
+    for (const char *p = json; (p = strchr(p, '"')) != NULL; p++) {
+        if (strncmp(p + 1, key, klen) != 0 || p[1 + klen] != '"') continue;
+        const char *q = p + 2 + klen;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q++ != ':') continue;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q++ != '"') return false;
+        size_t n = 0;
+        for (; *q && *q != '"'; q++) {
+            if (*q == '\\') {
+                q++;
+                if (*q != '"' && *q != '\\') return false;
+            }
+            if (n + 1 >= cap) return false;
+            out[n++] = *q;
+        }
+        if (*q != '"') return false;
+        out[n] = '\0';
+        return true;
+    }
+    return false;
+}

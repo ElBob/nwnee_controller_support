@@ -54,6 +54,10 @@ if [ -z "${XAUTHORITY:-}" ]; then
   XAUTHORITY="$(ls -t /run/user/"$(id -u)"/xauth_* 2>/dev/null | head -1 || true)"
 fi
 
+TOOLS="$(cd "$(dirname "$0")" && pwd)"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+rm -f "$XDG_RUNTIME_DIR/nwpad.sock"  # stale socket from an earlier run
+
 cd "$(dirname "$NWN_BIN")"
 env "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="$XAUTHORITY" \
     SteamAppId="$NWN_APPID" SteamGameId="$NWN_APPID" NWPAD_SOCKET=1 \
@@ -62,10 +66,10 @@ env "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="$XAUTHORITY" \
 PID=$!
 echo "$PID" > "$RUN/pid"
 
-# Readiness: until the control socket exists (M0), "ready" means the library loaded.
+# Readiness: the control socket answers a ping from the game's frame loop.
 for _ in $(seq "$TIMEOUT"); do
   if ! kill -0 "$PID" 2>/dev/null; then echo "game exited early; see $RUN/game.log"; exit 12; fi
-  if grep -q '^\[nwpad\] version' "$RUN/game.log"; then echo "$RUN"; exit 0; fi
+  if "$TOOLS/nwpadctl" --timeout 3 ping >/dev/null 2>&1; then echo "$RUN"; exit 0; fi
   sleep 1
 done
 kill "$PID" 2>/dev/null || true

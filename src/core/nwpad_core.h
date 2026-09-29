@@ -4,6 +4,7 @@
 #define NWPAD_CORE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define NWPAD_SAFETY_DEADZONE 0.05f /* fixed, not configurable (plan §6.3) */
@@ -111,5 +112,11 @@ void nwpad_arbiter_move_key(nwpad_arbiter *a, uint8_t key_bit, bool down);
 /* Call once per frame with the deadzoned sticks; updates ownership flags. */
 void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
                           uint64_t now_ms, const nwpad_config *cfg);
+
+/* ---- Control socket protocol helpers (plan §8.3) ---- */
+/* Copy the string value of "key" from a flat JSON object into out. Handles \"
+ * and \\ escapes only. Returns false if the key is missing, not a string, or
+ * doesn't fit. */
+bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap);
 
 #endif

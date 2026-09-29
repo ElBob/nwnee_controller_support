@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""CLI over the nwpad control socket (plan §8.3, §8.4). Runs on the test box.
+
+  tools/nwpadctl ping
+  tools/nwpadctl status
+  tools/nwpadctl <cmd> [key=value ...]    # numbers are sent as numbers
+  tools/nwpadctl --wait-ready SECS ping   # retry until the frame loop answers
+
+Prints the reply line. Exit codes: 0 ok, 1 the library answered ok=false,
+2 socket unavailable or no reply.
+"""
+import argparse
+import json
+import os
+import socket
+import sys
+import time
+
+
+def sock_path() -> str:
+    run = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return os.path.join(run, "nwpad.sock")
+
+
+def request(msg: dict, timeout: float) -> dict:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(sock_path())
+        s.sendall((json.dumps(msg) + "\n").encode())
+        buf = b""
+        while b"\n" not in buf:
+            chunk = s.recv(4096)
+            if not chunk:
+                raise ConnectionError("socket closed before a reply")
+            buf += chunk
+    return json.loads(buf.split(b"\n", 1)[0])
+
+
+def parse_value(v: str):
+    for conv in (int, float):
+        try:
+            return conv(v)
+        except ValueError:
+            pass
+    return v
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--timeout", type=float, default=5.0, help="per-request timeout, seconds")
+    ap.add_argument("--wait-ready", type=float, metavar="SECS",
+                    help="retry until a reply arrives or SECS elapse")
+    ap.add_argument("cmd")
+    ap.add_argument("args", nargs="*", metavar="key=value")
+    a = ap.parse_args()
+
+    msg = {"cmd": a.cmd}
+    for kv in a.args:
+        k, sep, v = kv.partition("=")
+        if not sep:
+            ap.error(f"expected key=value, got {kv!r}")
+        msg[k] = parse_value(v)
+
+    deadline = time.monotonic() + (a.wait_ready or 0)
+    while True:
+        try:
+            reply = request(msg, a.timeout)
+            if a.wait_ready and not reply.get("ok") and reply.get("error") == "frame loop not running":
+                raise ConnectionError(reply["error"])
+            break
+        except (OSError, ConnectionError, ValueError) as e:
+            if time.monotonic() >= deadline:
+                print(f"no reply: {e}", file=sys.stderr)
+                return 2
+            time.sleep(0.5)
+    print(json.dumps(reply))
+    return 0 if reply.get("ok") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

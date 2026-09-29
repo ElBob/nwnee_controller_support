@@ -19,8 +19,10 @@ target_link_libraries(nwpad_core PUBLIC m)
 set_target_properties(nwpad_core PROPERTIES C_VISIBILITY_PRESET hidden)
 
 # The preload library.
-add_library(nwpad SHARED src/hook/nwpad.c src/hook/backend_stub.c)
-target_link_libraries(nwpad PRIVATE nwpad_core dl)
+add_library(nwpad SHARED src/hook/nwpad.c src/hook/backend_stub.c
+  $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:src/hook/control.c>)
+find_package(Threads REQUIRED)
+target_link_libraries(nwpad PRIVATE nwpad_core dl Threads::Threads)
 target_compile_definitions(nwpad PRIVATE NWPAD_VERSION="${PROJECT_VERSION}"
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:NWPAD_DEBUG_SURFACES=1>)
 set_target_properties(nwpad PROPERTIES C_VISIBILITY_PRESET hidden)
@@ -31,9 +33,16 @@ target_link_libraries(test_core PRIVATE nwpad_core)
 add_test(NAME core COMMAND test_core)
 
 # Preload smoke test: the real preload library against a fake SDL that is
-# statically linked and exported, like the game's.
-add_executable(test_preload tests/unit/test_preload.c tests/unit/fake_sdl.c)
-set_target_properties(test_preload PROPERTIES ENABLE_EXPORTS ON)
-add_test(NAME preload COMMAND test_preload)
-set_tests_properties(preload PROPERTIES
-  ENVIRONMENT "LD_PRELOAD=$<TARGET_FILE:nwpad>;HOME=${CMAKE_BINARY_DIR}")
+# statically linked and exported, like the game's. Linux x86-64 only (the fake
+# SDL's stubs are x86-64 assembly, and LD_PRELOAD is Linux).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+  add_executable(test_preload tests/unit/test_preload.c tests/unit/fake_sdl.c)
+  set_target_properties(test_preload PROPERTIES ENABLE_EXPORTS ON)
+  target_link_libraries(test_preload PRIVATE Threads::Threads)
+  add_test(NAME preload COMMAND test_preload)
+  set(preload_env "LD_PRELOAD=$<TARGET_FILE:nwpad>;HOME=${CMAKE_BINARY_DIR}")
+  if(NWPAD_DEBUG_SURFACES)
+    list(APPEND preload_env "NWPAD_SOCKET=1;XDG_RUNTIME_DIR=${CMAKE_BINARY_DIR}")
+  endif()
+  set_tests_properties(preload PROPERTIES ENVIRONMENT "${preload_env}")
+endif()

@@ -4,7 +4,9 @@ They are skipped unless NWPAD_LIVE=1, so `pytest` is safe to run anywhere.
 tools/remote.sh test sets NWPAD_LIVE=1 on the box.
 """
 import os
+import signal
 import subprocess
+import time
 
 import pytest
 
@@ -28,5 +30,18 @@ def game():
         pytest.fail(f"run_game.sh failed ({proc.returncode}): {proc.stdout}{proc.stderr}")
     run_dir = proc.stdout.strip().splitlines()[-1]
     yield run_dir
-    pid = open(os.path.join(run_dir, "pid")).read().strip()
-    subprocess.run(["kill", pid], check=False)
+    pid = int(open(os.path.join(run_dir, "pid")).read().strip())
+    stop_game(pid)
+
+
+def stop_game(pid, grace_s=15.0):
+    """SIGTERM the game we started, wait for it to exit, SIGKILL after grace_s."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+        deadline = time.monotonic() + grace_s
+        while time.monotonic() < deadline:
+            os.kill(pid, 0)
+            time.sleep(0.25)
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
