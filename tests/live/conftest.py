@@ -61,8 +61,9 @@ run_threshold = 0.7875
 run_hysteresis = 0.125
 mouse_idle_ms = 300
 strafe_window = 10
+strafe_exit_ms = 150
 """
-TEST_CONFIG_KEYS = 6
+TEST_CONFIG_KEYS = 7
 
 
 @pytest.fixture(scope="session")

@@ -42,6 +42,7 @@ The game log shows `[nwpad] version ... loaded` when the library is active. Set 
 | `run_hysteresis` | 0.125 | Width of the walk/run band (so: run above 0.85, walk below 0.725) |
 | `mouse_idle_ms` | 300 | How long the mouse must be still before the stick gets the camera back |
 | `strafe_window` | 10 | Half-width of the strafe/backpedal windows, ° |
+| `strafe_exit_ms` | 150 | How long the stick must leave a strafe window before it becomes a drag |
 | `hide_cursor` | 1 | Hide the cursor while the sticks are in use |
 
 Deadzones and response curves belong in Steam Input. The library's own safety deadzone is fixed at 0.15.

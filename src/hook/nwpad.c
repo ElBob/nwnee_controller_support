@@ -139,6 +139,7 @@ static struct {
     nwpad_arbiter arbiter;
     nwpad_move_mode move_mode;
     nwpad_move_style move_style;
+    nwpad_style_state style_state;
     nwpad_vec2 last_left, last_right; /* deadzoned sticks this frame (state reports them) */
     struct {             /* cursor hidden while the sticks are in use (Robert's request) */
         bool game_wants; /* what the game last asked SDL_ShowCursor for */
@@ -146,6 +147,7 @@ static struct {
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
+    bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27) */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
     struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
         uint32_t bucket[256], own_bucket[256]; /* all work / excluding game functions we call */
@@ -469,7 +471,10 @@ static void nwpad_frame(void) {
     }
     /* With edge turning on, a pointer left on the outermost pixel spins the camera
      * once the stick is released; move the game's recorded pointer one pixel in. */
-    if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) g.cursor.nudges++;
+    if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) {
+        g.cursor.nudges++;
+        g.right_edge_pinned = false; /* only a new rightward push re-pins it */
+    }
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;
@@ -492,7 +497,7 @@ static void nwpad_frame(void) {
     nwpad_vec2 move = nwpad_backend_movement_gated() ? (nwpad_vec2){0, 0} : left;
     nwpad_move_intent intent = nwpad_move_intent_compute(
         move, nwpad_backend_camera_forward(&cam), facing, nwpad_backend_always_run(), g.move_mode,
-        g.move_style, &g.cfg);
+        &g.style_state, t, &g.cfg);
     g.move_mode = intent.mode;
     g.move_style = intent.style;
     nwpad_move_style sent_style = g.send_state.last_sent.style;
@@ -567,9 +572,17 @@ static int nwpad_PollEvent(SDL_Event *event) {
              * column (width-1), where the game's right-edge turning triggers, can't be
              * reached. Moving right onto width-2 counts as reaching it (re-notes F27). */
             int w = nwpad_backend_gui_width();
-            if (w > 2 && event->motion.x == w - 2 && event->motion.xrel > 0) {
-                event->motion.x = w - 1;
-                g.events.right_edge_fixes++;
+            if (w > 2 && event->motion.x == w - 2) {
+                /* Sticky: a real mouse pressed against the edge keeps sending
+                 * zero-movement events there; keep reporting the edge until it
+                 * moves left. */
+                if (event->motion.xrel > 0 && !g.right_edge_pinned) {
+                    g.right_edge_pinned = true;
+                    g.events.right_edge_fixes++;
+                }
+                if (g.right_edge_pinned) event->motion.x = w - 1;
+            } else {
+                g.right_edge_pinned = false;
             }
             g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());

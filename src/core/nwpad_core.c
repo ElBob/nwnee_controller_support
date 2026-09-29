@@ -18,6 +18,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->mouse_idle_ms = 300;
     cfg->strafe_window_deg = 10.0f;
     cfg->hide_cursor = true;
+    cfg->strafe_exit_ms = 150;
 }
 
 static const char *skip_ws(const char *s) {
@@ -60,6 +61,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
             else if (!strcmp(key, "mouse_idle_ms")) { cfg->mouse_idle_ms = (uint32_t)v; applied++; }
             else if (!strcmp(key, "strafe_window")) { cfg->strafe_window_deg = (float)v; applied++; }
             else if (!strcmp(key, "hide_cursor")) { cfg->hide_cursor = v != 0; applied++; }
+            else if (!strcmp(key, "strafe_exit_ms")) { cfg->strafe_exit_ms = (uint32_t)v; applied++; }
         }
         line = end ? end + 1 : NULL;
     }
@@ -110,18 +112,22 @@ nwpad_move_mode nwpad_move_mode_update(nwpad_move_mode prev, float magnitude,
 
 nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_forward_deg,
                                             float facing_deg, bool always_run,
-                                            nwpad_move_mode prev_mode, nwpad_move_style prev_style,
-                                            const nwpad_config *cfg) {
+                                            nwpad_move_mode prev_mode, nwpad_style_state *style,
+                                            uint64_t now_ms, const nwpad_config *cfg) {
     nwpad_move_intent in = {0};
     float m = nwpad_magnitude(stick);
     in.mode = nwpad_move_mode_update(prev_mode, m, always_run, cfg);
     in.moving = in.mode != NWPAD_MOVE_IDLE;
-    if (!in.moving) return in; /* style REST */
+    if (!in.moving) {
+        style->style = NWPAD_STYLE_REST;
+        style->outside_since_ms = 0;
+        return in;
+    }
     in.bearing_deg = nwpad_world_bearing(stick, camera_forward_deg);
     /* The same stick, re-expressed relative to the character's facing. */
     float cw = nwpad_wrap_deg(facing_deg - in.bearing_deg) * 0.017453292f;
     nwpad_vec2 rel = {sinf(cw) * m, cosf(cw) * m};
-    in.style = nwpad_move_style_update(prev_style, rel, cfg);
+    in.style = nwpad_move_style_step(style, rel, now_ms, cfg);
     return in;
 }
 
@@ -310,4 +316,19 @@ nwpad_move_style nwpad_move_style_update(nwpad_move_style prev, nwpad_vec2 stick
     case NWPAD_STYLE_DRAG: break;
     }
     return NWPAD_STYLE_DRAG;
+}
+
+nwpad_move_style nwpad_move_style_step(nwpad_style_state *st, nwpad_vec2 stick, uint64_t now_ms,
+                                       const nwpad_config *cfg) {
+    nwpad_move_style next = nwpad_move_style_update(st->style, stick, cfg);
+    bool key_style = st->style == NWPAD_STYLE_STRAFE_RIGHT || st->style == NWPAD_STYLE_BACKPEDAL ||
+                     st->style == NWPAD_STYLE_STRAFE_LEFT;
+    if (key_style && next == NWPAD_STYLE_DRAG) {
+        if (!st->outside_since_ms) st->outside_since_ms = now_ms ? now_ms : 1;
+        if (now_ms - st->outside_since_ms < cfg->strafe_exit_ms) return st->style; /* not yet */
+    }
+    if (next != NWPAD_STYLE_DRAG || !key_style) st->outside_since_ms = 0;
+    if (next != st->style) st->outside_since_ms = 0;
+    st->style = next;
+    return next;
 }

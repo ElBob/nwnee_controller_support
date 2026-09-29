@@ -20,6 +20,7 @@ typedef struct {
     uint32_t mouse_idle_ms;   /* mouse idle time before the stick regains the camera */
     float strafe_window_deg;  /* half-width of the strafe/backpedal windows (plan §3) */
     bool hide_cursor;         /* hide the mouse cursor while the sticks are in use */
+    uint32_t strafe_exit_ms;  /* how long outside a strafe window before it becomes a drag */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);
@@ -68,6 +69,19 @@ float nwpad_stick_angle_cw(nwpad_vec2 stick);
 nwpad_move_style nwpad_move_style_update(nwpad_move_style prev, nwpad_vec2 stick_after_deadzone,
                                          const nwpad_config *cfg);
 
+/* nwpad_move_style_update with a debounce on leaving a strafe/backpedal window:
+ * the stick must stay outside it for cfg->strafe_exit_ms before it becomes a
+ * drag. A released stick springing back to centre passes through other angles
+ * for a moment, which would otherwise turn the character around just before it
+ * stops (Robert's feel test). */
+typedef struct {
+    nwpad_move_style style;
+    uint64_t outside_since_ms; /* 0: inside its window (or not in a key style) */
+} nwpad_style_state;
+
+nwpad_move_style nwpad_move_style_step(nwpad_style_state *st, nwpad_vec2 stick_after_deadzone,
+                                       uint64_t now_ms, const nwpad_config *cfg);
+
 typedef struct {
     bool moving;
     nwpad_move_mode mode;   /* walk or run */
@@ -80,7 +94,8 @@ typedef struct {
 nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick_after_deadzone,
                                             float camera_forward_deg, float facing_deg,
                                             bool always_run, nwpad_move_mode prev_mode,
-                                            nwpad_move_style prev_style, const nwpad_config *cfg);
+                                            nwpad_style_state *style, uint64_t now_ms,
+                                            const nwpad_config *cfg);
 
 /* ---- Send-rate limiting (plan §5.2) ---- */
 typedef struct {

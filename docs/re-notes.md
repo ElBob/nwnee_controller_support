@@ -247,7 +247,8 @@ Every function, global, offset, and signature the library uses must have an entr
 ### F27: Right-edge turning is unreachable under 2x desktop scaling
 - What: on the box (TV output at scale 2, `kwinrc [Xwayland] Scale=2`, X screen 3840×2160) the real pointer never gets past X = 3838. A relative mouse pushed right, even one unit at a time, stops there, and the game records x = 3838. The game's right-edge turning needs x = 3839 (width − 1), so it can never trigger; the left edge (0) works. KWin keeps the pointer in whole logical pixels (0–1919), and XWayland doubles them, so X coordinates are even. Robert saw the same with his own mouse.
 - Fix (library): in the PollEvent hook, a mouse-motion event at x = width − 2 moving right (xrel > 0) is reported to the game as x = width − 1. `state.events.right_edge_fixes` counts them. Where the last pixel is reachable, the only effect is a 2-px right edge zone. The alternative, the TV at 100% scale, would shrink the whole desktop.
-- Evidence: run 20260929-124722 and after: right edge turns at −76°/s (game pointer 3839), and a stick turn plus release stops it (record nudged to 3838).
+- Sticky (after Robert's test, where the right edge only caught fast flicks): a real mouse pressed against the edge keeps sending motion events at x = 3838 with no horizontal movement, and each one reset the game's record to 3838. The correction now pins the record at width − 1 from the first rightward arrival until the pointer leaves that column. A stick nudge clears the pin, so jitter can't restart the turning; a deliberate move off and back re-pins it.
+- Evidence: run 20260929-124722 and after: right edge turns at −76°/s (game pointer 3839), steady under simulated hand jitter (2 s), and a stick turn plus release stops it (record nudged to 3838).
 - Confidence: confirmed.
 
 ## Conventions to confirm

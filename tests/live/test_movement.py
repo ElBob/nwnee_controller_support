@@ -285,3 +285,20 @@ def test_walk_run(home, always_run):
             assert low_mode == "walk" and low == pytest.approx(walk_ref, rel=0.10), (low, walk_ref)
     finally:
         ctl("always_run", on=0)
+
+
+def test_backpedal_release_springback_keeps_facing(home):
+    """Releasing a backpedal: the stick springs back through angles outside the
+    window for a moment. That mustn't turn the character around (strafe_exit_ms;
+    Robert's feel test)."""
+    _, c, _ = snapshot(home)
+    f0 = c["facing"]
+    home("stick", **stick_for_world(home, (f0 - 180) % 360))  # straight back
+    time.sleep(0.8)
+    for cw in (150, 210):  # the spring-back wobble, 40 ms each, still above the deadzone
+        home("stick", **stick_for_world(home, (f0 - cw) % 360, mag=0.5))
+        time.sleep(0.04)
+    home("release")
+    time.sleep(0.8)
+    _, c1, _ = snapshot(home)
+    assert abs(ang_diff(c1["facing"], f0)) <= FACING_TOL, (f0, c1)

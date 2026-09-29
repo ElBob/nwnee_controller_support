@@ -44,27 +44,29 @@ static void test_bearing(void) {
 
 static void test_intent(void) {
     /* Camera forward 45; the character also faces 45. Stick right strafes right. */
+    nwpad_style_state ss = {0};
     nwpad_move_intent in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, 45, false,
-                                                     NWPAD_MOVE_IDLE, NWPAD_STYLE_REST, &cfg);
+                                                     NWPAD_MOVE_IDLE, &ss, 0, &cfg);
     CHECK(in.moving && in.style == NWPAD_STYLE_STRAFE_RIGHT);
     ANGLE_NEAR(in.bearing_deg, 315, 1e-3);
     /* Character turned 90 left of the camera (facing 135): the same world
      * direction is now behind it, so it backpedals (windows follow facing). */
-    in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, 135, false, NWPAD_MOVE_IDLE,
-                                   NWPAD_STYLE_REST, &cfg);
+    ss = (nwpad_style_state){0};
+    in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, 135, false, NWPAD_MOVE_IDLE, &ss, 0, &cfg);
     CHECK(in.style == NWPAD_STYLE_BACKPEDAL);
     ANGLE_NEAR(in.bearing_deg, 315, 1e-3);
     /* Forward and diagonals drag. */
-    in = nwpad_move_intent_compute((nwpad_vec2){0, 1}, 45, 45, false, NWPAD_MOVE_IDLE,
-                                   NWPAD_STYLE_REST, &cfg);
+    ss = (nwpad_style_state){0};
+    in = nwpad_move_intent_compute((nwpad_vec2){0, 1}, 45, 45, false, NWPAD_MOVE_IDLE, &ss, 0, &cfg);
     CHECK(in.style == NWPAD_STYLE_DRAG);
     ANGLE_NEAR(in.bearing_deg, 45, 1e-3);
-    in = nwpad_move_intent_compute((nwpad_vec2){0.7f, 0.7f}, 45, 45, false, NWPAD_MOVE_IDLE,
-                                   NWPAD_STYLE_REST, &cfg);
+    ss = (nwpad_style_state){0};
+    in = nwpad_move_intent_compute((nwpad_vec2){0.7f, 0.7f}, 45, 45, false, NWPAD_MOVE_IDLE, &ss, 0, &cfg);
     CHECK(in.style == NWPAD_STYLE_DRAG);
     /* Released: rest. */
+    ss = (nwpad_style_state){.style = NWPAD_STYLE_DRAG};
     nwpad_move_intent idle = nwpad_move_intent_compute((nwpad_vec2){0, 0}, 45, 45, false,
-                                                       NWPAD_MOVE_RUN, NWPAD_STYLE_DRAG, &cfg);
+                                                       NWPAD_MOVE_RUN, &ss, 0, &cfg);
     CHECK(!idle.moving && idle.mode == NWPAD_MOVE_IDLE && idle.style == NWPAD_STYLE_REST);
 }
 
@@ -250,6 +252,30 @@ static void test_move_style(void) {
     CHECK(nwpad_config_parse(&wide, "strafe_window = 15\n") == 1 && wide.strafe_window_deg == 15);
 }
 
+static void test_style_debounce(void) {
+    nwpad_style_state st = {0};
+    uint64_t t = 1000;
+    CHECK(nwpad_move_style_step(&st, at_cw(180), t, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    /* a release springing back through 150 deg for 60 ms: still backpedal */
+    CHECK(nwpad_move_style_step(&st, at_cw(150), t + 20, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_step(&st, at_cw(150), t + 80, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_step(&st, (nwpad_vec2){0, 0}, t + 90, &cfg) == NWPAD_STYLE_REST);
+    /* a drift that stays outside the window becomes a drag after strafe_exit_ms */
+    st = (nwpad_style_state){0};
+    CHECK(nwpad_move_style_step(&st, at_cw(180), t, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_step(&st, at_cw(200), t + 10, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_step(&st, at_cw(200), t + 10 + cfg.strafe_exit_ms - 1, &cfg) == NWPAD_STYLE_BACKPEDAL);
+    CHECK(nwpad_move_style_step(&st, at_cw(200), t + 10 + cfg.strafe_exit_ms, &cfg) == NWPAD_STYLE_DRAG);
+    CHECK(nwpad_move_style_step(&st, at_cw(180), t + 400, &cfg) == NWPAD_STYLE_DRAG); /* drag stays drag */
+    /* coming back inside the window resets the timer */
+    st = (nwpad_style_state){0};
+    nwpad_move_style_step(&st, at_cw(90), t, &cfg);
+    nwpad_move_style_step(&st, at_cw(120), t + 100, &cfg);
+    CHECK(nwpad_move_style_step(&st, at_cw(90), t + 200, &cfg) == NWPAD_STYLE_STRAFE_RIGHT);
+    CHECK(nwpad_move_style_step(&st, at_cw(120), t + 300, &cfg) == NWPAD_STYLE_STRAFE_RIGHT); /* fresh timer */
+    CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
+}
+
 int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
@@ -263,6 +289,7 @@ int main(void) {
     test_json();
     test_pattern();
     test_move_style();
+    test_style_debounce();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
