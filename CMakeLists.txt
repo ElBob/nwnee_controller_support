@@ -30,10 +30,10 @@ add_executable(test_core tests/unit/test_core.c)
 target_link_libraries(test_core PRIVATE nwpad_core)
 add_test(NAME core COMMAND test_core)
 
-# Preload smoke test: fake SDL + the real preload library.
-add_library(fake_sdl SHARED tests/unit/fake_sdl.c)
-add_executable(test_preload tests/unit/test_preload.c)
-target_link_libraries(test_preload PRIVATE fake_sdl)
+# Preload smoke test: the real preload library against a fake SDL that is
+# statically linked and exported, like the game's.
+add_executable(test_preload tests/unit/test_preload.c tests/unit/fake_sdl.c)
+set_target_properties(test_preload PROPERTIES ENABLE_EXPORTS ON)
 add_test(NAME preload COMMAND test_preload)
 set_tests_properties(preload PROPERTIES
   ENVIRONMENT "LD_PRELOAD=$<TARGET_FILE:nwpad>;HOME=${CMAKE_BINARY_DIR}")

@@ -7,6 +7,7 @@
 
 typedef struct SDL_Window SDL_Window;
 typedef struct _SDL_GameController SDL_GameController;
+typedef struct SDL_version { uint8_t major, minor, patch; } SDL_version;
 
 /* SDL_Event is a 56-byte union; we only inspect the type and keyboard fields. */
 typedef union SDL_Event {

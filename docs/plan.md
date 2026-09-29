@@ -136,7 +136,7 @@ The safety deadzone is fixed at 0.05 raw magnitude and isn't configurable. The v
 
 `libnwpad.so` is a single C11 preload library.
 
-- **Hook layer.** Interposes `SDL_GL_SwapWindow`, which provides the per-frame callback on the main thread, and `SDL_PollEvent`, which filters out `SDL_CONTROLLER*` events and observes mouse and keyboard activity for arbitration. It also hooks game functions identified in R-tasks as needed.
+- **Hook layer.** Hooks `SDL_GL_SwapWindow`, which provides the per-frame callback on the main thread, and `SDL_PollEvent`, which filters out `SDL_CONTROLLER*` events and observes mouse and keyboard activity for arbitration. The game links SDL2 statically, so these hooks swap entries in SDL's dynamic API jump table rather than interposing symbols (re-notes F8). It also hooks game functions identified in R-tasks as needed.
 - **Signature resolver.** Resolves all game addresses at load time from `signatures/ee.yaml`. If a signature misses, the dependent feature is disabled and logged, and the game keeps running.
 - **Input source.** Uses the game's SDL GameController API, initialized lazily on the first frame. It also accepts a virtual input override from the control socket for testing.
 - **Arbitration, movement, and camera modules.** Pure functions of input plus game state that produce actions. This keeps them unit-testable.
@@ -335,4 +335,6 @@ The repo is public, under the MIT license.
 | 2026-09-28 | Steam Input is the controller layer and owns all stick tuning. The library uses raw values with a fixed safety deadzone. |
 | 2026-09-28 | The library is always active on any server; the README carries a persistent-world rules note. |
 | 2026-09-28 | Public repo, MIT license. Agent rules live in `CLAUDE.md`. |
+| 2026-09-28 | SDL hooks go through SDL's dynamic API jump table, because the game links SDL 2.0.8 statically and symbol interposition can't reach it (re-notes F8). |
+| 2026-09-28 | Test isolation uses the game's `-userdirectory` option (re-notes F10). |
 | 2026-09-28 | v1 is done when the automated suite passes and Robert signs off after play sessions on desktop and Deck. |

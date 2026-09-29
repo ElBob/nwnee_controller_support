@@ -1,9 +1,10 @@
-/* Preload smoke test: run with LD_PRELOAD=libnwpad.so against fake_sdl.
- * Checks interposition, pass-through to the real SDL, and controller-event filtering. */
+/* Preload smoke test: run with LD_PRELOAD=libnwpad.so. The fake SDL is linked
+ * into this executable, as in the game, so this checks the jump-table hooks,
+ * pass-through to the real SDL, and controller-event filtering. */
 #include <stdio.h>
 #include "../../src/hook/sdl_min.h"
 
-extern int fake_swap_calls;
+extern int fake_swap_calls, fake_dynapi_fills;
 void SDL_GL_SwapWindow(SDL_Window *w);
 int SDL_PollEvent(SDL_Event *e);
 
@@ -20,6 +21,7 @@ int main(void) {
     if (seen != 2) { fprintf(stderr, "FAIL: expected 2 events, saw %d\n", seen); fails++; }
     for (int i = 0; i < 3; i++) SDL_GL_SwapWindow(NULL);
     if (fake_swap_calls != 3) { fprintf(stderr, "FAIL: swap not forwarded\n"); fails++; }
+    if (fake_dynapi_fills != 1) { fprintf(stderr, "FAIL: jump table filled %d times\n", fake_dynapi_fills); fails++; }
     printf("preload smoke: %s\n", fails ? "FAIL" : "ok");
     return fails ? 1 : 0;
 }
