@@ -2,7 +2,7 @@
 
 Analog controller support for the native Linux client of **Neverwinter Nights: Enhanced Edition**, injected at runtime.
 
-The left stick moves your character in any direction relative to the camera, including strafing and backpedaling while facing forward. The right stick turns and pitches the camera smoothly. Nothing is remapped to keystrokes. The library, `libnwpad.so`, loads into the game with `LD_PRELOAD` and drives the game's own movement and camera, and the game files on disk are never modified.
+The left stick moves your character in any direction relative to the camera, turning to face where it walks, the same way holding the mouse button on the ground does. The right stick turns and pitches the camera smoothly. Nothing is remapped to keystrokes. The library, `libnwpad.so`, loads into the game with `LD_PRELOAD` and drives the game's own movement and camera, and the game files on disk are never modified.
 
 > **Status: pre-alpha.** The build, the core logic, and the SDL hook layer are in place. The game backend (camera and movement) is still a stub, so the library currently loads and reads your controller but doesn't control anything yet. See [`docs/plan.md`](docs/plan.md) for the roadmap.
 

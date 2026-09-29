@@ -8,7 +8,7 @@ Add true analog stick control of character movement and camera to the native Lin
 
 **In scope:**
 
-- **Movement from the left stick.** Full 360° direction relative to the camera, with free facing: the character can strafe and backpedal while facing forward. Stick magnitude selects walk or run.
+- **Movement from the left stick.** Full 360° direction relative to the camera. The character faces where it walks, as with the game's own click-and-drag movement (decision log, M2). Stick magnitude selects walk or run.
 - **Camera from the right stick.** Continuous, framerate-independent yaw and pitch.
 
 **Out of scope:** zoom (the mouse wheel stays the zoom control), menu and UI navigation, and all button, trackpad, and gyro mapping. Steam Input handles those (§2).
@@ -34,7 +34,7 @@ Steam Input is the controller layer. The library does not replace it, and the pr
 
 ## 3. Behavior specification
 
-**Movement.** The left stick direction, rotated by the current camera yaw, gives the world-space movement direction. While the stick is deflected, the character faces the camera's forward direction and moves along the stick direction. Pushing the stick sideways strafes, and pulling it back backpedals. When the stick returns to the safety deadzone, the character stops and keeps its current facing. This follows the free-facing requirement. The facing rule ("face camera forward while moving") is the v1 default and may be revisited after feel testing.
+**Movement.** The left stick direction, rotated by the current camera yaw, gives the world-space movement direction. While the stick is deflected, the character walks that way and turns to face it, exactly like holding the left mouse button on the ground. When the stick returns to the safety deadzone, the character stops and keeps its current facing. (Before the M2 gate the spec required free facing, with strafe and backpedal while facing the camera; Robert replaced it at the gate, see the decision log.)
 
 **Walk and run.** With the game's Always Run setting off, magnitude below the run threshold walks and magnitude above it runs, with hysteresis. With Always Run on, any deflection outside the safety deadzone runs.
 
@@ -99,7 +99,7 @@ These can start immediately, in parallel with M0. Tasks marked "agent" are headl
 - **Path A** is used if R1 plus a runtime check show that the server honors an arbitrary bearing *and* supports moving along that bearing while facing a different direction. The library calls the client-side `DriveControl` sender (from R3) with the world movement direction and keeps facing on the camera's forward direction, using `TurnOnSpot` if the drive message doesn't carry facing. This is client-only and works on any server.
 - **Path B** is used otherwise. The library hooks the in-process server's `HandlePlayerToServerInputDriveControl` or `AddDriveAction` and substitutes the analog bearing and facing before they reach the creature. This is single-player and self-hosted only, and multiplayer is revisited after v1.
 
-**Rejected for v1:** Path A2 (`TurnOnSpot` plus forward drive only) and click-to-move through `WalkToWayPoint`. Both force the character to face its movement direction, which violates the free-facing requirement. A2 may still serve as a diagnostic stepping stone during M2.
+**Decided at the gate (2026-09-28): Path D, drag emulation.** The game's click-and-drag movement resends `WalkToWayPoint` toward the cursor while the button is held (re-notes F16), and the character faces where it walks. The library produces the same stream toward a point ahead of the character along the stick direction, entering through the client function the mouse-drag path uses. This is client-only and works on any server. Paths A and B above are kept for reference. Free facing is out of scope for v1.
 
 ### 5.2 Common behavior
 
@@ -249,14 +249,14 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Camera limits and locks | Pitch stays within the game limits. With a script-applied yaw or pitch lock, the stick has no effect on that axis. |
 | Heading accuracy | 16 stick angles × 3 camera yaws: displacement direction after 1 s is within 5° of expected. |
 | Non-quantization | Headings at 22.5° offsets give distinct displacement directions. |
-| Free facing | Strafe (stick right) and backpedal (stick down): displacement matches the stick direction, and facing stays within 5° of camera forward. |
+| Facing follows movement | For stick right and stick down, displacement matches the stick direction, and facing ends within 5° of the displacement direction. |
 | Stop | The character stops within 300 ms of release, and position is stable for 1 s. |
 | Walk/run | Rates match the game's walk and run speeds on either side of the threshold. With Always Run on, it runs at 0.3 deflection. |
 | Direction change | Stick rotation while moving updates the heading without a stop or stutter. |
 | Collision | Pushing into the wall stops progress, and re-steering away works. |
 | Gating | No movement during dialog, cutscene, or chat focus. |
 | Arbitration | Mouse camera movement via xdotool suspends the stick camera until idle. WASD suspends stick movement until released. |
-| Packet shape (Path A) | `msglog` shows our messages have the same layout as captured keyboard packets, apart from the heading fields. |
+| Packet shape (Path D) | Our `WalkToWayPoint` messages have the same layout and cadence as captured mouse-drag packets, apart from the target point. |
 | Soak | 10 minutes of randomized input: no crash, no stuck movement, rate cap respected. |
 | End-to-end SDL | Heading and stop tests driven through `uinput_pad.py`. |
 | Overhead | Library time per frame at the 99th percentile is under 0.1 ms. |
@@ -284,7 +284,7 @@ The agent stops and asks Robert:
 | **M0: Environment** | Box setup, session lock, isolation, test module and save, unattended load, socket `ping`/`status`, build and hash recorded, `CLAUDE.md` in place. | 10 consecutive unattended launches reach `ready`. |
 | **M1: Camera** | Camera via R7 handler findings; linear stick control; limits, locks, and cutscene honored; mouse arbitration. | Camera, limits, locks, and camera arbitration tests pass. |
 | **M2: Movement gate** | R3 senders located; `msglog` captures of real keyboard packets; hand-built bearing experiments; Path A or B recommendation. | Human checkpoint. |
-| **M3: Analog movement** | Movement on the chosen path, with free facing, stop, and send-rate limiting. | Heading, non-quantization, free facing, stop, and direction-change tests pass. |
+| **M3: Analog movement** | Drag-emulation movement (Path D), with stop and send-rate limiting. | Heading, non-quantization, facing-follows-movement, stop, and direction-change tests pass. |
 | **M4: Complete behavior** | Walk/run and Always Run, gating, keyboard arbitration, config file. | Full live suite and soak pass; overhead within budget; desktop feel sign-off. |
 | **M5: Release** | Release build; Steam Input layouts for Xbox and Deck; README (install, launch options, Steam Input setup, multiplayer note); Deck validation. | Game runs normally with all signatures deliberately broken (features off, logged). **v1 done:** Robert signs off after real play sessions on desktop and Deck. |
 
@@ -328,7 +328,7 @@ The repo is public, under the MIT license.
 
 | Date | Decision |
 |---|---|
-| 2026-09-28 | Free facing (strafe and backpedal) is required. Path A if the bearing is honored, otherwise Path B for single-player and self-hosted; multiplayer revisited later. A2 and click-to-move rejected. |
+| 2026-09-28 | ~~Free facing (strafe and backpedal) is required.~~ Superseded at the M2 gate, below. Path A if the bearing is honored, otherwise Path B for single-player and self-hosted; multiplayer revisited later. A2 and click-to-move rejected. |
 | 2026-09-28 | Claude Code runs locally, driving a dedicated Linux box over SSH with full access. The box has a monitor and is shared with Robert's play. |
 | 2026-09-28 | Steam copy of the game, tracking whatever Steam installs; hash checked. |
 | 2026-09-28 | Zoom is out of scope. Last-used device wins. Walk/run by stick magnitude, overridden by Always Run. |
@@ -340,3 +340,4 @@ The repo is public, under the MIT license.
 | 2026-09-28 | Test isolation uses the game's `-userdirectory` option (re-notes F10). |
 | 2026-09-28 | Signature entries may name an exported symbol instead of a byte pattern (approved by Robert); patterns remain for code without symbols. Failure behavior is unchanged. |
 | 2026-09-28 | v1 is done when the automated suite passes and Robert signs off after play sessions on desktop and Deck. |
+| 2026-09-28 | M2 gate (Robert): the character faces where it walks, like the game's click-and-drag. Free facing is dropped for v1. Movement uses Path D, drag emulation through `WalkToWayPoint` (re-notes F16). |

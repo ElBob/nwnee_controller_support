@@ -25,7 +25,7 @@ You run on Robert's local machine. The game runs on a dedicated Linux test box r
 
 ## Stop and ask Robert
 
-- At the M2 movement gate, before committing to Path A or Path B.
+- ~~At the M2 movement gate~~ (passed 2026-09-28: Path D, drag emulation; see the plan's decision log).
 - Before changing the signature format or the resolver's failure behavior.
 - Before relaxing any tolerance (rule 6).
 - When feel tuning or sign-off is needed. You can prepare parameter sweeps, but you can't judge feel.
