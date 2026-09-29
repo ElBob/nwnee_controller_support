@@ -69,16 +69,17 @@ static void test_intent(void) {
 }
 
 static void test_walk_run(void) {
+    /* walk -> run above 0.85, run -> walk below 0.725 (threshold 0.7875, band 0.125) */
     nwpad_move_mode m = NWPAD_MOVE_IDLE;
     m = nwpad_move_mode_update(m, 0.4f, false, &cfg);  CHECK(m == NWPAD_MOVE_WALK);
-    m = nwpad_move_mode_update(m, 0.61f, false, &cfg); CHECK(m == NWPAD_MOVE_WALK); /* inside band */
-    m = nwpad_move_mode_update(m, 0.63f, false, &cfg); CHECK(m == NWPAD_MOVE_RUN);
-    m = nwpad_move_mode_update(m, 0.59f, false, &cfg); CHECK(m == NWPAD_MOVE_RUN);  /* hysteresis */
-    m = nwpad_move_mode_update(m, 0.57f, false, &cfg); CHECK(m == NWPAD_MOVE_WALK);
-    /* noisy signal around threshold must not flicker */
+    m = nwpad_move_mode_update(m, 0.84f, false, &cfg); CHECK(m == NWPAD_MOVE_WALK); /* inside band */
+    m = nwpad_move_mode_update(m, 0.86f, false, &cfg); CHECK(m == NWPAD_MOVE_RUN);
+    m = nwpad_move_mode_update(m, 0.74f, false, &cfg); CHECK(m == NWPAD_MOVE_RUN);  /* hysteresis */
+    m = nwpad_move_mode_update(m, 0.71f, false, &cfg); CHECK(m == NWPAD_MOVE_WALK);
+    /* noisy signal inside the band must not flicker */
     int flips = 0; nwpad_move_mode prev = NWPAD_MOVE_WALK;
     for (int i = 0; i < 200; i++) {
-        float mag = 0.6f + ((i % 2) ? 0.02f : -0.02f);
+        float mag = 0.7875f + ((i % 2) ? 0.05f : -0.05f);
         nwpad_move_mode n = nwpad_move_mode_update(prev, mag, false, &cfg);
         if (n != prev) flips++;
         prev = n;

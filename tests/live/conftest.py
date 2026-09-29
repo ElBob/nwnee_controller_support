@@ -57,8 +57,8 @@ class Ctl:
 TEST_CONFIG = """# written by tests/live/conftest.py
 camera_yaw_speed = 180
 camera_pitch_speed = 90
-run_threshold = 0.6
-run_hysteresis = 0.05
+run_threshold = 0.7875
+run_hysteresis = 0.125
 mouse_idle_ms = 300
 strafe_window = 10
 """

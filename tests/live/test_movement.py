@@ -166,20 +166,44 @@ def test_strafe_and_backpedal_keep_facing(home, rel, style):
     assert abs(ang_diff(c1["facing"], c0["facing"])) <= FACING_TOL, (c0, c1)
 
 
-def test_stop(home):
-    home("stick", ly=1.0)
+SERVER_CATCHUP_MS = 1000  # walk stop: the server reaches the on-screen spot (Robert)
+
+
+def settled_after(samples, t_from):
+    """Largest movement (m) seen after t_from in (t, x, y) samples."""
+    after = [(x, y) for t, x, y in samples if t >= t_from]
+    return max(math.hypot(x - after[0][0], y - after[0][1]) for x, y in after)
+
+
+@pytest.mark.parametrize("ly", [1.0, 0.3], ids=["run", "walk"])
+def test_stop(home, ly):
+    """Run (forward-tap stop): the server stops within STOP_MS.
+    Walk (re-target stop; a tap would surge ~1.7 m from a walk, re-notes F22):
+    the on-screen character stops within STOP_MS, and the server, which trails
+    the client at walking speed, reaches the same spot within SERVER_CATCHUP_MS
+    (Robert's call on what the walk case measures)."""
+    home("stick", ly=ly)
     time.sleep(0.8)
     home("release")
     t_release = time.monotonic()
-    positions = []
-    while time.monotonic() - t_release < 1.3:
-        c = home("state")["creature"]
-        positions.append((time.monotonic() - t_release, c["x"], c["y"]))
+    server, client = [], []
+    while time.monotonic() - t_release < 1.6:
+        d = home("state")
+        t = time.monotonic() - t_release
+        server.append((t, d["creature"]["x"], d["creature"]["y"]))
+        client.append((t, d["client"]["x"], d["client"]["y"]))
         time.sleep(0.02)
-    # Stopped within STOP_MS: nothing moves more than 1 cm after that point.
-    after = [(x, y) for t, x, y in positions if t >= STOP_MS / 1000]
-    drift = max(math.hypot(x - after[0][0], y - after[0][1]) for x, y in after)
-    assert drift < 0.01, f"still moving after {STOP_MS} ms: {drift:.3f} m"
+    if ly == 1.0:
+        drift = settled_after(server, STOP_MS / 1000)
+        assert drift < 0.01, f"server still moving after {STOP_MS} ms: {drift:.3f} m"
+    else:
+        drift = settled_after(client, STOP_MS / 1000)
+        assert drift < 0.01, f"on-screen character still moving after {STOP_MS} ms: {drift:.3f} m"
+        drift = settled_after(server, SERVER_CATCHUP_MS / 1000)
+        assert drift < 0.01, f"server still catching up after {SERVER_CATCHUP_MS} ms: {drift:.3f} m"
+        _, sx, sy = server[-1]
+        _, cx, cy = client[-1]
+        assert math.hypot(sx - cx, sy - cy) < 0.05, f"server and screen disagree: {(sx, sy)} vs {(cx, cy)}"
 
 
 def test_direction_change_without_stop(home):
@@ -253,7 +277,7 @@ def test_walk_run(home, always_run):
         run_ref, _ = steady_speed(ctl, walk_to_mode=2)
         assert walk_ref < 0.7 * run_ref, (walk_ref, run_ref)
         low, low_mode = steady_speed(ctl, stick={"ly": 0.3})
-        high, high_mode = steady_speed(ctl, stick={"ly": 0.9})
+        high, high_mode = steady_speed(ctl, stick={"ly": 0.95})
         assert high_mode == "run" and high == pytest.approx(run_ref, rel=0.10), (high, run_ref)
         if always_run:
             assert low_mode == "run" and low == pytest.approx(run_ref, rel=0.10), (low, run_ref)

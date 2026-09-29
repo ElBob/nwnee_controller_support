@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define NWPAD_SAFETY_DEADZONE 0.05f /* fixed, not configurable (plan §6.3) */
+#define NWPAD_SAFETY_DEADZONE 0.15f /* fixed, not configurable (plan §6.3); covers an Xbox stick that settles off-centre */
 
 typedef struct { float x, y; } nwpad_vec2;
 

@@ -140,12 +140,12 @@ The library has few settings, because tuning lives in Steam Input. The file is `
 |---|---|---|
 | `camera_yaw_speed` | 180 °/s | Speed at full deflection. Steam Input can only scale below this. |
 | `camera_pitch_speed` | 90 °/s | Same, for pitch. |
-| `run_threshold` | 0.6 | Raw magnitude where walk turns into run. |
-| `run_hysteresis` | 0.05 | Band around the threshold. |
+| `run_threshold` | 0.7875 | Centre of the walk/run band (Robert's feel test: run above 0.85, walk again below 0.725). |
+| `run_hysteresis` | 0.125 | Width of the band around the threshold. |
 | `mouse_idle_ms` | 300 | Idle time before the stick regains the camera. |
 | `strafe_window` | 10° | Half-width of the strafe/backpedal windows around 90/180/270° (§3). |
 
-The safety deadzone is fixed at 0.05 raw magnitude and isn't configurable. The values above are starting points, confirmed during feel sign-off (M4).
+The safety deadzone is fixed at 0.15 raw magnitude and isn't configurable. It was 0.05 until Robert's Xbox Series pad test: after a small push the left stick can settle at 0.084 and keep the character walking until the pad is bumped. The values above are starting points, confirmed during feel sign-off (M4).
 
 ## 7. Architecture
 
@@ -267,7 +267,7 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Facing follows movement | From rest, stick at 45° (drag): displacement matches the stick direction, and facing ends within 5° of the displacement direction. |
 | Strafe and backpedal | From rest, with the stick right, back, and left of the character's facing (inside the windows): displacement matches the stick direction, and facing stays within 5° of its starting value. |
 | Mode transitions | Strafe then rotate the stick out of its window: switches to drag. Drag then rotate into a window: stays drag. |
-| Stop | The character stops within 450 ms of release, and position is stable for 1 s. |
+| Stop | From a run: the character (server) stops within 450 ms of release, and position is stable for 1 s. From a walk: the on-screen character stops within 450 ms, and the server reaches the same spot within 1 s. |
 | Walk/run | Rates match the game's walk and run speeds on either side of the threshold. With Always Run on, it runs at 0.3 deflection. |
 | Direction change | Stick rotation while moving updates the heading without a stop or stutter. |
 | Collision | Pushing into the wall stops progress, and re-steering away works. |
@@ -362,3 +362,5 @@ The repo is public, under the MIT license.
 | 2026-09-29 | Gating struck (Robert): stick movement isn't blocked in dialogs or cutscenes, because walking away from a conversation is a legitimate player action with story consequences. Keyboard arbitration (WASD suspends the stick) is on hold, not committed for v1. |
 | 2026-09-29 | Keyboard arbitration dropped from the library (Robert): the engine handles keyboard and stick input through its own entry points; verified in play testing. The config file (`~/.config/nwpad/config.toml`) is approved. |
 | 2026-09-29 | Overhead budget, provisionally (Robert): p99 under 0.1 ms applies to the library's own logic (measured ≤ 20 µs in the soak). Time inside the game functions it calls (≤ 110 µs p99 in total) is reported and revisited later for further improvement. |
+| 2026-09-29 | Feel testing on an Xbox Series pad (Robert): safety deadzone 0.05 → 0.15 (the stick can rest at 0.084 off-centre); run band 0.575–0.625 → 0.725–0.85 (start running above 0.85, back to walking below 0.725). Stopping from a walk re-targets the current position, because the forward tap runs and surged about 1.7 m. |
+| 2026-09-29 | Stop test, walk case (Robert): measure the on-screen stop (450 ms) plus the server reaching the same spot within 1 s. At walking speed the server trails the client and catches up forward, with no surge and no slide-back. |

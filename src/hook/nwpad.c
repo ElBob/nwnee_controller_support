@@ -133,6 +133,7 @@ static struct {
     nwpad_arbiter arbiter;
     nwpad_move_mode move_mode;
     nwpad_move_style move_style;
+    nwpad_vec2 last_left, last_right; /* deadzoned sticks this frame (state reports them) */
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
     struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
@@ -312,6 +313,9 @@ static void control_handler(const char *request, char *out, size_t cap) {
         static const char *modes[] = {"idle", "walk", "run"};
         float pf, px, py;
         if (n > 0 && (size_t)n < cap)
+            n += snprintf(out + n, cap - (size_t)n, ",\"sticks\":{\"left\":%.3f,\"right\":%.3f}",
+                          nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right));
+        if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],
                           nwpad_backend_always_run() ? "true" : "false");
@@ -437,6 +441,8 @@ static void nwpad_frame(void) {
         }
     }
 
+    g.last_left = left;
+    g.last_right = right;
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;

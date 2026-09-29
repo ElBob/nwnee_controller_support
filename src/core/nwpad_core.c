@@ -12,8 +12,9 @@
 void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->camera_yaw_speed = 180.0f;
     cfg->camera_pitch_speed = 90.0f;
-    cfg->run_threshold = 0.6f;
-    cfg->run_hysteresis = 0.05f;
+    /* Robert's feel test: start running above 0.85, drop back to walking below 0.725. */
+    cfg->run_threshold = 0.7875f;
+    cfg->run_hysteresis = 0.125f;
     cfg->mouse_idle_ms = 300;
     cfg->strafe_window_deg = 10.0f;
 }

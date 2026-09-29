@@ -288,6 +288,7 @@ typedef unsigned (*handle_input_fn)(void *client_internal, int action, int press
 typedef void (*stop_drag_fn)(void *nwc_message);
 
 static nwpad_move_style active_style; /* what we're currently driving */
+static nwpad_move_mode active_mode;   /* walk or run, for choosing how to stop */
 static uint64_t now_cache_ms, stop_tap_release_ms; /* 0: no tap pending */
 
 static void *player_creature(void) {
@@ -371,6 +372,7 @@ bool nwpad_backend_send_move(const nwpad_move_intent *intent) {
         key(in, style_action(intent->style), 1); /* repeated like key autorepeat */
     }
     active_style = intent->style;
+    active_mode = intent->mode;
     return true;
 }
 
@@ -380,12 +382,20 @@ bool nwpad_backend_send_stop(void) {
     if (style_action(active_style)) {
         key(in, style_action(active_style), 0); /* the handler sends AbortDriveControl */
     } else if (active_style == NWPAD_STYLE_DRAG) {
-        /* A walk keeps going to its target, so hand the stop to the keyboard drive:
-         * end the drag like a mouse release, then tap forward. The character already
-         * faces its path, so the tap doesn't turn it (Robert; re-notes F22). */
-        end_drag(in);
-        key(in, ACTION_FORWARD, 1);
-        stop_tap_release_ms = now_cache_ms + STOP_TAP_MS;
+        end_drag(in); /* as a mouse-button release does */
+        if (active_mode == NWPAD_MOVE_RUN) {
+            /* A walk keeps going to its target, so hand the stop to the keyboard
+             * drive: tap forward (Robert). The character already faces its path,
+             * so the tap doesn't turn it (re-notes F22). */
+            key(in, ACTION_FORWARD, 1);
+            stop_tap_release_ms = now_cache_ms + STOP_TAP_MS;
+        } else {
+            /* The tap's drive runs, so from a walk it surges ~1.7 m. At walking
+             * speed the client barely trails the server, so re-targeting where
+             * the character stands stops it at once (re-notes F22). */
+            walk_to(in, pc, read_float(pc, CLIENT_CREATURE_POS_X),
+                    read_float(pc, CLIENT_CREATURE_POS_Y), WALK_MODE_WALK);
+        }
     }
     active_style = NWPAD_STYLE_REST;
     return true;
