@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Decompile functions by (demangled) name with headless Ghidra. Output goes to re-work/ (gitignored).
+#   tools/ghidra/decompile_fn <binary> <Class::Method> [more names...]
+# Env: GHIDRA_HOME (Ghidra install dir), NWPAD_GHIDRA_PROJ (default ~/.nwpad/ghidra)
+# The first run on a binary imports and analyzes it, which takes a while; later runs reuse the project.
+set -euo pipefail
+BIN="${1:?usage: $0 <binary> <function names...>}"; shift
+[ $# -gt 0 ] || { echo "no function names given" >&2; exit 1; }
+: "${GHIDRA_HOME:?set GHIDRA_HOME to the Ghidra install directory}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+PROJ="${NWPAD_GHIDRA_PROJ:-$HOME/.nwpad/ghidra}"
+NAME="$(basename "$BIN")"
+OUT="$ROOT/re-work/decompile/$NAME"
+mkdir -p "$PROJ" "$OUT"
+
+SCRIPT_ARGS=(-scriptPath "$ROOT/tools/ghidra/scripts" -postScript DecompileFunction.java "$OUT" "$@")
+MARKER="$PROJ/.imported-$NAME"
+if [ -f "$MARKER" ]; then
+  "$GHIDRA_HOME/support/analyzeHeadless" "$PROJ" nwpad -process "$NAME" -noanalysis "${SCRIPT_ARGS[@]}" \
+    >"$OUT/last-run.log" 2>&1
+else
+  "$GHIDRA_HOME/support/analyzeHeadless" "$PROJ" nwpad -import "$BIN" -overwrite "${SCRIPT_ARGS[@]}" \
+    >"$OUT/last-run.log" 2>&1
+  touch "$MARKER"
+fi
+grep -E "DECOMPILE-(OK|MISSING|ERROR)" "$OUT/last-run.log" || { echo "no results; see $OUT/last-run.log" >&2; exit 1; }

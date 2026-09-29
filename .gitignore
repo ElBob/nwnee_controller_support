@@ -1,0 +1,18 @@
+# Build and local outputs
+build/
+artifacts/
+re-work/
+testdata-local/
+__pycache__/
+.venv/
+*.pyc
+
+# Beamdog-derived material must never be committed (see CLAUDE.md rule 3)
+*.mod
+*.sav
+*.bif
+*.key
+*.erf
+*.hak
+nwmain*
+nwserver*

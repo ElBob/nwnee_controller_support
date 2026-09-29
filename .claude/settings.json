@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake:*)",
+      "Bash(ctest:*)",
+      "Bash(tools/remote.sh:*)",
+      "Bash(tools/sigcheck:*)",
+      "Bash(ssh nwpad-box:*)",
+      "Bash(rsync:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ]
+  }
+}

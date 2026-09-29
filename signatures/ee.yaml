@@ -1,0 +1,17 @@
+# Byte signatures for nwmain-linux, resolved at load time and checked offline by tools/sigcheck.
+# Every entry must reference a finding in docs/re-notes.md (CLAUDE.md rule 4).
+#
+# Pattern syntax: space-separated hex bytes, "??" for wildcards.
+# Entry shape:
+#   <key>:
+#     note: F<n>                  # re-notes finding id
+#     pattern: "55 48 89 e5 ?? ?? 41 57"
+#     offset: 0                   # added to the match address
+#     expect: 1                   # required number of matches
+#
+# binary_sha256 is the nwmain-linux hash these signatures were built against.
+# sigcheck exits non-zero if the installed binary differs (CLAUDE.md rule 7).
+
+binary_sha256: null   # recorded in M0
+
+signatures: {}

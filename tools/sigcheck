@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Offline signature check (plan §8.4, CLAUDE.md rule 7).
+
+Resolves every pattern in signatures/ee.yaml against the installed nwmain-linux
+and checks the binary hash. Exit codes: 0 ok, 1 signature problems,
+2 binary hash differs from the recorded one, 3 setup error.
+
+Usage: tools/sigcheck [--binary PATH] [--signatures PATH] [--print-hash]
+"""
+import argparse
+import hashlib
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("sigcheck needs PyYAML: pip install pyyaml")
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_BIN = os.environ.get(
+    "NWN_BIN",
+    os.path.expanduser("~/.local/share/Steam/steamapps/common/Neverwinter Nights/bin/linux-x86/nwmain-linux"),
+)
+
+
+def compile_pattern(pattern: str) -> re.Pattern:
+    parts = []
+    for tok in pattern.split():
+        if tok in ("??", "?"):
+            parts.append(b".")
+        elif re.fullmatch(r"[0-9a-fA-F]{2}", tok):
+            parts.append(re.escape(bytes([int(tok, 16)])))
+        else:
+            raise ValueError(f"bad pattern token {tok!r}")
+    return re.compile(b"".join(parts), re.DOTALL)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--binary", default=DEFAULT_BIN)
+    ap.add_argument("--signatures", default=os.path.join(ROOT, "signatures", "ee.yaml"))
+    ap.add_argument("--print-hash", action="store_true")
+    args = ap.parse_args()
+
+    if not os.path.isfile(args.binary):
+        print(f"setup error: binary not found: {args.binary} (set NWN_BIN)")
+        return 3
+    data = open(args.binary, "rb").read()
+    digest = hashlib.sha256(data).hexdigest()
+    if args.print_hash:
+        print(digest)
+        return 0
+
+    doc = yaml.safe_load(open(args.signatures)) or {}
+    expected = doc.get("binary_sha256")
+    print(f"binary: {args.binary}\nsha256: {digest}")
+    if expected and expected != digest:
+        print(f"HASH MISMATCH: signatures were built against {expected}. Stop and report (CLAUDE.md rule 7).")
+        return 2
+    if not expected:
+        print("note: binary_sha256 not recorded yet (M0)")
+
+    sigs = doc.get("signatures") or {}
+    problems = 0
+    for key, sig in sigs.items():
+        try:
+            pat = compile_pattern(sig["pattern"])
+        except (KeyError, ValueError) as e:
+            print(f"  {key}: INVALID ({e})")
+            problems += 1
+            continue
+        if not sig.get("note"):
+            print(f"  {key}: missing 'note' (re-notes reference)")
+            problems += 1
+        hits = [m.start() + int(sig.get("offset", 0)) for m in pat.finditer(data)]
+        want = int(sig.get("expect", 1))
+        status = "ok" if len(hits) == want else f"EXPECTED {want}, FOUND {len(hits)}"
+        if len(hits) != want:
+            problems += 1
+        where = ", ".join(hex(h) for h in hits[:4])
+        print(f"  {key}: {status} {where}")
+    print(f"{len(sigs)} signature(s), {problems} problem(s)")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

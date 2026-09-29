@@ -1,0 +1,19 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build build -j
+      - name: Unit and preload smoke tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Release build (no debug surfaces)
+        run: cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DNWPAD_DEBUG_SURFACES=OFF && cmake --build build-release -j
+      - name: Script syntax
+        run: bash -n tools/*.sh tools/ghidra/decompile_fn && python3 -m py_compile tools/sigcheck
