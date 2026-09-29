@@ -126,6 +126,7 @@ static struct {
     nwpad_send_state send_state;
     nwpad_arbiter arbiter;
     nwpad_move_mode move_mode;
+    struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
         nwpad_vec2 left, right;
@@ -204,12 +205,16 @@ static void control_handler(const char *request, char *out, size_t cap) {
         bool have = nwpad_backend_camera_get(&cam, &lim);
         int n = snprintf(out, cap,
                          "{\"ok\":true,\"frame\":%llu,\"t_ms\":%llu,\"in_game\":%s,"
-                         "\"virtual_stick\":%s,\"camera_owner\":\"%s\",\"movement_owner\":\"%s\"",
+                         "\"virtual_stick\":%s,\"camera_owner\":\"%s\",\"movement_owner\":\"%s\","
+                         "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
+                         "\"filtered\":%llu}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
                          g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
-                         g.arbiter.movement_owned_by_stick ? "stick" : "keyboard");
+                         g.arbiter.movement_owned_by_stick ? "stick" : "keyboard",
+                         (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
+                         (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
         if (n > 0 && (size_t)n < cap) {
             if (have)
                 snprintf(out + n, cap - (size_t)n,
@@ -372,11 +377,16 @@ static int nwpad_PollEvent(SDL_Event *event) {
         int r = sdl.PollEvent(event);
         if (!r || !event) return r;
         uint32_t type = event->type;
-        if (type >= SDL_CONTROLLER_FIRST && type <= SDL_CONTROLLER_LAST)
+        g.events.total++;
+        if (type >= SDL_CONTROLLER_FIRST && type <= SDL_CONTROLLER_LAST) {
+            g.events.filtered++;
             continue; /* the game never sees controller events; Steam Input covers buttons */
+        }
         if (type == SDL_MOUSEMOTION) {
+            g.events.mouse_motion++;
             nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
         } else if ((type == SDL_KEYDOWN || type == SDL_KEYUP) && !event->key.repeat) {
+            g.events.keys++;
             uint8_t bit = move_key_bit(event->key.scancode);
             if (bit) nwpad_arbiter_move_key(&g.arbiter, bit, type == SDL_KEYDOWN);
         }

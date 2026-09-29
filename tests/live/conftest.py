@@ -81,6 +81,17 @@ def ctl(game):
     c.close()
 
 
+def game_window_center():
+    """X-screen coordinates of the middle of the game window (xdotool)."""
+    env = {**os.environ, "DISPLAY": os.environ.get("NWPAD_DISPLAY", ":0")}
+    wid = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights"], env=env,
+                         capture_output=True, text=True, check=True).stdout.split()[0]
+    geo = dict(line.split("=", 1) for line in subprocess.run(
+        ["xdotool", "getwindowgeometry", "--shell", wid], env=env,
+        capture_output=True, text=True, check=True).stdout.split())
+    return int(geo["X"]) + int(geo["WIDTH"]) // 2, int(geo["Y"]) + int(geo["HEIGHT"]) // 2
+
+
 def stop_game(pid, grace_s=15.0):
     """SIGTERM the game we started, wait for it to exit, SIGKILL after grace_s."""
     try:

@@ -13,7 +13,8 @@ sync() {
   rsync -az --delete --exclude build/ --exclude artifacts/ --exclude re-work/ \
     --exclude .git/ "$ROOT/" "$NWPAD_HOST:$NWPAD_REMOTE_DIR/"
 }
-remote() { ssh "$NWPAD_HOST" "cd ~/$NWPAD_REMOTE_DIR && $*"; }
+# Always bash on the box, whatever the login shell is (the BC-250's is fish).
+remote() { ssh "$NWPAD_HOST" bash -s <<<"cd ~/$NWPAD_REMOTE_DIR && $*"; }
 build() {
   remote "cmake -S . -B build >/dev/null && cmake --build build -j && ctest --test-dir build --output-on-failure"
 }
@@ -30,7 +31,7 @@ case "$cmd" in
   test)
     sync; build
     remote "python3 tools/sigcheck"
-    rc=0; remote "NWPAD_LIVE=1 python3 -m pytest tests/live -v $*" || rc=$?
+    rc=0; remote ". tools/common.sh && session_env; NWPAD_LIVE=1 python3 -m pytest tests/live -v $*" || rc=$?
     pull; exit $rc ;;
   pull) pull ;;
   *) die "usage: $0 sync|build|run|test|pull" ;;

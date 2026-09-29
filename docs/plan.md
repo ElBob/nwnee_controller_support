@@ -215,6 +215,7 @@ The socket is `$XDG_RUNTIME_DIR/nwpad.sock`, mode 0600, and exists only when `NW
 | `tools/frida/` | box | Trace scripts, run with `frida -q` and a timeout. |
 | `tools/sigcheck` | box | Offline signature resolution against the installed binary. |
 | `tools/uinput_pad.py` | box | Virtual gamepad for end-to-end tests through SDL. |
+| `tools/uinput_mouse.py` | box | Virtual absolute mouse for arbitration tests (XTEST pointer motion doesn't reach XWayland clients). |
 | `tools/xinput.sh` | box | xdotool wrappers for mouse and keyboard, used in arbitration tests. |
 
 ### 8.5 The loop
