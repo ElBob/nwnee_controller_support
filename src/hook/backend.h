@@ -33,5 +33,8 @@ bool nwpad_backend_run_script_chunk(const char *code);
 /* Debug surface: base address of a named game object for the socket's read
  * command ("module" or "camera"), or NULL. */
 void *nwpad_backend_debug_object(const char *name);
+/* Server-side player creature (ground truth for tests): world position and
+ * facing in degrees counter-clockwise from +X. False if there is none. */
+bool nwpad_backend_creature(float *x, float *y, float *facing_deg);
 
 #endif

@@ -39,3 +39,9 @@ signatures:
   cheat_run_script_chunk:  # CNWCMessage::SendPlayerToServerCheat_RunScriptChunk(CExoString const&, unsigned int, int)
     note: F17
     symbol: _ZN11CNWCMessage38SendPlayerToServerCheat_RunScriptChunkERK10CExoStringji
+  server_first_pc:         # CServerExoApp::GetFirstPCObject() -> object id (0x7f000000 if none)
+    note: F19
+    symbol: _ZN13CServerExoApp16GetFirstPCObjectEv
+  server_creature_by_id:   # CServerExoApp::GetCreatureByGameObjectID(unsigned int) -> CNWSCreature*
+    note: F19
+    symbol: _ZN13CServerExoApp25GetCreatureByGameObjectIDEj

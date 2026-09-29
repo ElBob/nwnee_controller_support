@@ -163,13 +163,20 @@ Every function, global, offset, and signature the library uses must have an entr
   - Distance: `cam+0x80` / `+0x84`, 1 / 25 unlocked. `LockCameraDistance(TRUE)` sets both to 20.
   - Unlocking restores the defaults.
 - Corrects F14: bits 0x10 / 0x20 of `module+0x2bc` didn't change under any of these locks, so they're something else (open). `GetCameraMinPitch()` / `GetCameraMaxPitch()` aren't needed: the backend reads the effective pitch range from the camera and treats a collapsed range as locked.
-- Also: script chunks run in a single-player `+TestNewModule` session (F17's gate passes). `SetCameraFacing(45.0, 10.0, 30.0, SNAP)` moved the yaw field to -45.0 and pitch to 30.0, so the F15 yaw field is the negative of the NWScript facing (degrees counter-clockwise from east).
+- Also: script chunks run in a single-player `+TestNewModule` session (F17's gate passes). `SetCameraFacing(45.0, 10.0, 30.0, SNAP)` moved the yaw field to -45.0 and pitch to 30.0. With the spawn data (yaw field 0, drive bearing 90°, W moving +Y, creature facing 90°), this gives camera forward (degrees counter-clockwise from +X, the NWScript convention) = yaw field + 90°. The DriveControl bearing (F16) is that same forward direction.
 - Evidence: socket `read` dumps (1 KiB of module and camera) diffed across script lock toggles, run 20260928-234244.
+- Confidence: confirmed.
+
+### F19: Server-side player creature
+- Binary / hash: nwmain-linux 6d19c39b
+- What: `g_pAppManager` is `{CClientExoApp*, CServerExoApp*, ...}` (the server app at +0x8 matches NWNX's layout and the server code's `g_pAppManager + 8` in F17). `CServerExoApp::GetFirstPCObject()` returns the first player's object id, or 0x7f000000 if there is none (disassembly: it walks the player list and reads each player's `+0x64`). `CServerExoApp::GetCreatureByGameObjectID(oid)` returns the `CNWSCreature*`. Both forward to `CServerExoAppInternal` through `+0x8`.
+- Offsets on `CNWSCreature` (from `read server_pc` dumps across movement, run 20260928-234835): position x/y at `+0xa4` / `+0xa8` (z presumably `+0xac`), unit facing vector at `+0xb0` / `+0xb4`. Spawn was (20, 20) facing (0, 1). Holding W for 1 s moved y to 25.24; E for 1 s moved x to 22.27 with facing unchanged; A for 0.5 s turned facing to (-1, 0).
+- Use: ground truth for movement tests, exposed as `state.creature` (facing in degrees counter-clockwise from +X).
 - Confidence: confirmed.
 
 ## Conventions to confirm
 
-- **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). Confirm the game's yaw direction and zero point in M1, and adapt in the backend rather than in the core.
+- **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.
 - **Right stick sign:** stick right currently decreases yaw (turns clockwise). The game's mouse path also decreases yaw when moving right (F14), so the signs agree; confirm the feel in M1.
 
 ## Open questions
@@ -177,7 +184,7 @@ Every function, global, offset, and signature the library uses must have an entr
 | ID | Question | Task |
 |---|---|---|
 | Q1 | ~~Full `DriveControl` payload layout~~ F16 | R1 |
-| Q2 | Does the server honor an arbitrary bearing, and can facing differ from movement direction? | R1, R8, M2 |
+| Q2 | ~~Does the server honor an arbitrary bearing, and can facing differ from movement direction?~~ Settled by the M2 decision (plan decision log); F16 | R1, R8, M2 |
 | Q3 | ~~Does `nwmain-linux` export symbols?~~ Yes (F9) | R2 |
 | Q4 | Where does the client store camera yaw, pitch, limits, and locks? (Static answer in F14; runtime confirmation pending) | R7 |
 | Q5 | Where does the client store Always Run state? | R7 |

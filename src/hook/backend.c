@@ -3,6 +3,7 @@
  * is still unavailable until M3. Every entry point checks its signatures. */
 #include "backend.h"
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -136,8 +137,40 @@ bool nwpad_backend_run_script_chunk(const char *code) {
     return true;
 }
 
+typedef uint32_t (*first_pc_fn)(void *server_app);
+typedef void *(*creature_by_id_fn)(void *server_app, uint32_t oid);
+
+/* The first player's creature in the in-process server (re-notes F19), or NULL. */
+static void *server_pc(void) {
+    first_pc_fn first = (first_pc_fn)nwpad_sig(NWPAD_SIG_SERVER_FIRST_PC);
+    creature_by_id_fn by_id = (creature_by_id_fn)nwpad_sig(NWPAD_SIG_SERVER_CREATURE_BY_ID);
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    if (!first || !by_id || !app_manager || !*app_manager) return NULL;
+    void *server = ((void **)*app_manager)[1]; /* CAppManager: client app, then server app */
+    if (!server) return NULL;
+    uint32_t oid = first(server);
+    return oid == OBJECT_INVALID ? NULL : by_id(server, oid);
+}
+
+/* CNWSCreature offsets (re-notes F19). */
+#define CREATURE_POS_X 0xa4
+#define CREATURE_POS_Y 0xa8
+#define CREATURE_FACING_X 0xb0 /* unit facing vector */
+#define CREATURE_FACING_Y 0xb4
+
+bool nwpad_backend_creature(float *x, float *y, float *facing_deg) {
+    void *c = server_pc();
+    if (!c) return false;
+    *x = read_float(c, CREATURE_POS_X);
+    *y = read_float(c, CREATURE_POS_Y);
+    *facing_deg = nwpad_wrap_deg(atan2f(read_float(c, CREATURE_FACING_Y),
+                                        read_float(c, CREATURE_FACING_X)) * 57.29577951f);
+    return true;
+}
+
 void *nwpad_backend_debug_object(const char *name) {
     void *mod = module();
+    if (strcmp(name, "server_pc") == 0) return server_pc();
     if (strcmp(name, "module") == 0) return mod;
     if (strcmp(name, "camera") == 0) return mod ? camera_object(mod) : NULL;
     return NULL;

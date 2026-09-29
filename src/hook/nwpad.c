@@ -241,6 +241,10 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          g.arbiter.movement_owned_by_stick ? "stick" : "keyboard",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
+        float cx, cy, cf;
+        if (n > 0 && (size_t)n < cap && nwpad_backend_creature(&cx, &cy, &cf))
+            n += snprintf(out + n, cap - (size_t)n,
+                          ",\"creature\":{\"x\":%.4f,\"y\":%.4f,\"facing\":%.3f}", cx, cy, cf);
         if (n > 0 && (size_t)n < cap) {
             if (have)
                 snprintf(out + n, cap - (size_t)n,
