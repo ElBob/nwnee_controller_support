@@ -135,9 +135,10 @@ static struct {
     nwpad_move_style move_style;
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
-    struct { /* per-frame library cost (plan §7 budget), 10 us buckets up to 2.55 ms */
-        uint32_t bucket[256];
-        uint64_t frames, max_ns;
+    struct { /* per-frame cost (plan §7 budget), 10 us buckets up to 2.55 ms */
+        uint32_t bucket[256], own_bucket[256]; /* all work / excluding game functions we call */
+        uint64_t frames, max_ns, own_max_ns;
+        uint64_t game_ns; /* this frame's time inside game functions (backend calls) */
     } cost;
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
@@ -176,10 +177,10 @@ static void load_config(void) {
 /* ---- Control socket commands (plan §8.3); main thread only ---- */
 
 /* Upper edge (us) of the bucket holding the given percentile of frame costs. */
-static unsigned cost_percentile_us(double pct) {
+static unsigned cost_percentile_us(const uint32_t *bucket, double pct) {
     uint64_t need = (uint64_t)(g.cost.frames * pct / 100.0 + 0.5), seen = 0;
     for (unsigned i = 0; i < 256; i++) {
-        seen += g.cost.bucket[i];
+        seen += bucket[i];
         if (seen >= need && seen) return (i + 1) * 10;
     }
     return 2560;
@@ -298,10 +299,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
-                          ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu}"
+                          ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
+                          "\"own_p99\":%u,\"own_max\":%.1f}"
                           ",\"sends\":{\"moves\":%llu,\"stops\":%llu,\"min_gap_ms\":%llu,\"cap_ms\":%u}",
-                          cost_percentile_us(50), cost_percentile_us(99), (double)g.cost.max_ns / 1000.0,
-                          (unsigned long long)g.cost.frames, (unsigned long long)g.sends.moves,
+                          cost_percentile_us(g.cost.bucket, 50), cost_percentile_us(g.cost.bucket, 99),
+                          (double)g.cost.max_ns / 1000.0, (unsigned long long)g.cost.frames,
+                          cost_percentile_us(g.cost.own_bucket, 99), (double)g.cost.own_max_ns / 1000.0,
+                          (unsigned long long)g.sends.moves,
                           (unsigned long long)g.sends.stops, (unsigned long long)g.sends.min_gap_ms,
                           (unsigned)g.send_policy.min_interval_ms);
         static const char *styles[] = {"rest", "drag", "strafe_right", "backpedal", "strafe_left"};
@@ -443,7 +447,9 @@ static void nwpad_frame(void) {
     if (have_cam && g.arbiter.camera_owned_by_stick &&
         nwpad_magnitude(right) >= NWPAD_SAFETY_DEADZONE) {
         nwpad_camera next = nwpad_camera_step(cam, right, dt, &g.cfg, &lim);
+        uint64_t g0 = now_ns();
         nwpad_backend_camera_set(&next);
+        g.cost.game_ns += now_ns() - g0;
         cam = next;
     }
 
@@ -466,11 +472,19 @@ static void nwpad_frame(void) {
         }
         g.sends.moves++;
         g.sends.last_move_ms = t;
-        nwpad_backend_send_move(&intent);
+        {
+            uint64_t g0 = now_ns();
+            nwpad_backend_send_move(&intent);
+            g.cost.game_ns += now_ns() - g0;
+        }
         break;
     case NWPAD_SEND_STOP:
         g.sends.stops++;
-        nwpad_backend_send_stop();
+        {
+            uint64_t g0 = now_ns();
+            nwpad_backend_send_stop();
+            g.cost.game_ns += now_ns() - g0;
+        }
         break;
     case NWPAD_SEND_NONE: break;
     }
@@ -480,11 +494,15 @@ static void nwpad_frame(void) {
 
 static void nwpad_SwapWindow(SDL_Window *window) {
     uint64_t t0 = now_ns();
+    g.cost.game_ns = 0;
     nwpad_frame();
     uint64_t ns = now_ns() - t0; /* control-socket servicing is debug-only; not counted */
+    uint64_t own = ns > g.cost.game_ns ? ns - g.cost.game_ns : 0;
     g.cost.bucket[ns / 10000 < 255 ? ns / 10000 : 255]++;
+    g.cost.own_bucket[own / 10000 < 255 ? own / 10000 : 255]++;
     g.cost.frames++;
     if (ns > g.cost.max_ns) g.cost.max_ns = ns;
+    if (own > g.cost.own_max_ns) g.cost.own_max_ns = own;
     nwpad_control_service();
     sdl.SwapWindow(window);
 }

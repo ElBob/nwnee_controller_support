@@ -68,6 +68,9 @@ def home(ctl):
 
 def reset(ctl):
     ctl("release")
+    # Let a stick release finish first: the stop tap's drive packet carries the
+    # client's position, and landing after the jump it would put the character back.
+    time.sleep(0.5)
     x, y, f = HOME
 
     def jump(facing):
