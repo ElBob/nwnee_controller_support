@@ -31,7 +31,7 @@ add_custom_command(
   COMMENT "Generating signatures_gen.h from ${NWPAD_SIGNATURES}")
 
 # The preload library.
-add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend_stub.c
+add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend.c
   ${NWPAD_SIG_HEADER}
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:src/hook/control.c>)
 target_include_directories(nwpad PRIVATE ${CMAKE_BINARY_DIR}/gen)

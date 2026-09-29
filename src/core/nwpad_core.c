@@ -201,7 +201,8 @@ void nwpad_arbiter_update(nwpad_arbiter *a, nwpad_vec2 left, nwpad_vec2 right,
     }
 }
 
-bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap) {
+/* Start of the value for "key" (after the colon), or NULL. */
+static const char *json_value(const char *json, const char *key) {
     size_t klen = strlen(key);
     for (const char *p = json; (p = strchr(p, '"')) != NULL; p++) {
         if (strncmp(p + 1, key, klen) != 0 || p[1 + klen] != '"') continue;
@@ -209,21 +210,36 @@ bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t 
         while (*q == ' ' || *q == '\t') q++;
         if (*q++ != ':') continue;
         while (*q == ' ' || *q == '\t') q++;
-        if (*q++ != '"') return false;
-        size_t n = 0;
-        for (; *q && *q != '"'; q++) {
-            if (*q == '\\') {
-                q++;
-                if (*q != '"' && *q != '\\') return false;
-            }
-            if (n + 1 >= cap) return false;
-            out[n++] = *q;
-        }
-        if (*q != '"') return false;
-        out[n] = '\0';
-        return true;
+        return q;
     }
-    return false;
+    return NULL;
+}
+
+bool nwpad_json_get_number(const char *json, const char *key, double *out) {
+    const char *q = json_value(json, key);
+    if (!q) return false;
+    char *end;
+    double v = strtod(q, &end);
+    if (end == q) return false;
+    *out = v;
+    return true;
+}
+
+bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap) {
+    const char *q = json_value(json, key);
+    if (!q || *q++ != '"') return false;
+    size_t n = 0;
+    for (; *q && *q != '"'; q++) {
+        if (*q == '\\') {
+            q++;
+            if (*q != '"' && *q != '\\') return false;
+        }
+        if (n + 1 >= cap) return false;
+        out[n++] = *q;
+    }
+    if (*q != '"') return false;
+    out[n] = '\0';
+    return true;
 }
 
 static int hex_nibble(char c) {

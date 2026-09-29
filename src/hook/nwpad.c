@@ -126,6 +126,11 @@ static struct {
     nwpad_send_state send_state;
     nwpad_arbiter arbiter;
     nwpad_move_mode move_mode;
+    struct { /* control socket override (plan §8.3), core convention */
+        bool active;
+        nwpad_vec2 left, right;
+        uint64_t until_ms; /* 0: until released */
+    } virt;
 } g;
 
 static void load_config(void) {
@@ -179,6 +184,42 @@ static void control_handler(const char *request, char *out, size_t cap) {
                  nwpad_backend_in_game() ? "true" : "false",
                  bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false",
                  sigs);
+    } else if (strcmp(cmd, "stick") == 0) {
+        /* {"cmd":"stick","lx":..,"ly":..,"rx":..,"ry":..,"hold_ms":..}; +y is forward/up. */
+        double v;
+        g.virt.left.x = nwpad_json_get_number(request, "lx", &v) ? (float)v : 0.0f;
+        g.virt.left.y = nwpad_json_get_number(request, "ly", &v) ? (float)v : 0.0f;
+        g.virt.right.x = nwpad_json_get_number(request, "rx", &v) ? (float)v : 0.0f;
+        g.virt.right.y = nwpad_json_get_number(request, "ry", &v) ? (float)v : 0.0f;
+        g.virt.until_ms = nwpad_json_get_number(request, "hold_ms", &v) && v > 0
+                              ? now_ms() + (uint64_t)v : 0;
+        g.virt.active = true;
+        snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "release") == 0) {
+        g.virt.active = false;
+        snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "state") == 0) {
+        nwpad_camera cam;
+        nwpad_camera_limits lim;
+        bool have = nwpad_backend_camera_get(&cam, &lim);
+        int n = snprintf(out, cap,
+                         "{\"ok\":true,\"frame\":%llu,\"t_ms\":%llu,\"in_game\":%s,"
+                         "\"virtual_stick\":%s,\"camera_owner\":\"%s\",\"movement_owner\":\"%s\"",
+                         (unsigned long long)g.frames, (unsigned long long)now_ms(),
+                         nwpad_backend_in_game() ? "true" : "false",
+                         g.virt.active ? "true" : "false",
+                         g.arbiter.camera_owned_by_stick ? "stick" : "mouse",
+                         g.arbiter.movement_owned_by_stick ? "stick" : "keyboard");
+        if (n > 0 && (size_t)n < cap) {
+            if (have)
+                snprintf(out + n, cap - (size_t)n,
+                         ",\"camera\":{\"yaw\":%.4f,\"pitch\":%.4f,\"min_pitch\":%.4f,"
+                         "\"max_pitch\":%.4f,\"yaw_locked\":%s,\"pitch_locked\":%s}}",
+                         cam.yaw_deg, cam.pitch_deg, lim.min_pitch, lim.max_pitch,
+                         lim.yaw_locked ? "true" : "false", lim.pitch_locked ? "true" : "false");
+            else
+                snprintf(out + n, cap - (size_t)n, ",\"camera\":null}");
+        }
     } else {
         snprintf(out, cap, "{\"ok\":false,\"error\":\"unknown cmd\"}");
     }
@@ -265,15 +306,21 @@ static void nwpad_frame(void) {
     if (dt > 0.1f) dt = 0.1f; /* hitch guard: never jump more than 100 ms of motion */
     g.last_frame_ms = t;
 
-    if (!controller_init()) return;
-    controller_ensure_open(t);
-    if (!g.pad) return;
-
-    /* SDL Y axes are +down; core convention is +forward / +up. */
-    nwpad_vec2 left = nwpad_apply_deadzone(
-        (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
-    nwpad_vec2 right = nwpad_apply_deadzone(
-        (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
+    if (g.virt.active && g.virt.until_ms && t >= g.virt.until_ms) g.virt.active = false;
+    nwpad_vec2 left, right;
+    if (g.virt.active) {
+        left = nwpad_apply_deadzone(g.virt.left);
+        right = nwpad_apply_deadzone(g.virt.right);
+    } else {
+        if (!controller_init()) return;
+        controller_ensure_open(t);
+        if (!g.pad) return;
+        /* SDL Y axes are +down; core convention is +forward / +up. */
+        left = nwpad_apply_deadzone(
+            (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
+        right = nwpad_apply_deadzone(
+            (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
+    }
 
     nwpad_arbiter_update(&g.arbiter, left, right, t, &g.cfg);
     if (!nwpad_backend_in_game()) return;

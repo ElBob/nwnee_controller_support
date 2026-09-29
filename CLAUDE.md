@@ -7,7 +7,7 @@ nwpad is an `LD_PRELOAD` library that adds analog stick movement and camera cont
 - **Local build and tests:** `cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
 - **Test box:** `tools/remote.sh build` (sync, build, unit tests) or `tools/remote.sh test` (plus sigcheck and live tests, with artifacts pulled back)
 - **Hooks:** run `tools/install_hooks.sh` once per clone.
-- **Where things live:** the library code is split between `src/core/` (pure logic, unit-tested) and `src/hook/` (SDL interposition, plus `backend_stub.c`, which real backends replace). Signatures are in `signatures/ee.yaml`, findings in `docs/re-notes.md`, and the plan in `docs/plan.md`.
+- **Where things live:** the library code is split between `src/core/` (pure logic, unit-tested) and `src/hook/` (SDL hooks via the dynamic API jump table, the signature resolver in `sigs.c`, the control socket, and `backend.c`, the only code that touches game functions or memory). Signatures are in `signatures/ee.yaml`, findings in `docs/re-notes.md`, and the plan in `docs/plan.md`.
 
 ## Topology
 

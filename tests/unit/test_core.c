@@ -172,6 +172,11 @@ static void test_json(void) {
     CHECK(!nwpad_json_get_string("{\"cmd\":\"0123456789abcdefg\"}", "cmd", v, sizeof v)); /* too long */
     CHECK(nwpad_json_get_string("{\"a\":\"cmd\",\"cmd\":\"ok\"}", "cmd", v, sizeof v) &&
           strcmp(v, "ok") == 0); /* "cmd" as a value is skipped */
+    double d;
+    CHECK(nwpad_json_get_number("{\"cmd\":\"stick\",\"rx\": -0.5, \"hold_ms\":1000}", "rx", &d) && d == -0.5);
+    CHECK(nwpad_json_get_number("{\"hold_ms\":1000}", "hold_ms", &d) && d == 1000);
+    CHECK(!nwpad_json_get_number("{\"rx\":\"x\"}", "rx", &d));
+    CHECK(!nwpad_json_get_number("{\"ry\":1}", "rx", &d));
 }
 
 static void test_pattern(void) {

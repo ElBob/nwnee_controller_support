@@ -133,5 +133,7 @@ const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_patt
  * and \\ escapes only. Returns false if the key is missing, not a string, or
  * doesn't fit. */
 bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap);
+/* Read the numeric value of "key". Returns false if missing or not a number. */
+bool nwpad_json_get_number(const char *json, const char *key, double *out);
 
 #endif
