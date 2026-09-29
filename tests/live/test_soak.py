@@ -86,7 +86,10 @@ def diagnose_desync(ctl, recent):
 
 
 def test_overhead(ctl):
+    """The budget covers the library's own logic; time inside the game functions
+    it calls (walk, keys, camera), which the mouse and keyboard trigger too, is
+    reported but not held to it (Robert, provisional; plan decision log)."""
     cost = ctl("state")["frame_cost_us"]
     print(f"frame cost: {cost}")
     assert cost["frames"] > 1000, cost
-    assert cost["p99"] <= BUDGET_P99_US, cost
+    assert cost["own_p99"] <= BUDGET_P99_US, cost

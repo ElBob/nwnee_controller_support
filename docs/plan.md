@@ -275,7 +275,7 @@ A milestone is complete when its acceptance tests pass, all earlier tests still 
 | Packet shape (Path D) | Our `WalkToWayPoint` messages have the same layout and cadence as captured mouse-drag packets, apart from the target point. |
 | Soak | 10 minutes of randomized input: no crash, no stuck movement, rate cap respected. |
 | End-to-end SDL | Heading and stop tests driven through `uinput_pad.py`. |
-| Overhead | Library time per frame at the 99th percentile is under 0.1 ms. |
+| Overhead | The library's own time per frame at the 99th percentile is under 0.1 ms. Time inside the game functions it calls is reported separately (provisional, decision log). |
 
 ### 8.7 Human checkpoints
 
@@ -361,3 +361,4 @@ The repo is public, under the MIT license.
 | 2026-09-29 | Stop tolerance raised from 300 ms (an initial guess) to 450 ms to match the game (Robert). The stop measures 0.43 s; releasing the game's own movement keys takes about 0.37 s (re-notes F22). |
 | 2026-09-29 | Gating struck (Robert): stick movement isn't blocked in dialogs or cutscenes, because walking away from a conversation is a legitimate player action with story consequences. Keyboard arbitration (WASD suspends the stick) is on hold, not committed for v1. |
 | 2026-09-29 | Keyboard arbitration dropped from the library (Robert): the engine handles keyboard and stick input through its own entry points; verified in play testing. The config file (`~/.config/nwpad/config.toml`) is approved. |
+| 2026-09-29 | Overhead budget, provisionally (Robert): p99 under 0.1 ms applies to the library's own logic (measured ≤ 20 µs in the soak). Time inside the game functions it calls (≤ 110 µs p99 in total) is reported and revisited later for further improvement. |
