@@ -70,3 +70,6 @@ signatures:
     note: F23
     debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN14CClientOptions12SetAlwaysRunEi
+  gui_manager:                 # g_pGuiMan: CGuiMan*; GUI width/height at +0xb8/+0xbc
+    note: F26
+    symbol: g_pGuiMan

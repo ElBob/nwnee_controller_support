@@ -27,6 +27,10 @@ bool nwpad_backend_camera_get(nwpad_camera *cam, nwpad_camera_limits *lim);
 float nwpad_backend_camera_forward(const nwpad_camera *cam);
 /* The player character's current facing (core convention), client side. */
 bool nwpad_backend_player_facing(float *facing_deg);
+/* If the game's recorded pointer is on the outermost pixel of the GUI (where
+ * edge turning spins the camera), move it one pixel in. The next real mouse
+ * motion overwrites it. True if it moved (re-notes F26). */
+bool nwpad_backend_nudge_pointer_off_edge(void);
 /* The player character's client-side position (what's on screen). */
 bool nwpad_backend_player_pos(float *x, float *y);
 bool nwpad_backend_camera_set(const nwpad_camera *cam);

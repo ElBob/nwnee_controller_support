@@ -143,6 +143,7 @@ static struct {
     struct {             /* cursor hidden while the sticks are in use (Robert's request) */
         bool game_wants; /* what the game last asked SDL_ShowCursor for */
         bool stick_hidden;
+        uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
@@ -325,11 +326,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
-                          "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s}",
+                          "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
+                          "\"nudges\":%llu}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
-                          sdl.ShowCursor && sdl.ShowCursor(SDL_QUERY) == SDL_ENABLE ? "true" : "false");
+                          sdl.ShowCursor && sdl.ShowCursor(SDL_QUERY) == SDL_ENABLE ? "true" : "false",
+                          (unsigned long long)g.cursor.nudges);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],
@@ -458,11 +461,14 @@ static void nwpad_frame(void) {
 
     g.last_left = left;
     g.last_right = right;
-    if (sdl.ShowCursor && g.cfg.hide_cursor && !g.cursor.stick_hidden &&
-        (nwpad_magnitude(left) > 0 || nwpad_magnitude(right) > 0)) {
+    bool sticks_active = nwpad_magnitude(left) > 0 || nwpad_magnitude(right) > 0;
+    if (sdl.ShowCursor && g.cfg.hide_cursor && !g.cursor.stick_hidden && sticks_active) {
         g.cursor.stick_hidden = true;
         sdl.ShowCursor(SDL_DISABLE);
     }
+    /* With edge turning on, a pointer left on the outermost pixel spins the camera
+     * once the stick is released; move the game's recorded pointer one pixel in. */
+    if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) g.cursor.nudges++;
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
     nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;

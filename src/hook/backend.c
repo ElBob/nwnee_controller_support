@@ -265,6 +265,35 @@ void *nwpad_backend_debug_object(const char *name) {
 }
 #endif /* NWPAD_DEBUG_SURFACES */
 
+/* ---- Edge nudge (re-notes F26) ---- */
+
+#define INTERNAL_POINTER_X 0x120 /* int: the game's recorded pointer position */
+#define INTERNAL_POINTER_Y 0x124
+#define GUI_WIDTH 0xb8           /* int, on CGuiMan */
+#define GUI_HEIGHT 0xbc
+
+static int32_t read_int(void *base, size_t offset) {
+    int32_t v;
+    memcpy(&v, (char *)base + offset, sizeof v);
+    return v;
+}
+
+bool nwpad_backend_nudge_pointer_off_edge(void) {
+    void **gui_var = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
+    void *in = client_internal();
+    void *gui = gui_var ? *gui_var : NULL;
+    if (!in || !gui) return false;
+    int32_t w = read_int(gui, GUI_WIDTH), h = read_int(gui, GUI_HEIGHT);
+    int32_t x = read_int(in, INTERNAL_POINTER_X), y = read_int(in, INTERNAL_POINTER_Y);
+    if (w < 3 || h < 3) return false;
+    int32_t nx = x <= 0 ? 1 : x >= w - 1 ? w - 2 : x;
+    int32_t ny = y <= 0 ? 1 : y >= h - 1 ? h - 2 : y;
+    if (nx == x && ny == y) return false;
+    memcpy((char *)in + INTERNAL_POINTER_X, &nx, sizeof nx);
+    memcpy((char *)in + INTERNAL_POINTER_Y, &ny, sizeof ny);
+    return true;
+}
+
 /* ---- Movement (M3) ---- */
 
 float nwpad_backend_camera_forward(const nwpad_camera *cam) {
