@@ -42,15 +42,30 @@ static void test_bearing(void) {
     NEAR(nwpad_angle_diff(350, 10), -20, 1e-4);
 }
 
-static void test_free_facing(void) {
-    nwpad_move_intent in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, false,
-                                                     NWPAD_MOVE_IDLE, &cfg);
-    CHECK(in.moving);
-    ANGLE_NEAR(in.facing_deg, 45, 1e-3);   /* faces camera forward */
-    ANGLE_NEAR(in.bearing_deg, 315, 1e-3); /* but moves right */
-    nwpad_move_intent idle = nwpad_move_intent_compute((nwpad_vec2){0, 0}, 45, false,
-                                                       NWPAD_MOVE_RUN, &cfg);
-    CHECK(!idle.moving && idle.mode == NWPAD_MOVE_IDLE);
+static void test_intent(void) {
+    /* Camera forward 45; the character also faces 45. Stick right strafes right. */
+    nwpad_move_intent in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, 45, false,
+                                                     NWPAD_MOVE_IDLE, NWPAD_STYLE_REST, &cfg);
+    CHECK(in.moving && in.style == NWPAD_STYLE_STRAFE_RIGHT);
+    ANGLE_NEAR(in.bearing_deg, 315, 1e-3);
+    /* Character turned 90 left of the camera (facing 135): the same world
+     * direction is now behind it, so it backpedals (windows follow facing). */
+    in = nwpad_move_intent_compute((nwpad_vec2){1, 0}, 45, 135, false, NWPAD_MOVE_IDLE,
+                                   NWPAD_STYLE_REST, &cfg);
+    CHECK(in.style == NWPAD_STYLE_BACKPEDAL);
+    ANGLE_NEAR(in.bearing_deg, 315, 1e-3);
+    /* Forward and diagonals drag. */
+    in = nwpad_move_intent_compute((nwpad_vec2){0, 1}, 45, 45, false, NWPAD_MOVE_IDLE,
+                                   NWPAD_STYLE_REST, &cfg);
+    CHECK(in.style == NWPAD_STYLE_DRAG);
+    ANGLE_NEAR(in.bearing_deg, 45, 1e-3);
+    in = nwpad_move_intent_compute((nwpad_vec2){0.7f, 0.7f}, 45, 45, false, NWPAD_MOVE_IDLE,
+                                   NWPAD_STYLE_REST, &cfg);
+    CHECK(in.style == NWPAD_STYLE_DRAG);
+    /* Released: rest. */
+    nwpad_move_intent idle = nwpad_move_intent_compute((nwpad_vec2){0, 0}, 45, 45, false,
+                                                       NWPAD_MOVE_RUN, NWPAD_STYLE_DRAG, &cfg);
+    CHECK(!idle.moving && idle.mode == NWPAD_MOVE_IDLE && idle.style == NWPAD_STYLE_REST);
 }
 
 static void test_walk_run(void) {
@@ -77,7 +92,7 @@ static void test_send_rate(void) {
     nwpad_send_policy p; nwpad_send_policy_defaults(&p);
     nwpad_send_state st = {0};
     nwpad_move_intent idle = {0};
-    nwpad_move_intent mv = {.moving = true, .mode = NWPAD_MOVE_RUN, .bearing_deg = 90, .facing_deg = 90};
+    nwpad_move_intent mv = {.moving = true, .mode = NWPAD_MOVE_RUN, .style = NWPAD_STYLE_DRAG, .bearing_deg = 90};
 
     CHECK(nwpad_send_decide(&st, &p, &idle, 0) == NWPAD_SEND_NONE); /* never moved */
     CHECK(nwpad_send_decide(&st, &p, &mv, 100) == NWPAD_SEND_MOVE); /* start */
@@ -93,6 +108,9 @@ static void test_send_rate(void) {
     CHECK(nwpad_send_decide(&st, &p, &idle, t) == NWPAD_SEND_STOP);
     CHECK(nwpad_send_decide(&st, &p, &idle, t + 1000) == NWPAD_SEND_NONE);
     CHECK(nwpad_send_decide(&st, &p, &mv, t + 1001) == NWPAD_SEND_MOVE); /* restart not capped */
+    /* A style change sends immediately, even inside the rate cap. */
+    nwpad_move_intent strafe = mv; strafe.style = NWPAD_STYLE_STRAFE_RIGHT;
+    CHECK(nwpad_send_decide(&st, &p, &strafe, t + 1002) == NWPAD_SEND_MOVE);
 }
 
 static void test_camera(void) {
@@ -242,7 +260,7 @@ int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
     test_bearing();
-    test_free_facing();
+    test_intent();
     test_walk_run();
     test_send_rate();
     test_camera();

@@ -126,6 +126,7 @@ static struct {
     nwpad_send_state send_state;
     nwpad_arbiter arbiter;
     nwpad_move_mode move_mode;
+    nwpad_move_style move_style;
     struct { uint64_t total, mouse_motion, keys, filtered; } events; /* seen by the PollEvent hook */
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
@@ -222,6 +223,27 @@ static void control_handler(const char *request, char *out, size_t cap) {
             for (size_t i = 0; i < n; i++) k += snprintf(out + k, cap - (size_t)k, "%02x", p[i]);
             snprintf(out + k, cap - (size_t)k, "\"}");
         }
+    } else if (strcmp(cmd, "walk_to") == 0) {
+        /* {"cmd":"walk_to","x":..,"y":..,"mode":0} (M3 RE) */
+        double x, y, mode = 0;
+        nwpad_json_get_number(request, "mode", &mode);
+        if (!nwpad_json_get_number(request, "x", &x) || !nwpad_json_get_number(request, "y", &y))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"missing x or y\"}");
+        else if (!nwpad_backend_debug_walk_to((float)x, (float)y, (int)mode))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"walk unavailable\"}");
+        else
+            snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "drive_keys") == 0) {
+        /* {"cmd":"drive_keys","w":0,"s":1,"q":0,"e":0} (M3 RE) */
+        double w = 0, sk = 0, q = 0, e = 0;
+        nwpad_json_get_number(request, "w", &w);
+        nwpad_json_get_number(request, "s", &sk);
+        nwpad_json_get_number(request, "q", &q);
+        nwpad_json_get_number(request, "e", &e);
+        if (!nwpad_backend_debug_drive_keys(w != 0, sk != 0, q != 0, e != 0))
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"drive unavailable\"}");
+        else
+            snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "release") == 0) {
         g.virt.active = false;
         snprintf(out, cap, "{\"ok\":true}");
@@ -241,6 +263,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          g.arbiter.movement_owned_by_stick ? "stick" : "keyboard",
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered);
+        static const char *styles[] = {"rest", "drag", "strafe_right", "backpedal", "strafe_left"};
+        float pf, px, py;
+        if (n > 0 && (size_t)n < cap)
+            n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\"", styles[g.move_style]);
+        if (n > 0 && (size_t)n < cap && nwpad_backend_player_facing(&pf) &&
+            nwpad_backend_player_pos(&px, &py))
+            n += snprintf(out + n, cap - (size_t)n,
+                          ",\"client\":{\"x\":%.4f,\"y\":%.4f,\"facing\":%.3f}", px, py, pf);
         float cx, cy, cf;
         if (n > 0 && (size_t)n < cap && nwpad_backend_creature(&cx, &cy, &cf))
             n += snprintf(out + n, cap - (size_t)n,
@@ -342,22 +372,25 @@ static void nwpad_frame(void) {
     g.last_frame_ms = t;
 
     if (g.virt.active && g.virt.until_ms && t >= g.virt.until_ms) g.virt.active = false;
-    nwpad_vec2 left, right;
+    /* No input source (no pad, virtual stick ended) reads as centered sticks, so a
+     * character that was moving still gets its stop. */
+    nwpad_vec2 left = {0, 0}, right = {0, 0};
     if (g.virt.active) {
         left = nwpad_apply_deadzone(g.virt.left);
         right = nwpad_apply_deadzone(g.virt.right);
-    } else {
-        if (!controller_init()) return;
+    } else if (controller_init()) {
         controller_ensure_open(t);
-        if (!g.pad) return;
-        /* SDL Y axes are +down; core convention is +forward / +up. */
-        left = nwpad_apply_deadzone(
-            (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
-        right = nwpad_apply_deadzone(
-            (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
+        if (g.pad) {
+            /* SDL Y axes are +down; core convention is +forward / +up. */
+            left = nwpad_apply_deadzone(
+                (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
+            right = nwpad_apply_deadzone(
+                (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
+        }
     }
 
     nwpad_arbiter_update(&g.arbiter, left, right, t, &g.cfg);
+    nwpad_backend_tick(t);
     if (!nwpad_backend_in_game()) return;
 
     nwpad_camera cam;
@@ -370,11 +403,15 @@ static void nwpad_frame(void) {
         cam = next;
     }
 
-    if (!have_cam || !g.arbiter.movement_owned_by_stick) return;
+    float facing;
+    if (!have_cam || !g.arbiter.movement_owned_by_stick || !nwpad_backend_player_facing(&facing))
+        return;
     nwpad_vec2 move = nwpad_backend_movement_gated() ? (nwpad_vec2){0, 0} : left;
     nwpad_move_intent intent = nwpad_move_intent_compute(
-        move, cam.yaw_deg, nwpad_backend_always_run(), g.move_mode, &g.cfg);
+        move, nwpad_backend_camera_forward(&cam), facing, nwpad_backend_always_run(), g.move_mode,
+        g.move_style, &g.cfg);
     g.move_mode = intent.mode;
+    g.move_style = intent.style;
     switch (nwpad_send_decide(&g.send_state, &g.send_policy, &intent, t)) {
     case NWPAD_SEND_MOVE: nwpad_backend_send_move(&intent); break;
     case NWPAD_SEND_STOP: nwpad_backend_send_stop(); break;

@@ -45,3 +45,15 @@ signatures:
   server_creature_by_id:   # CServerExoApp::GetCreatureByGameObjectID(unsigned int) -> CNWSCreature*
     note: F19
     symbol: _ZN13CServerExoApp25GetCreatureByGameObjectIDEj
+  client_get_player_creature:  # CClientExoApp::GetPlayerCreature() -> CNWCCreature*
+    note: F20
+    symbol: _ZN13CClientExoApp17GetPlayerCreatureEv
+  client_walk_player_to_point: # CClientExoAppInternal::WalkPlayerToPoint(float, float, float, int, unsigned int, int)
+    note: F20
+    symbol: _ZN21CClientExoAppInternal17WalkPlayerToPointEfffiji
+  client_handle_input_event:   # CClientExoAppInternal::HandleInputEvent(int, int, int, int)
+    note: F21
+    symbol: _ZN21CClientExoAppInternal16HandleInputEventEiiii
+  client_stop_drag_mode:       # CNWCMessage::SendPlayerToServerInput_StopDragMode()
+    note: F22
+    symbol: _ZN11CNWCMessage36SendPlayerToServerInput_StopDragModeEv

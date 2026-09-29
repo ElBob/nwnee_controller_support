@@ -105,15 +105,20 @@ nwpad_move_mode nwpad_move_mode_update(nwpad_move_mode prev, float magnitude,
     return magnitude > cfg->run_threshold + half ? NWPAD_MOVE_RUN : NWPAD_MOVE_WALK;
 }
 
-nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_yaw_deg,
-                                            bool always_run, nwpad_move_mode prev_mode,
+nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_forward_deg,
+                                            float facing_deg, bool always_run,
+                                            nwpad_move_mode prev_mode, nwpad_move_style prev_style,
                                             const nwpad_config *cfg) {
     nwpad_move_intent in = {0};
     float m = nwpad_magnitude(stick);
     in.mode = nwpad_move_mode_update(prev_mode, m, always_run, cfg);
     in.moving = in.mode != NWPAD_MOVE_IDLE;
-    in.facing_deg = nwpad_wrap_deg(camera_yaw_deg);
-    in.bearing_deg = in.moving ? nwpad_world_bearing(stick, camera_yaw_deg) : in.facing_deg;
+    if (!in.moving) return in; /* style REST */
+    in.bearing_deg = nwpad_world_bearing(stick, camera_forward_deg);
+    /* The same stick, re-expressed relative to the character's facing. */
+    float cw = nwpad_wrap_deg(facing_deg - in.bearing_deg) * 0.017453292f;
+    nwpad_vec2 rel = {sinf(cw) * m, cosf(cw) * m};
+    in.style = nwpad_move_style_update(prev_style, rel, cfg);
     return in;
 }
 
@@ -121,7 +126,7 @@ nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_yaw_d
 
 void nwpad_send_policy_defaults(nwpad_send_policy *p) {
     p->heading_threshold_deg = 2.0f;
-    p->keepalive_ms = 250;   /* placeholder until measured from msglog (plan §5.2) */
+    p->keepalive_ms = 150;   /* matches the mouse-drag resend cadence (re-notes F16) */
     p->min_interval_ms = 33; /* hard cap, ~30 Hz */
 }
 
@@ -138,12 +143,13 @@ nwpad_send_action nwpad_send_decide(nwpad_send_state *st, const nwpad_send_polic
         return NWPAD_SEND_NONE;
     }
 
-    bool want = !st->was_moving || !st->has_sent || in->mode != st->last_sent.mode ||
+    bool style_changed = in->style != st->last_sent.style;
+    bool want = !st->was_moving || !st->has_sent || style_changed || in->mode != st->last_sent.mode ||
                 fabsf(nwpad_angle_diff(in->bearing_deg, st->last_sent.bearing_deg)) >= p->heading_threshold_deg ||
-                fabsf(nwpad_angle_diff(in->facing_deg, st->last_sent.facing_deg)) >= p->heading_threshold_deg ||
                 now_ms - st->last_send_ms >= p->keepalive_ms;
     if (!want) return NWPAD_SEND_NONE;
-    if (st->has_sent && st->was_moving && now_ms - st->last_send_ms < p->min_interval_ms)
+    /* A style change is never rate-capped: the old style has to end now. */
+    if (st->has_sent && st->was_moving && !style_changed && now_ms - st->last_send_ms < p->min_interval_ms)
         return NWPAD_SEND_NONE;
 
     st->was_moving = true;

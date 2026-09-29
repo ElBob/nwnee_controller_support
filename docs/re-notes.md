@@ -174,6 +174,43 @@ Every function, global, offset, and signature the library uses must have an entr
 - Use: ground truth for movement tests, exposed as `state.creature` (facing in degrees counter-clockwise from +X).
 - Confidence: confirmed.
 
+### F20: Client walk and drive entry points (Ghidra, client)
+- Binary / hash: nwmain-linux 6d19c39b
+- `CClientExoAppInternal::UpdateDriveMode()` (the per-frame keyboard drive):
+  - Key state is kept in the internal app: `+0x1b4` / `+0x1b8` / `+0x1bc` (forward and back variants), `+0x1c0` / `+0x1c4` (A / D, which send `TurnOnSpot` with the facing rotated), and `+0x1c8` / `+0x1cc` (strafe; they add flag 4 / 8).
+  - The DriveControl bearing is the client creature's facing, `atan2(creature+0x48, creature+0x44)` in tenths of a degree. The position is `creature+0x38/+0x3c/+0x40`, and the per-packet sequence is `creature+0x2f2`. The camera doesn't enter directly, so something else turns the creature to the camera while driving (F16's observation).
+  - A separate branch sends `WalkToWayPoint` one unit sideways or behind when `creature[0x39e] == 2` (an alternate control scheme), not for mouse drag.
+- `CClientExoAppInternal::WalkPlayerToPoint(x, y, z, int mode, uint target_oid, int ring)` is the mouse's walk entry, called from `PerformLButtonDownAction` with `mode = (arg != 0) * 2` and `target_oid = 0x7f000000` for ground. It:
+  - returns early (throttled) if called within 1000 ms of the last walk (`+0x5b4`) with a nearby target (`+0x5a8` / `+0x5ac`);
+  - tests line of sight and inter-tile path depth (plays `gui_nowalk` on failure);
+  - runs `CNWCCreature::ClientSideWalkCommand` (the client's prediction) and sends `WalkToWayPoint`.
+  - `mode` 0 follows Always Run and Shift; 2 forces the run/walk flag passed to `ClientSideWalkCommand`. Which way it forces is to be checked.
+  - `ShowWalkToRingVFX(x, y, z, ring)` returns immediately when `ring` = 0, so passing 0 shows no ring.
+- `CClientExoApp::GetPlayerCreature()` forwards to the internal app (`+0x8`).
+- Use: drag mode calls `WalkPlayerToPoint(point ahead along the stick, mode, 0x7f000000, 0)`. Strafe and backpedal set the drive key fields.
+- Confidence: likely (decompile); runtime checks follow.
+
+### F21: The keyboard movement handler
+- Binary / hash: nwmain-linux 6d19c39b
+- What: `CClientExoAppInternal::HandleInputEvent(int action, int pressed, int, int)` (Ghidra) handles the movement actions: 0x57 Q → `+0x1c8`, 0x58 E → `+0x1cc`, 0x59 → `+0x1b4`, 0x5a W → `+0x1b8`, 0x5b S → `+0x1bc`, 0x5c A → `+0x1c0`, 0x5d D → `+0x1c4`. Each press stores `pressed`, stamps timers (`+0x198`, `+0x1a8`), and sets `+0x1b0` = 1 so the next `UpdateDriveMode` sends at once. Releasing Q / E / S / W sends `SendPlayerToServerInput_AbortDriveControl`. The preamble drops events while a UI text field has focus, but only when the 4th argument is nonzero.
+- Runtime (gdb breakpoint, xdotool S held): real key events arrive as `(0x5b, 1, 0, 0)` repeated by autorepeat (11 in 1.2 s), then `(0x5b, 0, 0, 0)`.
+- Facing: neither a real S nor setting the fields turns the character toward the camera. Q / E / S move relative to the creature's own facing (camera forward 80.5°, facing 89°: S moved at facing + 180°). This is what the M2 option (b) builds on.
+- Setting the fields directly (socket `drive_keys`) moves the character exactly like the keys (S: 3.6 m at facing + 180°; Q / E: 3.2 m at facing ± 90°; facing unchanged), but skips the release's AbortDriveControl, so the library calls `HandleInputEvent` instead.
+- Also measured: `WalkPlayerToPoint` mode 1 walks (1.85 m/s steady) and mode 2 runs (3.85 m/s); mode 0 follows the game default. Where the game keeps Always Run is still open (M4); `client_internal+0x184` read 0 here.
+- Confidence: confirmed.
+
+### F22: Mouse drag mode and how it ends
+- Binary / hash: nwmain-linux 6d19c39b
+- What: the byte `CClientExoAppInternal+0x140` is an input mode. It's 1 while the mouse drags, and `UpdateDriveMode` sets it to 2 temporarily. `CClientExoAppInternal::PerformLButtonUpAction()` (Ghidra) sends `CNWCMessage::SendPlayerToServerInput_StopDragMode()` when the mode is 1, then sets the mode to 0. `WalkPlayerToPoint` skips its line-of-sight test and passes the mode on in drag mode (F20).
+- Why it matters: stopping a drag by re-targeting the client's position walks the character back, because the client's position trails the server's by about 0.5 m while running (run 20260929-070241: client y 21.83 vs server 22.38; the server then slid back to 21.90 over 0.7 s). The library drags in mode 1 and stops with StopDragMode, as the mouse does.
+- Also measured there: releasing the game's own S key stops in about 0.37 s (0.07 m of travel after 300 ms), which is native key behavior.
+- Stop measurements (run 20260929-075304, server and client positions):
+  - Re-targeting the client position stops the rendered character at once, but the server's copy (about 0.5 m ahead while running) slides back about 0.5 m over 0.7 s.
+  - StopDragMode alone doesn't stop the walk: the character still goes to the last target (1.3–2.4 m with a 2 m lookahead).
+  - Robert's method, a forward key tap after ending the drag (`HandleInputEvent(0x5a, 1)`, then `(0x5a, 0)` 60 ms later, which sends AbortDriveControl): server and client stop together (final gap 0.01 m, no slide-back) at 0.43 s, after 1.1–1.75 m of running momentum. That's about the same as releasing the real keys (0.37 s).
+- Client vs. server facing: after moves, the client's facing can settle several degrees off the server's (83.7 vs. 90, 96.6 vs. 90). The drive uses the client's copy.
+- Confidence: confirmed.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

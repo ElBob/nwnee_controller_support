@@ -47,21 +47,9 @@ typedef enum { NWPAD_MOVE_IDLE = 0, NWPAD_MOVE_WALK, NWPAD_MOVE_RUN } nwpad_move
 nwpad_move_mode nwpad_move_mode_update(nwpad_move_mode prev, float magnitude,
                                        bool always_run, const nwpad_config *cfg);
 
-typedef struct {
-    bool moving;
-    nwpad_move_mode mode;
-    float bearing_deg; /* world movement direction */
-    float facing_deg;  /* character facing: camera forward while moving */
-} nwpad_move_intent;
-
-nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick_after_deadzone,
-                                            float camera_yaw_deg, bool always_run,
-                                            nwpad_move_mode prev_mode,
-                                            const nwpad_config *cfg);
-
 /* ---- Movement style (plan §3, decided at the M2 gate) ----
  * DRAG walks along the stick and faces it (like holding the mouse on the
- * ground). The others keep facing the camera, as the E / S / Q keys do. */
+ * ground). The others keep the character's facing, as the E / S / Q keys do. */
 typedef enum {
     NWPAD_STYLE_REST = 0,
     NWPAD_STYLE_DRAG,
@@ -72,11 +60,26 @@ typedef enum {
 
 /* Stick angle clockwise from forward, in [0, 360): right 90, back 180, left 270. */
 float nwpad_stick_angle_cw(nwpad_vec2 stick);
-/* From rest, the first direction picks the style (inside a window: strafe or
+/* stick is relative to the character's facing (+y = the way it faces).
+ * From rest, the first direction picks the style (inside a window: strafe or
  * backpedal; otherwise drag). Strafe/backpedal becomes drag when the stick
  * leaves its window; drag stays drag; the deadzone returns to rest. */
 nwpad_move_style nwpad_move_style_update(nwpad_move_style prev, nwpad_vec2 stick_after_deadzone,
                                          const nwpad_config *cfg);
+
+typedef struct {
+    bool moving;
+    nwpad_move_mode mode;   /* walk or run */
+    nwpad_move_style style; /* drag or strafe/backpedal */
+    float bearing_deg;      /* world movement direction */
+} nwpad_move_intent;
+
+/* camera_forward_deg: the camera's forward direction. facing_deg: the character's
+ * current facing; the strafe/backpedal windows are measured from it (plan §3). */
+nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick_after_deadzone,
+                                            float camera_forward_deg, float facing_deg,
+                                            bool always_run, nwpad_move_mode prev_mode,
+                                            nwpad_move_style prev_style, const nwpad_config *cfg);
 
 /* ---- Send-rate limiting (plan §5.2) ---- */
 typedef struct {
