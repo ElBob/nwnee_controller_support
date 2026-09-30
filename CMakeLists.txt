@@ -20,6 +20,7 @@ option(NWPAD_DEBUG_SURFACES "Build the control socket and RE commands (never in 
 # only: the workaround is about how XWayland scales X11 pointer coordinates.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   option(NWPAD_XWAYLAND_EDGE_FIX "Let the pointer reach the right edge under scaled XWayland" ON)
+  option(NWPAD_CRASH_TRACE "Log a backtrace on a crash, then hand on to the game's handler" ON)
 endif()
 
 # Pure logic: no SDL, no game, no I/O. Unit-tested.
@@ -42,6 +43,7 @@ add_custom_command(
 
 # The preload library.
 add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend.c
+  $<$<BOOL:${NWPAD_CRASH_TRACE}>:src/hook/crashtrace.c>
   ${NWPAD_SIG_HEADER}
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:src/hook/control.c>)
 target_include_directories(nwpad PRIVATE ${CMAKE_BINARY_DIR}/gen)
@@ -49,7 +51,8 @@ find_package(Threads REQUIRED)
 target_link_libraries(nwpad PRIVATE nwpad_core dl Threads::Threads)
 target_compile_definitions(nwpad PRIVATE NWPAD_VERSION="${PROJECT_VERSION}"
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:NWPAD_DEBUG_SURFACES=1>
-  $<$<BOOL:${NWPAD_XWAYLAND_EDGE_FIX}>:NWPAD_XWAYLAND_EDGE_FIX=1>)
+  $<$<BOOL:${NWPAD_XWAYLAND_EDGE_FIX}>:NWPAD_XWAYLAND_EDGE_FIX=1>
+  $<$<BOOL:${NWPAD_CRASH_TRACE}>:NWPAD_CRASH_TRACE=1>)
 set_target_properties(nwpad PROPERTIES C_VISIBILITY_PRESET hidden)
 if(NOT NWPAD_DEBUG_SURFACES AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_options(nwpad PRIVATE -s) # release: no symbol names either

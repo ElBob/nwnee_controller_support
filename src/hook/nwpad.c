@@ -18,6 +18,7 @@
 #include "backend.h"
 #include "control.h"
 #include "sigs.h"
+#include "crashtrace.h"
 #include "sdl_min.h"
 
 #ifndef NWPAD_VERSION
@@ -443,7 +444,10 @@ static float axis(int a) {
 
 static void nwpad_frame(void) {
     uint64_t t = now_ms();
-    if (!g.frames++) nwpad_log("first frame");
+    if (!g.frames++) {
+        nwpad_log("first frame");
+        nwpad_crashtrace_install(); /* after the game has installed its own handlers */
+    }
     float dt = g.last_frame_ms ? (float)(t - g.last_frame_ms) / 1000.0f : 0.0f;
     if (dt > 0.1f) dt = 0.1f; /* hitch guard: never jump more than 100 ms of motion */
     g.last_frame_ms = t;
@@ -477,26 +481,37 @@ static void nwpad_frame(void) {
      * once the stick is released; move the game's recorded pointer one pixel in. */
     /* The pin (right_edge_pinned) stays: like the left edge, the next mouse motion,
      * even purely vertical, reports the edge again and edge turning resumes. */
+    NWPAD_WHERE("edge nudge");
     if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) g.cursor.nudges++;
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
+    NWPAD_WHERE("backend tick");
     nwpad_backend_tick(t);
-    if (!nwpad_backend_in_game()) return;
+    NWPAD_WHERE("in_game check");
+    if (!nwpad_backend_in_game()) {
+        NWPAD_WHERE("");
+        return;
+    }
 
     nwpad_camera cam;
     nwpad_camera_limits lim;
+    NWPAD_WHERE("camera read");
     bool have_cam = nwpad_backend_camera_get(&cam, &lim);
     if (have_cam && g.arbiter.camera_owned_by_stick &&
         nwpad_magnitude(right) >= NWPAD_SAFETY_DEADZONE) {
         nwpad_camera next = nwpad_camera_step(cam, right, dt, &g.cfg, &lim);
         uint64_t g0 = now_ns();
+        NWPAD_WHERE("camera turn");
         nwpad_backend_camera_set(&next);
         g.cost.game_ns += now_ns() - g0;
         cam = next;
     }
 
     float facing;
-    if (!have_cam || !nwpad_backend_player_facing(&facing))
+    NWPAD_WHERE("player facing");
+    if (!have_cam || !nwpad_backend_player_facing(&facing)) {
+        NWPAD_WHERE("");
         return;
+    }
     nwpad_vec2 move = nwpad_backend_movement_gated() ? (nwpad_vec2){0, 0} : left;
     nwpad_move_intent intent = nwpad_move_intent_compute(
         move, nwpad_backend_camera_forward(&cam), facing, nwpad_backend_always_run(), g.move_mode,
@@ -515,6 +530,7 @@ static void nwpad_frame(void) {
         g.sends.last_move_ms = t;
         {
             uint64_t g0 = now_ns();
+            NWPAD_WHERE("move send");
             nwpad_backend_send_move(&intent);
             g.cost.game_ns += now_ns() - g0;
         }
@@ -523,12 +539,14 @@ static void nwpad_frame(void) {
         g.sends.stops++;
         {
             uint64_t g0 = now_ns();
+            NWPAD_WHERE("stop send");
             nwpad_backend_send_stop();
             g.cost.game_ns += now_ns() - g0;
         }
         break;
     case NWPAD_SEND_NONE: break;
     }
+    NWPAD_WHERE("");
 }
 
 /* ---- Interposed SDL functions ---- */
@@ -578,6 +596,7 @@ static int nwpad_PollEvent(SDL_Event *event) {
              * so the last column (width-1), where the game's right-edge turning
              * triggers, can't be reached. Moving right onto width-2 counts as reaching
              * it (re-notes F27). */
+            NWPAD_WHERE("right-edge fix");
             int w = nwpad_backend_gui_width();
             if (w > 2 && event->motion.x >= w - 2) {
                 /* Sticky: a mouse pressed against the edge keeps sending events on

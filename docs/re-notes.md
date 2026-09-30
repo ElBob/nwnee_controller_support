@@ -253,6 +253,13 @@ Every function, global, offset, and signature the library uses must have an entr
 - Evidence: run 20260929-124722 and after: right edge turns at −76°/s (game pointer 3839), steady under simulated hand jitter (2 s), and a stick turn plus release stops it (record nudged to 3838).
 - Confidence: confirmed.
 
+### F28: Steam Deck bring-up (SteamOS 3.8.28)
+- Binary / hash: nwmain-linux 6d19c39b on the Deck too (buildid 20277208), native, no Proton mapping.
+- glibc 2.41 on the Deck: the unpinned build (GLIBC_2.43) wouldn't have loaded; the pinned release (F25) does.
+- Layout: Robert's Deck layout for NWN:EE is the workshop "Neverwinter Nights Console Port" (3095778009), cloud-synced (a copy shows up on the box). `steam-input/deck_from_console_port.py` switched its left stick from arrow keys (group 1) to its own `joystick_move` group 30, and its right stick from the companion radial menu (group 51) to a new `joystick_move` group 52. The original is kept as `controller_neptune.vdf.bak-nwpad-20260929173317`.
+- A first load of the quicksave "XP1-Chapter 1" crashed on the Deck with nwpad active (the log stopped after the module load and NUI font bake; there was no core dump and no crash report, because the game installs its own crash handlers). It loaded with `NWPAD_DISABLE=1`, loaded on the box (debug build under gdb, same save copied into the test profile), and then loaded on the Deck with nwpad active and the crash-trace build. It hasn't reproduced since. The release build now includes a chained crash handler (`NWPAD_CRASH_TRACE`, `src/hook/crashtrace.c`) that logs the signal, address, pc, the library's current step, and a backtrace to the Steam log before handing on to the game's handler.
+- Steam on the Deck, restarted over SSH: it needs the Plasma session's `DISPLAY` / `XAUTHORITY` / D-Bus environment (without `XAUTHORITY`, `steam -applaunch` fails with "Unable to open X11 display"), and the first start right after a shutdown sometimes exits on the single-instance lock, so retry once.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

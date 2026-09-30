@@ -43,7 +43,20 @@ Steam's controller log (`~/.local/share/Steam/logs/controller.txt`) shows
 `Loaded Config for Local Selection Path for App ID 704450 ... controller_xboxone.vdf`
 when it's in use.
 
-## Steam Deck
+## Steam Deck: `deck_from_console_port.py`
 
-Pending: the Deck version will be the same port on the Deck's controls, made on
-the Deck itself, so the existing (cloud-synced) Console Port layout stays as it is.
+Converts your own copy of *Neverwinter Nights Console Port* for nwpad, in place,
+with a backup (run it with Steam closed):
+
+```
+steam-input/deck_from_console_port.py \
+  "~/.local/share/Steam/steamapps/common/Steam Controller Configs/<your id>/config/704450/controller_neptune.vdf"
+```
+
+- Left stick: from the camera arrow keys to a gamepad joystick (nwpad movement),
+  keeping its click binding.
+- Right stick: from the companion-command radial menu to a gamepad joystick
+  (nwpad camera). The companion menu currently has no other home.
+- Trackpads, triggers, buttons, back grips, and the quickbar radial are unchanged.
+
+The workshop layout itself isn't part of this repository.
