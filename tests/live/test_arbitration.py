@@ -7,6 +7,7 @@ import time
 from conftest import ROOT, game_window_center
 
 MOUSE_IDLE_MS = 300  # config default (plan §6.3)
+REHIDE_MS = 1000     # cursor_rehide_ms in the test config
 
 
 def test_mouse_suspends_stick_camera(ctl):
@@ -49,6 +50,7 @@ def test_stick_hides_cursor_until_mouse_moves(ctl):
     time.sleep(0.3)
     c = ctl("state")["cursor"]
     assert c["shown"] and not c["stick_hidden"], c
+    time.sleep(REHIDE_MS / 1000)  # mouse still that long: the stick hides at once
     ctl("stick", rx=0.5)
     time.sleep(0.3)
     ctl("release")
@@ -60,3 +62,42 @@ def test_stick_hides_cursor_until_mouse_moves(ctl):
     time.sleep(0.3)
     c = ctl("state")["cursor"]
     assert not c["stick_hidden"] and c["shown"] == c["game_wants"], c
+
+
+def _jiggle():
+    x, y = game_window_center()
+    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(x), str(y), "--jiggle", "20"],
+                   check=True, capture_output=True)
+
+
+def test_mouse_shows_cursor_while_sticks_held(ctl):
+    """Moving the mouse while a stick is held shows the cursor; it hides again once
+    the mouse is still and the stick has been held for cursor_rehide_ms, counting
+    only continuous stick use (Robert's request)."""
+    time.sleep(REHIDE_MS / 1000 + 0.2)
+    ctl("stick", rx=0.3)
+    try:
+        time.sleep(0.3)
+        assert ctl("state")["cursor"]["stick_hidden"], "stick didn't hide the cursor"
+        _jiggle()
+        c = ctl("state")["cursor"]
+        assert not c["stick_hidden"], c  # shown while the mouse moves
+        time.sleep(REHIDE_MS / 1000 * 0.5)
+        c = ctl("state")["cursor"]
+        assert not c["stick_hidden"], c  # still shown: the mouse only just stopped
+        time.sleep(REHIDE_MS / 1000 * 0.5 + 0.3)
+        c = ctl("state")["cursor"]
+        assert c["stick_hidden"], c      # mouse still and stick held long enough
+        # Letting go restarts the count: stick use must be continuous.
+        _jiggle()
+        time.sleep(REHIDE_MS / 1000 * 0.6)
+        ctl("release")
+        time.sleep(0.2)
+        ctl("stick", rx=0.3)
+        time.sleep(REHIDE_MS / 1000 * 0.6)
+        c = ctl("state")["cursor"]
+        assert not c["stick_hidden"], c  # 0.6 s since the stick came back
+        time.sleep(REHIDE_MS / 1000 * 0.4 + 0.3)
+        assert ctl("state")["cursor"]["stick_hidden"]
+    finally:
+        ctl("release")

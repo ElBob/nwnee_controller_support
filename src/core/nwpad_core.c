@@ -19,6 +19,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->mouse_idle_ms = 300;
     cfg->strafe_window_deg = 10.0f;
     cfg->hide_cursor = true;
+    cfg->cursor_rehide_ms = 2000;
     cfg->strafe_exit_ms = 150;
     cfg->enabled = true;
 }
@@ -64,6 +65,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
             else if (!strcmp(key, "strafe_window")) { cfg->strafe_window_deg = (float)v; applied++; }
             else if (!strcmp(key, "hide_cursor")) { cfg->hide_cursor = v != 0; applied++; }
             else if (!strcmp(key, "strafe_exit_ms")) { cfg->strafe_exit_ms = (uint32_t)v; applied++; }
+            else if (!strcmp(key, "cursor_rehide_ms")) { cfg->cursor_rehide_ms = (uint32_t)v; applied++; }
         }
         line = end ? end + 1 : NULL;
     }
@@ -335,6 +337,14 @@ nwpad_move_style nwpad_move_style_step(nwpad_style_state *st, nwpad_vec2 stick, 
     return next;
 }
 
+bool nwpad_cursor_should_hide(uint64_t now_ms, uint64_t sticks_since_ms, uint64_t last_mouse_ms,
+                              const nwpad_config *cfg) {
+    if (!sticks_since_ms) return false;
+    if (!last_mouse_ms || sticks_since_ms >= last_mouse_ms + cfg->cursor_rehide_ms) return true;
+    uint64_t since = sticks_since_ms > last_mouse_ms ? sticks_since_ms : last_mouse_ms;
+    return now_ms >= since + cfg->cursor_rehide_ms;
+}
+
 /* ---- settings.tml [nwpad] section ---- */
 
 static float clampf(double v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : (float)v; }
@@ -348,6 +358,7 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
     bool is_num = end != val;
     if (!strcmp(key, "nwpad.enabled") && is_bool) cfg->enabled = b;
     else if (!strcmp(key, "nwpad.hide-cursor") && is_bool) cfg->hide_cursor = b;
+    else if (!strcmp(key, "nwpad.cursor-rehide-ms") && is_num) cfg->cursor_rehide_ms = (uint32_t)clampf(d, 0, 10000);
     else if (!strcmp(key, "nwpad.mouse-idle-ms") && is_num) cfg->mouse_idle_ms = (uint32_t)clampf(d, 100, 1000);
     else if (!strcmp(key, "nwpad.camera.turn-speed") && is_num) cfg->camera_yaw_speed = clampf(d, 60, 360);
     else if (!strcmp(key, "nwpad.camera.tilt-speed") && is_num) cfg->camera_pitch_speed = clampf(d, 30, 180);
@@ -410,6 +421,7 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
     int n = snprintf(out, cap,
                      "[nwpad]\n"
                      "\tenabled = %s\n"
+                     "\tcursor-rehide-ms = %u\n"
                      "\thide-cursor = %s\n"
                      "\tmouse-idle-ms = %u\n"
                      "\t[nwpad.camera]\n"
@@ -419,7 +431,8 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\t\trun-point = %.4f\n"
                      "\t\tstrafe-exit-ms = %u\n"
                      "\t\tstrafe-window = %.1f\n",
-                     cfg->enabled ? "true" : "false", cfg->hide_cursor ? "true" : "false",
+                     cfg->enabled ? "true" : "false", (unsigned)cfg->cursor_rehide_ms,
+                     cfg->hide_cursor ? "true" : "false",
                      (unsigned)cfg->mouse_idle_ms, cfg->camera_pitch_speed, cfg->camera_yaw_speed,
                      cfg->run_threshold, (unsigned)cfg->strafe_exit_ms, cfg->strafe_window_deg);
     return n > 0 && (size_t)n < cap ? n : -1;

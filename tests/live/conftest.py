@@ -62,8 +62,9 @@ run_hysteresis = 0.125
 mouse_idle_ms = 300
 strafe_window = 10
 strafe_exit_ms = 150
+cursor_rehide_ms = 1000
 """
-TEST_CONFIG_KEYS = 7
+TEST_CONFIG_KEYS = 8
 
 
 @pytest.fixture(scope="session")

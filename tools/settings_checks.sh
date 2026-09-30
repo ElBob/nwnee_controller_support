@@ -78,14 +78,15 @@ python3 - "$S" <<'PY'
 import sys; p = sys.argv[1]; t = open(p).read()
 t = t.replace("turn-speed = 240", "turn-speed = 300", 1); open(p, "w").write(t)
 PY
-launch; grep -qa 'settings .*settings.tml: 8 setting(s) applied' "$RUN/game.log" || fail "settings.tml not read"
+launch; grep -qa 'settings .*settings.tml: 9 setting(s) applied' "$RUN/game.log" || fail "settings.tml not read"
 status; status | grep -q 'turn_speed=300.0' || fail "settings.tml value not used"
 quit; echo "ok: settings.tml wins"
 
 echo "== 3. enabled = false"
 python3 - "$S" <<'PY'
 import sys; p = sys.argv[1]; t = open(p).read()
-t = t.replace("[nwpad]\n\tenabled = true", "[nwpad]\n\tenabled = false", 1); open(p, "w").write(t)
+import re; t = re.sub(r"(?m)(^\[nwpad\]\n(?:\t.*\n)*?)\tenabled = true", r"\1\tenabled = false", t, 1)
+open(p, "w").write(t)
 PY
 RUN=$(NWPAD_CONFIG= "$TOOLS/run_game.sh" --timeout 90 -- +TestNewModule "Contest Of Champions 0492") || fail "launch"; PID=$(cat "$RUN/pid")
 for i in $(seq 30); do "$TOOLS/nwpadctl" state 2>/dev/null | grep -q '"in_game": true' && break; sleep 1; done; sleep 2

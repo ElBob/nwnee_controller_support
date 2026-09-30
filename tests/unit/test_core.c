@@ -276,6 +276,23 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_cursor_rehide(void) {
+    nwpad_config c;
+    nwpad_config_defaults(&c); /* cursor_rehide_ms 2000 */
+    CHECK(!nwpad_cursor_should_hide(5000, 0, 0, &c));        /* sticks centered */
+    CHECK(nwpad_cursor_should_hide(5000, 5000, 0, &c));      /* mouse never moved: at once */
+    CHECK(nwpad_cursor_should_hide(9000, 9000, 5000, &c));   /* mouse still for 4 s: at once */
+    CHECK(!nwpad_cursor_should_hide(6000, 6000, 5000, &c));  /* mouse just moved: wait */
+    CHECK(!nwpad_cursor_should_hide(7999, 6000, 5000, &c));  /* 2 s of sticks since they began */
+    CHECK(nwpad_cursor_should_hide(8000, 6000, 5000, &c));
+    CHECK(!nwpad_cursor_should_hide(8000, 4000, 7000, &c));  /* mouse moved mid-walk: 2 s from it */
+    CHECK(nwpad_cursor_should_hide(9000, 4000, 7000, &c));
+    c.cursor_rehide_ms = 0;
+    CHECK(nwpad_cursor_should_hide(7000, 4000, 7000, &c));   /* 0: the old immediate hide */
+    CHECK(nwpad_config_parse(&c, "cursor_rehide_ms = 1500\n") == 1 && c.cursor_rehide_ms == 1500);
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\ncursor-rehide-ms = 99999\n") == 1 && c.cursor_rehide_ms == 10000);
+}
+
 static void test_settings_toml(void) {
     nwpad_config c; nwpad_config_defaults(&c);
     /* The game's own style: sorted tables, tab indents, long floats; other tables ignored. */
@@ -299,7 +316,7 @@ static void test_settings_toml(void) {
     e.camera_yaw_speed = 240; e.enabled = false; e.run_threshold = 0.75f; e.strafe_window_deg = 12;
     CHECK(nwpad_settings_format(&e, buf, sizeof buf) > 0);
     nwpad_config f; nwpad_config_defaults(&f);
-    CHECK(nwpad_settings_parse(&f, buf) == 8);
+    CHECK(nwpad_settings_parse(&f, buf) == 9);
     NEAR(f.camera_yaw_speed, 240, 1e-3); CHECK(!f.enabled); NEAR(f.run_threshold, 0.75f, 1e-6);
     NEAR(f.strafe_window_deg, 12, 1e-6); CHECK(f.strafe_exit_ms == e.strafe_exit_ms);
     CHECK(nwpad_settings_format(&e, buf, 20) == -1); /* too small */
@@ -328,6 +345,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_cursor_rehide();
     test_settings_toml();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

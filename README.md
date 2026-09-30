@@ -45,11 +45,12 @@ you change them. Save keeps them, Cancel undoes them.
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. The last three keys
+runs with nwpad; the game keeps it when it saves its own settings. The last four keys
 below are only in the file; edit it while the game is closed.
 
 ```toml
 [nwpad]
+	cursor-rehide-ms = 2000
 	enabled = true
 	hide-cursor = true
 	mouse-idle-ms = 300
@@ -66,6 +67,7 @@ below are only in the file; edit it while the game is closed.
 |---|---|---|---|
 | `enabled` | true | | Controller support on/off. Off, the library stays loaded but idle: no stick input, no cursor hiding |
 | `hide-cursor` | true | | Hide the cursor while the sticks are in use |
+| `cursor-rehide-ms` | 2000 | 0–10000 | Moving the mouse shows the cursor; it hides again once the mouse is still and a stick has been held this long without a break (0: at once) |
 | `mouse-idle-ms` | 300 | 100–1000 | How long the mouse must be still before the stick gets the camera back |
 | `camera.turn-speed` | 180 | 60–360 | Camera turn speed at full deflection, °/s |
 | `camera.tilt-speed` | 90 | 30–180 | Camera tilt speed at full deflection, °/s |
@@ -81,7 +83,7 @@ imported into the new section on that first run; after that `settings.tml` wins 
 `config.toml` is only used if `settings.tml` can't be read. `NWPAD_CONFIG=<file>`
 makes nwpad use that `config.toml` only (for development; the keys are the old
 names: `camera_yaw_speed`, `camera_pitch_speed`, `run_threshold`, `run_hysteresis`,
-`mouse_idle_ms`, `strafe_window`, `strafe_exit_ms`, `hide_cursor`).
+`mouse_idle_ms`, `strafe_window`, `strafe_exit_ms`, `hide_cursor`, `cursor_rehide_ms`).
 
 **Uninstalling.** Running the game without nwpad is safe with the `[nwpad]` section
 present: the game ignores it and keeps it (re-notes F29). Delete it by hand if you like.

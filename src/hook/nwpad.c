@@ -146,6 +146,8 @@ static struct {
     struct {             /* cursor hidden while the sticks are in use (Robert's request) */
         bool game_wants; /* what the game last asked SDL_ShowCursor for */
         bool stick_hidden;
+        uint64_t sticks_since_ms; /* sticks continuously active since (0: centered) */
+        uint64_t last_mouse_ms;   /* last mouse motion (0: none yet) */
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
@@ -461,7 +463,13 @@ static void nwpad_frame(void) {
     g.last_left = left;
     g.last_right = right;
     bool sticks_active = nwpad_magnitude(left) > 0 || nwpad_magnitude(right) > 0;
-    if (sdl.ShowCursor && g.cfg.hide_cursor && !g.cursor.stick_hidden && sticks_active) {
+    if (!sticks_active) g.cursor.sticks_since_ms = 0;
+    else if (!g.cursor.sticks_since_ms) g.cursor.sticks_since_ms = t;
+    /* Moving the mouse shows the cursor; it hides again once the mouse is still and
+     * the sticks have been held for cursor_rehide_ms (at once if the mouse was
+     * already still that long). */
+    if (sdl.ShowCursor && g.cfg.hide_cursor && !g.cursor.stick_hidden &&
+        nwpad_cursor_should_hide(t, g.cursor.sticks_since_ms, g.cursor.last_mouse_ms, &g.cfg)) {
         g.cursor.stick_hidden = true;
         sdl.ShowCursor(SDL_DISABLE);
     }
@@ -600,7 +608,8 @@ static int nwpad_PollEvent(SDL_Event *event) {
             }
 #endif
             g.events.mouse_motion++;
-            nwpad_arbiter_mouse_motion(&g.arbiter, now_ms());
+            g.cursor.last_mouse_ms = now_ms();
+            nwpad_arbiter_mouse_motion(&g.arbiter, g.cursor.last_mouse_ms);
             if (g.cursor.stick_hidden) { /* the mouse is back: show what the game wants */
                 g.cursor.stick_hidden = false;
                 sdl.ShowCursor(g.cursor.game_wants ? SDL_ENABLE : SDL_DISABLE);

@@ -20,6 +20,7 @@ typedef struct {
     uint32_t mouse_idle_ms;   /* mouse idle time before the stick regains the camera */
     float strafe_window_deg;  /* half-width of the strafe/backpedal windows (plan §3) */
     bool hide_cursor;         /* hide the mouse cursor while the sticks are in use */
+    uint32_t cursor_rehide_ms; /* after mouse motion: still mouse + held stick this long re-hides */
     uint32_t strafe_exit_ms;  /* how long outside a strafe window before it becomes a drag */
     bool enabled;             /* "Controller support": off leaves the library idle */
 } nwpad_config;
@@ -43,6 +44,14 @@ int nwpad_settings_parse(nwpad_config *cfg, const char *toml);
 /* Apply one numeric key (full path, e.g. "nwpad.camera.turn-speed"), clamped as when
  * parsed. Returns 1 if the key is known. */
 int nwpad_settings_set_number(nwpad_config *cfg, const char *key, double value);
+/* Should the cursor be hidden for the sticks? sticks_since_ms: when the sticks became
+ * continuously active (0: not active). last_mouse_ms: last mouse motion (0: none).
+ * Hidden at once if the mouse was already still for cfg->cursor_rehide_ms when the
+ * sticks started; after mouse motion, only once the mouse has been still and the
+ * sticks held for that long (Robert's request). */
+bool nwpad_cursor_should_hide(uint64_t now_ms, uint64_t sticks_since_ms, uint64_t last_mouse_ms,
+                              const nwpad_config *cfg);
+
 int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap);
 
 /* ---- Stick processing ---- */
