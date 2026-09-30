@@ -317,12 +317,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
                           "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
-                          "\"nudges\":%llu}",
+                          "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
                           sdl.ShowCursor && sdl.ShowCursor(SDL_QUERY) == SDL_ENABLE ? "true" : "false",
-                          (unsigned long long)g.cursor.nudges);
+                          (unsigned long long)g.cursor.nudges,
+                          g.cursor.sticks_since_ms ? (long long)(now_ms() - g.cursor.sticks_since_ms) : -1LL,
+                          g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],

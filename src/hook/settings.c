@@ -196,7 +196,10 @@ static struct {
     void *(*cxx_new)(size_t);
     void (*cxx_delete)(void *);
     cxx_string keys[E_COUNT];
-    int read_frames;         /* frames left to read values every frame */
+    nwpad_config *cfg;       /* where change callbacks write */
+    size_t window_count;     /* s_by_identifier size when last scanned */
+    char *window_node;       /* the node the Options window was last found in */
+    char *patched_window, *patched_tabs; /* last window given our rows (and its tab buffer) */
 } nat;
 
 /* A std::string the game may later destroy: heap storage from its operator new. */
@@ -241,6 +244,31 @@ static void cxx_vector_reserve(cxx_vector *v, size_t size, size_t more, const si
     v->cap = grown + need * size;
 }
 
+/* Change callbacks: std::function<void(T)> built by hand (libstdc++ layout). The
+ * functor is the entry index, stored in place; the game calls the invoker from
+ * CExoConfig::Update() on its main loop whenever the value changes: Options rows,
+ * reset, Cancel's rollback, and once after registration (F30). */
+static bool on_change_manager(void *dest, const void *src, int op) {
+    switch (op) {
+    case 0: *(const void **)dest = NULL; break;          /* __get_type_info */
+    case 1: *(const void **)dest = src; break;           /* __get_functor_ptr */
+    case 2: memcpy(dest, src, 2 * sizeof(void *)); break; /* __clone_functor */
+    default: break;                                       /* __destroy_functor */
+    }
+    return false;
+}
+
+static int entry_of(const void *functor) { return (int)(intptr_t)((void *const *)functor)[0]; }
+
+static void on_change_double(const void *functor, double *value) {
+    nwpad_settings_set_number(nat.cfg, entries[entry_of(functor)].key, *value);
+}
+
+static void on_change_bool(const void *functor, bool *value) {
+    if (entry_of(functor) == E_ENABLED) nat.cfg->enabled = *value;
+    else nat.cfg->hide_cursor = *value;
+}
+
 static bool native_register(void) {
     static const int ids[] = {NWPAD_SIG_EXO_BASE, NWPAD_SIG_CONFIG_BIND_BOOL, NWPAD_SIG_CONFIG_BIND_DOUBLE,
                               NWPAD_SIG_CONFIG_GET_BOOL, NWPAD_SIG_CONFIG_GET_DOUBLE,
@@ -270,9 +298,10 @@ static bool native_register(void) {
     const bool def_b[E_COUNT] = {[E_ENABLED] = d.enabled, [E_HIDE_CURSOR] = d.hide_cursor};
     for (int i = 0; i < E_COUNT; i++) {
         cxx_string_init(&nat.keys[i], entries[i].key); /* kept for Get; never freed */
-        cxx_function none = {0};
-        void *b = entries[i].is_bool ? bind_bool(config, &nat.keys[i], &def_b[i], &none)
-                                     : bind_double(config, &nat.keys[i], &def_d[i], &none);
+        cxx_function on_change = {{(void *)(intptr_t)i, NULL}, (void *)on_change_manager,
+                                  entries[i].is_bool ? (void *)on_change_bool : (void *)on_change_double};
+        void *b = entries[i].is_bool ? bind_bool(config, &nat.keys[i], &def_b[i], &on_change)
+                                     : bind_double(config, &nat.keys[i], &def_d[i], &on_change);
         if (!b) { /* already bound: someone else owns the key */
             say("native settings: %s is already registered; staying file-only", entries[i].key);
             return false;
@@ -321,14 +350,29 @@ static void native_patch_window(char *window) {
     }
 }
 
-/* Find an open Options window: Nui::Window::s_by_identifier's nodes are
- * { next, std::string key, weak_ptr<Window> { ptr, control block }, hash }. */
+/* The live Options window in a Nui::Window::s_by_identifier node
+ * { next, std::string key, weak_ptr<Window> { ptr, control block }, hash }, or NULL. */
+static char *node_options_window(char *node) {
+    char *window = *(char **)(node + 0x28);
+    char *control = *(char **)(node + 0x30);
+    if (!window || !control || *(int32_t *)(control + 8) <= 0) return NULL; /* closed */
+    return *(void **)window == nat.window_vptr ? window : NULL;
+}
+
+/* The open Options window, if any. The map is only walked when its size changes;
+ * otherwise the node the window was found in last time is checked (reopening it
+ * reuses the node). */
 static char *native_find_window(void) {
+    size_t count = *(size_t *)((char *)nat.windows + 0x18); /* _M_element_count */
+    if (count == nat.window_count) return nat.window_node ? node_options_window(nat.window_node) : NULL;
+    nat.window_count = count;
+    nat.window_node = NULL;
     for (char **node = *(char ***)((char *)nat.windows + 0x10); node; node = *(char ***)node) {
-        char *window = *(char **)((char *)node + 0x28);
-        char *control = *(char **)((char *)node + 0x30);
-        if (!window || !control || *(int32_t *)(control + 8) <= 0) continue; /* closed */
-        if (*(void **)window == nat.window_vptr) return window;
+        char *window = node_options_window((char *)node);
+        if (window) {
+            nat.window_node = (char *)node;
+            return window;
+        }
     }
     return NULL;
 }
@@ -340,28 +384,28 @@ void nwpad_settings_frame(nwpad_config *cfg) {
             return;
         }
         NWPAD_WHERE("settings: register");
+        nat.cfg = cfg;
         nat.state = native_register() ? 1 : -1;
         say(nat.state > 0 ? "native settings: registered (Options > Camera)"
                           : "native settings unavailable; settings.tml only");
-        nat.read_frames = 1;
+        if (nat.state > 0) { /* read once; changes arrive through the callbacks */
+            void *config = *(void **)*nat.exo_base;
+            cfg->enabled = nat.get_bool(config, &nat.keys[E_ENABLED], false);
+            cfg->hide_cursor = nat.get_bool(config, &nat.keys[E_HIDE_CURSOR], false);
+            for (int i = E_TURN; i <= E_RUN_POINT; i++)
+                nwpad_settings_set_number(cfg, entries[i].key, nat.get_double(config, &nat.keys[i], false));
+        }
     }
     if (nat.state < 0) return;
     NWPAD_WHERE("settings: window");
     char *window = native_find_window();
-    if (window) native_patch_window(window); /* no-op once our rows are there */
-    /* The values change through the Options window (and its Save/Cancel on close),
-     * so read them while one is open, on the frame after, and now and then for
-     * other editors such as the debug Config menu. Get<T> costs a few µs each. */
-    static uint32_t frame;
-    if (window) nat.read_frames = 2;
-    if (!nat.read_frames && ++frame % 300) return;
-    if (nat.read_frames) nat.read_frames--;
-    NWPAD_WHERE("settings: read");
-    void *config = *(void **)*nat.exo_base;
-    cfg->enabled = nat.get_bool(config, &nat.keys[E_ENABLED], false);
-    cfg->hide_cursor = nat.get_bool(config, &nat.keys[E_HIDE_CURSOR], false);
-    for (int i = E_TURN; i <= E_RUN_POINT; i++)
-        nwpad_settings_set_number(cfg, entries[i].key, nat.get_double(config, &nat.keys[i], false));
+    if (!window) return;
+    char *tabs = *(char **)(window + WINDOW_TABS);
+    if (window == nat.patched_window && tabs == nat.patched_tabs) return; /* rows already added */
+    NWPAD_WHERE("settings: patch window");
+    native_patch_window(window);
+    nat.patched_window = window;
+    nat.patched_tabs = tabs;
 }
 
 bool nwpad_settings_native(void) { return nat.state > 0; }

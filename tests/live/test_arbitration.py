@@ -64,10 +64,14 @@ def test_stick_hides_cursor_until_mouse_moves(ctl):
     assert not c["stick_hidden"] and c["shown"] == c["game_wants"], c
 
 
-def _jiggle():
+def _jiggle(ctl):
+    """Jiggle the mouse and make sure the game saw it (a new uinput device can
+    miss its first events while the compositor adds it)."""
     x, y = game_window_center()
-    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(x), str(y), "--jiggle", "20"],
-                   check=True, capture_output=True)
+    motion0 = ctl("state")["events"]["mouse_motion"]
+    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(x), str(y), "--jiggle", "40",
+                    "--settle", "1.5"], check=True, capture_output=True)
+    assert ctl("state")["events"]["mouse_motion"] > motion0 + 5, "no mouse motion reached the game"
 
 
 def test_mouse_shows_cursor_while_sticks_held(ctl):
@@ -79,7 +83,7 @@ def test_mouse_shows_cursor_while_sticks_held(ctl):
     try:
         time.sleep(0.3)
         assert ctl("state")["cursor"]["stick_hidden"], "stick didn't hide the cursor"
-        _jiggle()
+        _jiggle(ctl)
         c = ctl("state")["cursor"]
         assert not c["stick_hidden"], c  # shown while the mouse moves
         time.sleep(REHIDE_MS / 1000 * 0.5)
@@ -89,15 +93,19 @@ def test_mouse_shows_cursor_while_sticks_held(ctl):
         c = ctl("state")["cursor"]
         assert c["stick_hidden"], c      # mouse still and stick held long enough
         # Letting go restarts the count: stick use must be continuous.
-        _jiggle()
-        time.sleep(REHIDE_MS / 1000 * 0.6)
+        # (The stick must come back while the mouse is still recent: a mouse
+        # already still for cursor_rehide_ms hides the cursor at once.)
+        _jiggle(ctl)
+        assert not ctl("state")["cursor"]["stick_hidden"]
+        time.sleep(REHIDE_MS / 1000 * 0.2)
         ctl("release")
-        time.sleep(0.2)
+        time.sleep(0.15)
         ctl("stick", rx=0.3)
-        time.sleep(REHIDE_MS / 1000 * 0.6)
+        time.sleep(REHIDE_MS / 1000 * 0.8)  # past cursor_rehide_ms since the mouse stopped
         c = ctl("state")["cursor"]
-        assert not c["stick_hidden"], c  # 0.6 s since the stick came back
-        time.sleep(REHIDE_MS / 1000 * 0.4 + 0.3)
-        assert ctl("state")["cursor"]["stick_hidden"]
+        assert not c["stick_hidden"], str(c)  # but not since the stick came back
+        time.sleep(REHIDE_MS / 1000 * 0.2 + 0.3)
+        c = ctl("state")["cursor"]
+        assert c["stick_hidden"], str(c)
     finally:
         ctl("release")
