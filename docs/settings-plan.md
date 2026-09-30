@@ -1,6 +1,6 @@
 # Native settings integration plan
 
-Status: **S done; N1-lite done** (2026-09-29): `src/hook/settings.c` seeds and reads `[nwpad]` in `settings.tml`, imports `config.toml` once, falls back to it; `nwpad.enabled` idles the library; checks in `tools/settings_checks.sh`. Next: the panel spike (N2, timeboxed). Robert chose: lite first (a `[nwpad]` section in `settings.tml`, no UI), then a timeboxed panel spike; D1 Camera group; D2 import once, then fallback only; D3 `strafe_window` and `mouse_idle_ms` file-only. Findings: `docs/re-notes.md` F29.
+Status: **N1–N3 done** (2026-09-29): `[nwpad]` in `settings.tml` (lite), plus native entries: the five user-facing keys are registered with `CExoConfig::Bind` on the first frame and added as rows to Options > Input > Camera ("Controller ..." labels), with live apply, Save/Cancel, reset and search (re-notes F30). No descriptions (strref-only). Checks: `tools/settings_checks.sh`. Next: N4, Deck validation (Robert).
 
 ## 1. Goal
 

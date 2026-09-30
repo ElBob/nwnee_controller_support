@@ -193,19 +193,20 @@ static void control_handler(const char *request, char *out, size_t cap) {
                  (unsigned long long)g.frames);
     } else if (strcmp(cmd, "status") == 0) {
         nwpad_backend_status bs = nwpad_backend_status_get();
-        char sigs[1024];
+        char sigs[1024], native[512];
         nwpad_sigs_json(sigs, sizeof sigs);
+        nwpad_settings_debug_json(native, sizeof native);
         snprintf(out, cap,
                  "{\"ok\":true,\"version\":\"%s\",\"frame\":%llu,\"hooks\":true,"
                  "\"controller\":\"%s\",\"in_game\":%s,"
                  "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":%s,"
                  "\"config\":{\"enabled\":%s,\"turn_speed\":%.1f,\"tilt_speed\":%.1f,"
-                 "\"run_point\":%.4f,\"hide_cursor\":%s}}",
+                 "\"run_point\":%.4f,\"hide_cursor\":%s},\"native\":%s}",
                  NWPAD_VERSION, (unsigned long long)g.frames, controller_state(),
                  nwpad_backend_in_game() ? "true" : "false",
                  bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false",
                  sigs, g.cfg.enabled ? "true" : "false", g.cfg.camera_yaw_speed,
-                 g.cfg.camera_pitch_speed, g.cfg.run_threshold, g.cfg.hide_cursor ? "true" : "false");
+                 g.cfg.camera_pitch_speed, g.cfg.run_threshold, g.cfg.hide_cursor ? "true" : "false", native);
     } else if (strcmp(cmd, "stick") == 0) {
         /* {"cmd":"stick","lx":..,"ly":..,"rx":..,"ry":..,"hold_ms":..}; +y is forward/up. */
         double v;
@@ -431,12 +432,19 @@ static void nwpad_frame(void) {
     if (dt > 0.1f) dt = 0.1f; /* hitch guard: never jump more than 100 ms of motion */
     g.last_frame_ms = t;
 
-    if (!g.cfg.enabled) return; /* "Controller support" off: stay idle */
+    NWPAD_WHERE("settings");
+    nwpad_settings_frame(&g.cfg); /* live values from the Options window, if native */
+    if ((!g.cfg.enabled || !g.cfg.hide_cursor) && g.cursor.stick_hidden) { /* turned off live */
+        g.cursor.stick_hidden = false;
+        if (sdl.ShowCursor) sdl.ShowCursor(g.cursor.game_wants ? SDL_ENABLE : SDL_DISABLE);
+    }
     if (g.virt.active && g.virt.until_ms && t >= g.virt.until_ms) g.virt.active = false;
     /* No input source (no pad, virtual stick ended) reads as centered sticks, so a
-     * character that was moving still gets its stop. */
+     * character that was moving still gets its stop. So does "Controller support"
+     * off, which otherwise does nothing. */
     nwpad_vec2 left = {0, 0}, right = {0, 0};
-    if (g.virt.active) {
+    if (!g.cfg.enabled) {
+    } else if (g.virt.active) {
         left = nwpad_apply_deadzone(g.virt.left);
         right = nwpad_apply_deadzone(g.virt.right);
     } else if (controller_init()) {

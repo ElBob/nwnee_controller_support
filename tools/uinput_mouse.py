@@ -12,7 +12,8 @@ KWin treats as a real pointer.
 X Y are X-screen pixel coordinates (as xdotool reports them). --jiggle moves
 the pointer back and forth N times around the target, one event per interval.
 --drag presses the left button at X Y, moves to X+DX Y+DY, holds for S
-seconds, and releases (NWN's click-and-drag movement).
+seconds, and releases (NWN's click-and-drag movement). --click clicks the left
+button at X Y (driving menus in the settings checks).
 """
 import argparse
 import os
@@ -43,6 +44,7 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=0.02)
     ap.add_argument("--drag", nargs=2, type=int, metavar=("DX", "DY"))
     ap.add_argument("--hold", type=float, default=1.0, help="drag: seconds to hold at the end point")
+    ap.add_argument("--click", action="store_true", help="left-click at X Y")
     ap.add_argument("--settle", type=float, default=1.0, help="wait for the compositor to add the device")
     a = ap.parse_args()
 
@@ -65,6 +67,13 @@ def main() -> int:
         for i in range(a.jiggle):
             time.sleep(a.interval)
             move(x + (8 if i % 2 == 0 else 0), y)
+        if a.click:
+            time.sleep(0.15)
+            ui.write(e.EV_KEY, e.BTN_LEFT, 1)
+            ui.syn()
+            time.sleep(0.08)
+            ui.write(e.EV_KEY, e.BTN_LEFT, 0)
+            ui.syn()
         if a.drag:
             time.sleep(0.1)
             ui.write(e.EV_KEY, e.BTN_LEFT, 1)

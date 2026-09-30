@@ -32,11 +32,21 @@ The game log shows `[nwpad] version ... loaded` when the library is active. Set 
 
 ## Settings
 
+In the game: **Options > Game Options > Input**, in the Camera group:
+
+- **Controller Support**: on/off. Off, nwpad stays loaded but idle (no stick input, no cursor hiding).
+- **Controller Hides Cursor**
+- **Controller Camera Turn Speed** / **Controller Camera Tilt Speed**: °/s at full deflection.
+- **Controller Run Point**: where walking becomes running.
+
+They work like the game's own settings (the Options search finds them with "controller") and apply as
+you change them. Save keeps them, Cancel undoes them.
+
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. Edit it while the
-game is closed; changes apply on the next launch.
+runs with nwpad; the game keeps it when it saves its own settings. The last three keys
+below are only in the file; edit it while the game is closed.
 
 ```toml
 [nwpad]

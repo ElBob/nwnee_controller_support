@@ -303,6 +303,15 @@ static void test_settings_toml(void) {
     NEAR(f.camera_yaw_speed, 240, 1e-3); CHECK(!f.enabled); NEAR(f.run_threshold, 0.75f, 1e-6);
     NEAR(f.strafe_window_deg, 12, 1e-6); CHECK(f.strafe_exit_ms == e.strafe_exit_ms);
     CHECK(nwpad_settings_format(&e, buf, 20) == -1); /* too small */
+    {
+        nwpad_config c;
+        nwpad_config_defaults(&c);
+        CHECK(nwpad_settings_set_number(&c, "nwpad.camera.turn-speed", 500) == 1);
+        CHECK(c.camera_yaw_speed == 360.0f);
+        CHECK(nwpad_settings_set_number(&c, "nwpad.movement.run-point", 0.6) == 1);
+        CHECK(fabsf(c.run_threshold - 0.6f) < 1e-6f && c.run_hysteresis == NWPAD_RUN_BAND);
+        CHECK(nwpad_settings_set_number(&c, "nwpad.nope", 1) == 0);
+    }
 }
 
 int main(void) {

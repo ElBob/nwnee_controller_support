@@ -40,6 +40,9 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text);
 int nwpad_settings_parse(nwpad_config *cfg, const char *toml);
 /* Write cfg as a [nwpad] section in the game's style (tabs, one table per group).
  * Returns the length, or -1 if cap is too small. */
+/* Apply one numeric key (full path, e.g. "nwpad.camera.turn-speed"), clamped as when
+ * parsed. Returns 1 if the key is known. */
+int nwpad_settings_set_number(nwpad_config *cfg, const char *key, double value);
 int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap);
 
 /* ---- Stick processing ---- */

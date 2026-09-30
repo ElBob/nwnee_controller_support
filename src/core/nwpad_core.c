@@ -360,6 +360,12 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
     return 1;
 }
 
+int nwpad_settings_set_number(nwpad_config *cfg, const char *key, double value) {
+    char text[40];
+    snprintf(text, sizeof text, "%.17g", value);
+    return settings_apply(cfg, key, text);
+}
+
 int nwpad_settings_parse(nwpad_config *cfg, const char *toml) {
     char table[128] = "";
     bool found = false;

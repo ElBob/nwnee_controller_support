@@ -73,3 +73,31 @@ signatures:
   gui_manager:                 # g_pGuiMan: CGuiMan*; GUI width/height at +0xb8/+0xbc
     note: F26
     symbol: g_pGuiMan
+  # Native settings: registry and Options window (settings plan N2)
+  exo_base:           # CExoBase* global; first field is the CExoConfig*
+    note: F30
+    symbol: g_pExoBase
+  config_bind_bool:   # CExoConfig::Bind<bool>(const std::string&, const bool&, std::function<void(bool)>)
+    note: F30
+    symbol: _ZN10CExoConfig4BindIbEEPNS_10BindConfigIT_EERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKS2_St8functionIFvS2_EE
+  config_bind_double: # CExoConfig::Bind<double>(...)
+    note: F30
+    symbol: _ZN10CExoConfig4BindIdEEPNS_10BindConfigIT_EERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKS2_St8functionIFvS2_EE
+  config_get_bool:    # CExoConfig::Get<bool>(const std::string&, bool)
+    note: F30
+    symbol: _ZN10CExoConfig3GetIbEET_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEb
+  config_get_double:  # CExoConfig::Get<double>(const std::string&, bool)
+    note: F30
+    symbol: _ZN10CExoConfig3GetIdEET_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEb
+  config_constrain_double:  # BindConfig<double>::Constrain(cpptoml::option<double>, cpptoml::option<double>)
+    note: F30
+    symbol: _ZN10CExoConfig10BindConfigIdE9ConstrainEN7cpptoml6optionIdEES4_
+  config_step_double: # BindConfig<double>::StepSize(cpptoml::option<double>)
+    note: F30
+    symbol: _ZN10CExoConfig10BindConfigIdE8StepSizeEN7cpptoml6optionIdEE
+  nui_windows:        # Nui::Window::s_by_identifier: unordered_map<std::string, weak_ptr<Window>>
+    note: F30
+    symbol: _ZN3Nui6Window15s_by_identifierB5cxx11E
+  config_window_vtable:  # vtable for enable_make<Nui::ConfigWindow> (the Options window)
+    note: F30
+    symbol: _ZTV11enable_makeIN3Nui12ConfigWindowEE
