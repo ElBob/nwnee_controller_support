@@ -21,12 +21,26 @@ typedef struct {
     float strafe_window_deg;  /* half-width of the strafe/backpedal windows (plan §3) */
     bool hide_cursor;         /* hide the mouse cursor while the sticks are in use */
     uint32_t strafe_exit_ms;  /* how long outside a strafe window before it becomes a drag */
+    bool enabled;             /* "Controller support": off leaves the library idle */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);
 /* Parse a minimal TOML subset ("key = number", '#' comments). Unknown keys are
  * ignored. Returns the number of keys applied, or -1 on a malformed line. */
 int nwpad_config_parse(nwpad_config *cfg, const char *text);
+
+/* ---- settings.tml [nwpad] section (docs/settings-plan.md §5) ----
+ * Keys: nwpad.enabled, nwpad.hide-cursor, nwpad.mouse-idle-ms, nwpad.camera.turn-speed,
+ * nwpad.camera.tilt-speed, nwpad.movement.run-point, nwpad.movement.strafe-window,
+ * nwpad.movement.strafe-exit-ms. run-point is the centre of the walk/run band; the
+ * band width stays NWPAD_RUN_BAND. Values are clamped to the plan's ranges. */
+#define NWPAD_RUN_BAND 0.125f
+/* Apply the [nwpad] tables of a settings.tml text. Returns the number of keys applied,
+ * or -1 if the text has no [nwpad] table. Other tables and unknown keys are ignored. */
+int nwpad_settings_parse(nwpad_config *cfg, const char *toml);
+/* Write cfg as a [nwpad] section in the game's style (tabs, one table per group).
+ * Returns the length, or -1 if cap is too small. */
+int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap);
 
 /* ---- Stick processing ---- */
 /* Radial safety deadzone: zero inside, raw passthrough outside (no rescaling;

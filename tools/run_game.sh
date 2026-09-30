@@ -65,13 +65,15 @@ TOOLS="$(cd "$(dirname "$0")" && pwd)"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 rm -f "$XDG_RUNTIME_DIR/nwpad.sock"  # stale socket from an earlier run
 
+# NWPAD_CONFIG: unset uses the test config; set but empty uses settings.tml like a
+# normal install (tools/settings_checks.sh).
 # SteamAppId stops the Steam API from relaunching the game through Steam, which
 # would drop the preload and the isolated user directory. The game runs on
 # XWayland, so it gets DISPLAY but not the session's WAYLAND_DISPLAY.
 cd "$(dirname "$NWN_BIN")"
 env -u WAYLAND_DISPLAY "${GAME_ENV[@]}" DISPLAY="$NWPAD_DISPLAY" XAUTHORITY="${XAUTHORITY:-}" \
     SteamAppId="$NWN_APPID" SteamGameId="$NWN_APPID" NWPAD_SOCKET=1 \
-    NWPAD_CONFIG="${NWPAD_CONFIG:-$NWPAD_STATE/config.toml}" \
+    NWPAD_CONFIG="${NWPAD_CONFIG-$NWPAD_STATE/config.toml}" \
     LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" \
     "$NWN_BIN" "${GAME_ARGS[@]}" "$@" >"$RUN/game.log" 2>&1 9>&- &
 PID=$!

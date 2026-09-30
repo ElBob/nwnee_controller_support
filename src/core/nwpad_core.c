@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,6 +20,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->strafe_window_deg = 10.0f;
     cfg->hide_cursor = true;
     cfg->strafe_exit_ms = 150;
+    cfg->enabled = true;
 }
 
 static const char *skip_ws(const char *s) {
@@ -331,4 +333,88 @@ nwpad_move_style nwpad_move_style_step(nwpad_style_state *st, nwpad_vec2 stick, 
     if (next != st->style) st->outside_since_ms = 0;
     st->style = next;
     return next;
+}
+
+/* ---- settings.tml [nwpad] section ---- */
+
+static float clampf(double v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : (float)v; }
+
+/* Apply one full key path (e.g. "nwpad.camera.turn-speed"). Returns 1 if known. */
+static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
+    bool is_bool = !strncmp(val, "true", 4) || !strncmp(val, "false", 5);
+    bool b = !strncmp(val, "true", 4);
+    char *end;
+    double d = strtod(val, &end);
+    bool is_num = end != val;
+    if (!strcmp(key, "nwpad.enabled") && is_bool) cfg->enabled = b;
+    else if (!strcmp(key, "nwpad.hide-cursor") && is_bool) cfg->hide_cursor = b;
+    else if (!strcmp(key, "nwpad.mouse-idle-ms") && is_num) cfg->mouse_idle_ms = (uint32_t)clampf(d, 100, 1000);
+    else if (!strcmp(key, "nwpad.camera.turn-speed") && is_num) cfg->camera_yaw_speed = clampf(d, 60, 360);
+    else if (!strcmp(key, "nwpad.camera.tilt-speed") && is_num) cfg->camera_pitch_speed = clampf(d, 30, 180);
+    else if (!strcmp(key, "nwpad.movement.run-point") && is_num) {
+        cfg->run_threshold = clampf(d, 0.5f, 0.95f);
+        cfg->run_hysteresis = NWPAD_RUN_BAND;
+    } else if (!strcmp(key, "nwpad.movement.strafe-window") && is_num) cfg->strafe_window_deg = clampf(d, 0, 30);
+    else if (!strcmp(key, "nwpad.movement.strafe-exit-ms") && is_num) cfg->strafe_exit_ms = (uint32_t)clampf(d, 0, 1000);
+    else return 0;
+    return 1;
+}
+
+int nwpad_settings_parse(nwpad_config *cfg, const char *toml) {
+    char table[128] = "";
+    bool found = false;
+    int applied = 0;
+    for (const char *line = toml; line && *line;) {
+        const char *nl = strchr(line, '\n');
+        size_t len = nl ? (size_t)(nl - line) : strlen(line);
+        char buf[256];
+        if (len < sizeof buf) {
+            memcpy(buf, line, len);
+            buf[len] = '\0';
+            char *p = (char *)skip_ws(buf);
+            char *hash = strchr(p, '#');
+            if (hash) *hash = '\0';
+            if (*p == '[') {
+                /* table header: [name] (arrays of tables and quoted names are other tables) */
+                char *close = strchr(p, ']');
+                table[0] = '\0';
+                if (p[1] != '[' && p[1] != '"' && close && (size_t)(close - p - 1) < sizeof table) {
+                    memcpy(table, p + 1, (size_t)(close - p - 1));
+                    table[close - p - 1] = '\0';
+                }
+                if (!strcmp(table, "nwpad") || !strncmp(table, "nwpad.", 6)) found = true;
+            } else if (table[0] && (!strcmp(table, "nwpad") || !strncmp(table, "nwpad.", 6))) {
+                char *eq = strchr(p, '=');
+                if (eq) {
+                    char *k_end = eq;
+                    while (k_end > p && (k_end[-1] == ' ' || k_end[-1] == '\t')) k_end--;
+                    *k_end = '\0';
+                    char full[256];
+                    if ((size_t)snprintf(full, sizeof full, "%s.%s", table, p) < sizeof full)
+                        applied += settings_apply(cfg, full, skip_ws(eq + 1));
+                }
+            }
+        }
+        line = nl ? nl + 1 : NULL;
+    }
+    return found ? applied : -1;
+}
+
+int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
+    int n = snprintf(out, cap,
+                     "[nwpad]\n"
+                     "\tenabled = %s\n"
+                     "\thide-cursor = %s\n"
+                     "\tmouse-idle-ms = %u\n"
+                     "\t[nwpad.camera]\n"
+                     "\t\ttilt-speed = %.1f\n"
+                     "\t\tturn-speed = %.1f\n"
+                     "\t[nwpad.movement]\n"
+                     "\t\trun-point = %.4f\n"
+                     "\t\tstrafe-exit-ms = %u\n"
+                     "\t\tstrafe-window = %.1f\n",
+                     cfg->enabled ? "true" : "false", cfg->hide_cursor ? "true" : "false",
+                     (unsigned)cfg->mouse_idle_ms, cfg->camera_pitch_speed, cfg->camera_yaw_speed,
+                     cfg->run_threshold, (unsigned)cfg->strafe_exit_ms, cfg->strafe_window_deg);
+    return n > 0 && (size_t)n < cap ? n : -1;
 }

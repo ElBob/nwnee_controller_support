@@ -1,6 +1,6 @@
 # Native settings integration plan
 
-Status: **draft**. Section 3 lists the decisions Robert needs to make. Once those are made, add them to the decision log in `docs/plan.md` §13.
+Status: **S done; N1-lite done** (2026-09-29): `src/hook/settings.c` seeds and reads `[nwpad]` in `settings.tml`, imports `config.toml` once, falls back to it; `nwpad.enabled` idles the library; checks in `tools/settings_checks.sh`. Next: the panel spike (N2, timeboxed). Robert chose: lite first (a `[nwpad]` section in `settings.tml`, no UI), then a timeboxed panel spike; D1 Camera group; D2 import once, then fallback only; D3 `strafe_window` and `mouse_idle_ms` file-only. Findings: `docs/re-notes.md` F29.
 
 ## 1. Goal
 

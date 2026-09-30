@@ -134,7 +134,7 @@ Compute `yaw += rx × yaw_speed × dt` and `pitch += ry × pitch_speed × dt`, c
 
 ### 6.3 Library configuration
 
-The library has few settings, because tuning lives in Steam Input. The file is `~/.config/nwpad/config.toml`, and every key is optional.
+The library has few settings, because tuning lives in Steam Input. Since the settings work (docs/settings-plan.md) they live in a `[nwpad]` section of the game's `settings.tml`; `~/.config/nwpad/config.toml` is imported once and then only a fallback (README "Settings"). The original `config.toml` keys, every one optional:
 
 | Key | Default | Notes |
 |---|---|---|
@@ -368,3 +368,4 @@ The repo is public, under the MIT license.
 | 2026-09-29 | Stop test, walk case (Robert): measure the on-screen stop (450 ms) plus the server reaching the same spot within 1 s. At walking speed the server trails the client and catches up forward, with no surge and no slide-back. |
 | 2026-09-29 | Cursor hiding (Robert): the mouse cursor hides while the sticks are in use and returns on mouse motion, honoring the game's own show/hide requests (config `hide_cursor`, default on). |
 | 2026-09-29 | Robert's feel test: releasing a backpedal could turn the character around, because the stick springing back crosses angles outside the window. Leaving a strafe/backpedal window now has to last `strafe_exit_ms` (150 ms) before it becomes a drag. Right-edge turning made sticky while the mouse stays on the last reachable column (re-notes F27). |
+| 2026-09-29 | Native settings (docs/settings-plan.md), Robert at the S checkpoint: tier "lite first, then a panel spike": settings move into a `[nwpad]` section of `settings.tml` (the game preserves it, re-notes F29), then a timeboxed spike for Options-window entries. D1: the Camera group. D2: `config.toml` imported once, then fallback only. D3: `strafe_window` and `mouse_idle_ms` stay file-only. |

@@ -18,6 +18,7 @@
 #include "backend.h"
 #include "control.h"
 #include "sigs.h"
+#include "settings.h"
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -164,31 +165,6 @@ static struct {
     } virt;
 } g;
 
-static void load_config(void) {
-    nwpad_config_defaults(&g.cfg);
-    const char *home = getenv("HOME");
-    const char *xdg = getenv("XDG_CONFIG_HOME");
-    const char *explicit_path = getenv("NWPAD_CONFIG"); /* tests use their own file */
-    char path[512];
-    if (explicit_path && *explicit_path) snprintf(path, sizeof path, "%s", explicit_path);
-    else if (xdg && *xdg) snprintf(path, sizeof path, "%s/nwpad/config.toml", xdg);
-    else if (home) snprintf(path, sizeof path, "%s/.config/nwpad/config.toml", home);
-    else return;
-
-    FILE *f = fopen(path, "r");
-    if (!f) return;
-    char buf[4096];
-    size_t n = fread(buf, 1, sizeof buf - 1, f);
-    fclose(f);
-    buf[n] = '\0';
-    int applied = nwpad_config_parse(&g.cfg, buf);
-    if (applied < 0) {
-        nwpad_config_defaults(&g.cfg);
-        nwpad_log("config %s is malformed; using defaults", path);
-    } else {
-        nwpad_log("config %s: %d setting(s) applied", path, applied);
-    }
-}
 
 #ifdef NWPAD_DEBUG_SURFACES
 /* ---- Control socket commands (plan §8.3); main thread only ---- */
@@ -222,11 +198,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
         snprintf(out, cap,
                  "{\"ok\":true,\"version\":\"%s\",\"frame\":%llu,\"hooks\":true,"
                  "\"controller\":\"%s\",\"in_game\":%s,"
-                 "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":%s}",
+                 "\"features\":{\"camera\":%s,\"movement\":%s},\"signatures\":%s,"
+                 "\"config\":{\"enabled\":%s,\"turn_speed\":%.1f,\"tilt_speed\":%.1f,"
+                 "\"run_point\":%.4f,\"hide_cursor\":%s}}",
                  NWPAD_VERSION, (unsigned long long)g.frames, controller_state(),
                  nwpad_backend_in_game() ? "true" : "false",
                  bs.camera_available ? "true" : "false", bs.movement_available ? "true" : "false",
-                 sigs);
+                 sigs, g.cfg.enabled ? "true" : "false", g.cfg.camera_yaw_speed,
+                 g.cfg.camera_pitch_speed, g.cfg.run_threshold, g.cfg.hide_cursor ? "true" : "false");
     } else if (strcmp(cmd, "stick") == 0) {
         /* {"cmd":"stick","lx":..,"ly":..,"rx":..,"ry":..,"hold_ms":..}; +y is forward/up. */
         double v;
@@ -382,7 +361,7 @@ __attribute__((constructor)) static void nwpad_init(void) {
         return;
     }
     nwpad_sigs_resolve();
-    load_config();
+    nwpad_settings_load(&g.cfg);
     nwpad_send_policy_defaults(&g.send_policy);
     nwpad_arbiter_init(&g.arbiter);
     nwpad_backend_init();
@@ -452,6 +431,7 @@ static void nwpad_frame(void) {
     if (dt > 0.1f) dt = 0.1f; /* hitch guard: never jump more than 100 ms of motion */
     g.last_frame_ms = t;
 
+    if (!g.cfg.enabled) return; /* "Controller support" off: stay idle */
     if (g.virt.active && g.virt.until_ms && t >= g.virt.until_ms) g.virt.active = false;
     /* No input source (no pad, virtual stick ended) reads as centered sticks, so a
      * character that was moving still gets its stop. */

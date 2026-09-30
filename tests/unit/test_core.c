@@ -276,6 +276,35 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_settings_toml(void) {
+    nwpad_config c; nwpad_config_defaults(&c);
+    /* The game's own style: sorted tables, tab indents, long floats; other tables ignored. */
+    const char *toml =
+        "[camera]\n\tedge-turning = true\n\tturn-speed = 999\n"
+        "[nwpad]\n\tenabled = false\n\thide-cursor = false\n\tmouse-idle-ms = 5000\n"
+        "\t[nwpad.camera]\n\t\tturn-speed = 200.00000000000000\n\t\ttilt-speed = 10\n"
+        "\t[nwpad.movement]\n\t\trun-point = 0.8\n\t\tfuture-key = 3\n"
+        "[nwscript]\n\t[\"~~schema\".binds.\"nwpad.enabled\"]\n";
+    CHECK(nwpad_settings_parse(&c, toml) == 6);
+    CHECK(!c.enabled && !c.hide_cursor);
+    CHECK(c.mouse_idle_ms == 1000);            /* clamped */
+    NEAR(c.camera_yaw_speed, 200, 1e-3);       /* [camera] turn-speed ignored */
+    NEAR(c.camera_pitch_speed, 30, 1e-3);      /* clamped */
+    NEAR(c.run_threshold, 0.8f, 1e-6); NEAR(c.run_hysteresis, NWPAD_RUN_BAND, 1e-6);
+    nwpad_config d; nwpad_config_defaults(&d);
+    CHECK(nwpad_settings_parse(&d, "[camera]\n\tmode = 1\n") == -1); /* no [nwpad] table */
+    /* Round trip: format, then parse back to the same values. */
+    char buf[512];
+    nwpad_config e; nwpad_config_defaults(&e);
+    e.camera_yaw_speed = 240; e.enabled = false; e.run_threshold = 0.75f; e.strafe_window_deg = 12;
+    CHECK(nwpad_settings_format(&e, buf, sizeof buf) > 0);
+    nwpad_config f; nwpad_config_defaults(&f);
+    CHECK(nwpad_settings_parse(&f, buf) == 8);
+    NEAR(f.camera_yaw_speed, 240, 1e-3); CHECK(!f.enabled); NEAR(f.run_threshold, 0.75f, 1e-6);
+    NEAR(f.strafe_window_deg, 12, 1e-6); CHECK(f.strafe_exit_ms == e.strafe_exit_ms);
+    CHECK(nwpad_settings_format(&e, buf, 20) == -1); /* too small */
+}
+
 int main(void) {
     nwpad_config_defaults(&cfg);
     test_deadzone();
@@ -290,6 +319,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_settings_toml();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
