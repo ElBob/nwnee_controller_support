@@ -95,9 +95,9 @@ signatures:
   config_step_double: # BindConfig<double>::StepSize(cpptoml::option<double>)
     note: F30
     symbol: _ZN10CExoConfig10BindConfigIdE8StepSizeEN7cpptoml6optionIdEE
-  nui_windows:        # Nui::Window::s_by_identifier: unordered_map<std::string, weak_ptr<Window>>
+  window_on_opened:   # Nui::Window::OnOpened(): empty base virtual; found by value in the vtable below
     note: F30
-    symbol: _ZN3Nui6Window15s_by_identifierB5cxx11E
+    symbol: _ZN3Nui6Window8OnOpenedEv
   config_window_vtable:  # vtable for enable_make<Nui::ConfigWindow> (the Options window)
     note: F30
     symbol: _ZTV11enable_makeIN3Nui12ConfigWindowEE

@@ -15,10 +15,11 @@
 /* Fill cfg. Call from the library constructor, before the game starts. */
 void nwpad_settings_load(nwpad_config *cfg);
 
-/* Per frame, on the game's thread: register the native entries once, add them to
- * any newly opened Options window, and copy their current values into cfg.
- * Does nothing unless the settings came from settings.tml and every F30
- * signature resolved. */
+/* Per frame, on the game's thread; only the first call does anything: register the
+ * native entries, read their values into cfg once, and hook the Options window's
+ * OnOpened so each window gets our rows. After that, value changes arrive through
+ * the game's change callbacks. Does nothing unless the settings came from
+ * settings.tml and every F30 signature resolved. */
 void nwpad_settings_frame(nwpad_config *cfg);
 
 /* Whether the native entries are registered (for status). */

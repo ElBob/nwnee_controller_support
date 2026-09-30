@@ -6,6 +6,7 @@
 #include "sigs.h"
 
 #include <dlfcn.h>
+#include <sys/mman.h>
 #include <stdint.h>
 
 #include <stdarg.h>
@@ -191,15 +192,11 @@ static struct {
     void **exo_base;
     get_bool_fn get_bool;
     get_double_fn get_double;
-    void *windows;           /* unordered_map<std::string, weak_ptr<Nui::Window>> */
-    void *window_vptr;       /* vtable for enable_make<Nui::ConfigWindow>, + 0x10 */
+    void (*on_opened)(void *window); /* the Options window's original OnOpened slot */
     void *(*cxx_new)(size_t);
     void (*cxx_delete)(void *);
     cxx_string keys[E_COUNT];
     nwpad_config *cfg;       /* where change callbacks write */
-    size_t window_count;     /* s_by_identifier size when last scanned */
-    char *window_node;       /* the node the Options window was last found in */
-    char *patched_window, *patched_tabs; /* last window given our rows (and its tab buffer) */
 } nat;
 
 /* A std::string the game may later destroy: heap storage from its operator new. */
@@ -269,11 +266,41 @@ static void on_change_bool(const void *functor, bool *value) {
     else nat.cfg->hide_cursor = *value;
 }
 
+static void native_patch_window(char *window);
+
+/* The Options window opening: add our rows before it's first drawn. */
+static void native_on_opened(void *window) {
+    NWPAD_WHERE("settings: Options window opened");
+    native_patch_window((char *)window);
+    nat.on_opened(window);
+}
+
+/* Point the Options window's OnOpened (an empty Nui::Window virtual it doesn't
+ * override) at native_on_opened: one slot in the vtable for
+ * enable_make<Nui::ConfigWindow>, found by value, so only that window class sees
+ * it. Like the SDL jump-table slots, nothing in the game's code changes. */
+static bool native_hook_on_opened(void) {
+    void **vtable = (void **)((char *)nwpad_sig(NWPAD_SIG_CONFIG_WINDOW_VTABLE) + 0x10);
+    void *base = nwpad_sig(NWPAD_SIG_WINDOW_ON_OPENED);
+    for (int i = 0; i < 16; i++) { /* the class has 15 virtuals (F30) */
+        if (vtable[i] != base) continue;
+        long page = sysconf(_SC_PAGESIZE);
+        void *start = (void *)((uintptr_t)&vtable[i] & ~(uintptr_t)(page - 1));
+        if (mprotect(start, (size_t)page, PROT_READ | PROT_WRITE) != 0) return false; /* RELRO */
+        nat.on_opened = (void (*)(void *))vtable[i];
+        vtable[i] = (void *)native_on_opened;
+        mprotect(start, (size_t)page, PROT_READ);
+        return true;
+    }
+    say("native settings: OnOpened not found in the Options window's vtable");
+    return false;
+}
+
 static bool native_register(void) {
     static const int ids[] = {NWPAD_SIG_EXO_BASE, NWPAD_SIG_CONFIG_BIND_BOOL, NWPAD_SIG_CONFIG_BIND_DOUBLE,
                               NWPAD_SIG_CONFIG_GET_BOOL, NWPAD_SIG_CONFIG_GET_DOUBLE,
                               NWPAD_SIG_CONFIG_CONSTRAIN_DOUBLE, NWPAD_SIG_CONFIG_STEP_DOUBLE,
-                              NWPAD_SIG_NUI_WINDOWS, NWPAD_SIG_CONFIG_WINDOW_VTABLE};
+                              NWPAD_SIG_WINDOW_ON_OPENED, NWPAD_SIG_CONFIG_WINDOW_VTABLE};
     if (!nwpad_sigs_all(ids, sizeof ids / sizeof ids[0])) return false;
     nat.cxx_new = (void *(*)(size_t))dlsym(RTLD_DEFAULT, "_Znwm");
     nat.cxx_delete = (void (*)(void *))dlsym(RTLD_DEFAULT, "_ZdlPv");
@@ -282,8 +309,6 @@ static bool native_register(void) {
     if (!nat.cxx_new || !nat.cxx_delete || !config) return false;
     nat.get_bool = (get_bool_fn)nwpad_sig(NWPAD_SIG_CONFIG_GET_BOOL);
     nat.get_double = (get_double_fn)nwpad_sig(NWPAD_SIG_CONFIG_GET_DOUBLE);
-    nat.windows = nwpad_sig(NWPAD_SIG_NUI_WINDOWS);
-    nat.window_vptr = (char *)nwpad_sig(NWPAD_SIG_CONFIG_WINDOW_VTABLE) + 0x10;
     bind_bool_fn bind_bool = (bind_bool_fn)nwpad_sig(NWPAD_SIG_CONFIG_BIND_BOOL);
     bind_double_fn bind_double = (bind_double_fn)nwpad_sig(NWPAD_SIG_CONFIG_BIND_DOUBLE);
     constrain_double_fn constrain = (constrain_double_fn)nwpad_sig(NWPAD_SIG_CONFIG_CONSTRAIN_DOUBLE);
@@ -311,10 +336,10 @@ static bool native_register(void) {
             step(b, (toml_option_d){false, entries[i].step});
         }
     }
-    return true;
+    return native_hook_on_opened();
 }
 
-/* Add our rows to an Options window's Camera group, once per window. */
+/* Add our rows to an Options window's Camera group (once: a no-op if they're there). */
 static void native_patch_window(char *window) {
     cxx_vector *tabs = (cxx_vector *)(window + WINDOW_TABS);
     for (char *tab = tabs->begin; tab && tab < tabs->end; tab += TAB_SIZE) {
@@ -350,33 +375,6 @@ static void native_patch_window(char *window) {
     }
 }
 
-/* The live Options window in a Nui::Window::s_by_identifier node
- * { next, std::string key, weak_ptr<Window> { ptr, control block }, hash }, or NULL. */
-static char *node_options_window(char *node) {
-    char *window = *(char **)(node + 0x28);
-    char *control = *(char **)(node + 0x30);
-    if (!window || !control || *(int32_t *)(control + 8) <= 0) return NULL; /* closed */
-    return *(void **)window == nat.window_vptr ? window : NULL;
-}
-
-/* The open Options window, if any. The map is only walked when its size changes;
- * otherwise the node the window was found in last time is checked (reopening it
- * reuses the node). */
-static char *native_find_window(void) {
-    size_t count = *(size_t *)((char *)nat.windows + 0x18); /* _M_element_count */
-    if (count == nat.window_count) return nat.window_node ? node_options_window(nat.window_node) : NULL;
-    nat.window_count = count;
-    nat.window_node = NULL;
-    for (char **node = *(char ***)((char *)nat.windows + 0x10); node; node = *(char ***)node) {
-        char *window = node_options_window((char *)node);
-        if (window) {
-            nat.window_node = (char *)node;
-            return window;
-        }
-    }
-    return NULL;
-}
-
 void nwpad_settings_frame(nwpad_config *cfg) {
     if (nat.state == 0) {
         if (!from_settings_tml) {
@@ -396,16 +394,6 @@ void nwpad_settings_frame(nwpad_config *cfg) {
                 nwpad_settings_set_number(cfg, entries[i].key, nat.get_double(config, &nat.keys[i], false));
         }
     }
-    if (nat.state < 0) return;
-    NWPAD_WHERE("settings: window");
-    char *window = native_find_window();
-    if (!window) return;
-    char *tabs = *(char **)(window + WINDOW_TABS);
-    if (window == nat.patched_window && tabs == nat.patched_tabs) return; /* rows already added */
-    NWPAD_WHERE("settings: patch window");
-    native_patch_window(window);
-    nat.patched_window = window;
-    nat.patched_tabs = tabs;
 }
 
 bool nwpad_settings_native(void) { return nat.state > 0; }
