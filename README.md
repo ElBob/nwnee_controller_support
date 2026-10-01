@@ -37,7 +37,9 @@ and a ring of the visible quickbar bank appears in the middle of the screen, wit
 game's own icons. Point with the right stick (or a trackpad set to act as the right
 stick) to highlight a button; its name shows in the centre. Let go of the key to use
 it, exactly as clicking it would; let go without pointing to cancel. The camera stays
-put while the picker is open.
+put while the picker is open. The other two quickbar banks show as smaller wheels on
+either side; while the picker is open, the bank keys (default `[` and `]`) make the
+previous or next one the active wheel. At other times those keys are the game's.
 
 ## Settings
 
@@ -54,7 +56,7 @@ you change them. Save keeps them, Cancel undoes them.
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. The last five keys
+runs with nwpad; the game keeps it when it saves its own settings. The last seven keys
 below are only in the file; edit it while the game is closed.
 
 ```toml
@@ -64,6 +66,8 @@ below are only in the file; edit it while the game is closed.
 	hide-cursor = true
 	mouse-idle-ms = 300
 	picker-key = "ScrollLock"
+	picker-next-key = "]"
+	picker-prev-key = "["
 	[nwpad.camera]
 		tilt-speed = 90.0
 		turn-speed = 180.0
@@ -78,6 +82,7 @@ below are only in the file; edit it while the game is closed.
 | `enabled` | true | | Controller support on/off. Off, the library stays loaded but idle: no stick input, no cursor hiding |
 | `hide-cursor` | true | | Hide the cursor while the sticks are in use |
 | `picker-key` | "ScrollLock" | | Key held to open the quickbar picker (an SDL key name, e.g. "F13", "Insert"; "" turns it off). nwpad takes the key; the game never sees it |
+| `picker-prev-key` / `picker-next-key` | "[" / "]" | | While the picker is open: make the previous / next quickbar bank the active wheel |
 | `cursor-rehide-ms` | 2000 | 0–10000 | Moving the mouse shows the cursor; it hides again once the mouse is still and a stick has been held this long without a break (0: at once) |
 | `mouse-idle-ms` | 300 | 100–1000 | How long the mouse must be still before the stick gets the camera back |
 | `camera.turn-speed` | 180 | 60–360 | Camera turn speed at full deflection, °/s |

@@ -206,3 +206,7 @@ signatures:
   shared_release:          # std::_Sp_counted_base<_S_atomic>::_M_release() (to drop Get's shared_ptr)
     note: F35
     symbol: _ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv
+  quickbar_activate_set:   # CPanelQuickBar::ActivateButtonSet(unsigned char bank): which 12 the panel shows
+    note: F31
+    symbol: _ZN14CPanelQuickBar17ActivateButtonSetEh
+    debug: true

@@ -24,6 +24,8 @@ typedef struct {
     uint32_t strafe_exit_ms;  /* how long outside a strafe window before it becomes a drag */
     bool enabled;             /* "Controller support": off leaves the library idle */
     char picker_key[32];      /* SDL key name held to open the quickbar picker ("" off) */
+    char picker_prev_key[32]; /* while the picker is open: previous / next quickbar bank */
+    char picker_next_key[32];
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);

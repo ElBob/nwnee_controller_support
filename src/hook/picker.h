@@ -15,7 +15,13 @@
  * picker's, not the camera's. */
 bool nwpad_picker_frame(bool held, nwpad_vec2 right, bool in_game);
 
-/* For status: the open picker's highlighted ring slot (-1 none), and whether open. */
+/* While open: show the previous (-1) or next (+1) quickbar bank as the active wheel.
+ * False if the picker isn't open (the key is then the game's). */
+bool nwpad_picker_shift(int direction);
+
+/* For status: the open picker's active bank (-1 closed) and highlighted ring slot
+ * (-1 none), and whether open. */
+int nwpad_picker_bank(void);
 int nwpad_picker_selected(void);
 bool nwpad_picker_open(void);
 /* The quickbar slot (0-35) the picker last used, -1 none (debug status). */

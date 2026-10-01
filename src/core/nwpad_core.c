@@ -24,6 +24,9 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     cfg->enabled = true;
     /* Scroll Lock: unused by NWN; Steam Input maps a grip or button to it. */
     snprintf(cfg->picker_key, sizeof cfg->picker_key, "%s", "ScrollLock"); /* SDL_GetKeyName spelling */
+    /* Only taken while the picker is open; otherwise the game gets them. */
+    snprintf(cfg->picker_prev_key, sizeof cfg->picker_prev_key, "%s", "[");
+    snprintf(cfg->picker_next_key, sizeof cfg->picker_next_key, "%s", "]");
 }
 
 static const char *skip_ws(const char *s) {
@@ -353,11 +356,15 @@ static float clampf(double v, float lo, float hi) { return v < lo ? lo : v > hi 
 
 /* Apply one full key path (e.g. "nwpad.camera.turn-speed"). Returns 1 if known. */
 static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
-    if (!strcmp(key, "nwpad.picker-key")) { /* a quoted string */
+    char *text = !strcmp(key, "nwpad.picker-key")        ? cfg->picker_key
+                 : !strcmp(key, "nwpad.picker-prev-key") ? cfg->picker_prev_key
+                 : !strcmp(key, "nwpad.picker-next-key") ? cfg->picker_next_key
+                                                         : NULL;
+    if (text) { /* a quoted string (key names fit the 32-byte fields) */
         const char *q = val[0] == '"' ? strchr(val + 1, '"') : NULL;
         if (!q || (size_t)(q - val - 1) >= sizeof cfg->picker_key) return 0;
-        memcpy(cfg->picker_key, val + 1, (size_t)(q - val - 1));
-        cfg->picker_key[q - val - 1] = '\0';
+        memcpy(text, val + 1, (size_t)(q - val - 1));
+        text[q - val - 1] = '\0';
         return 1;
     }
     bool is_bool = !strncmp(val, "true", 4) || !strncmp(val, "false", 5);
@@ -433,6 +440,8 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\tcursor-rehide-ms = %u\n"
                      "\thide-cursor = %s\n"
                      "\tpicker-key = \"%s\"\n"
+                     "\tpicker-next-key = \"%s\"\n"
+                     "\tpicker-prev-key = \"%s\"\n"
                      "\tmouse-idle-ms = %u\n"
                      "\t[nwpad.camera]\n"
                      "\t\ttilt-speed = %.1f\n"
@@ -443,6 +452,7 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\t\tstrafe-window = %.1f\n",
                      cfg->enabled ? "true" : "false", (unsigned)cfg->cursor_rehide_ms,
                      cfg->hide_cursor ? "true" : "false", cfg->picker_key,
+                     cfg->picker_next_key, cfg->picker_prev_key,
                      (unsigned)cfg->mouse_idle_ms, cfg->camera_pitch_speed, cfg->camera_yaw_speed,
                      cfg->run_threshold, (unsigned)cfg->strafe_exit_ms, cfg->strafe_window_deg);
     return n > 0 && (size_t)n < cap ? n : -1;

@@ -158,8 +158,10 @@ static struct {
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
     struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
-        int32_t sym; /* SDL_Keycode; 0 none or not resolved */
+        int32_t sym, prev_sym, next_sym; /* SDL_Keycodes; 0 none or not resolved */
         bool resolved, held;
+        bool prev_down, next_down;       /* swallowed key-downs whose key-ups are ours too */
+        int shift;                       /* bank change to apply on the next frame */
     } picker;
     int last_motion_x, last_motion_xrel; /* as SDL reported them (state shows them) */
     bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27;
@@ -345,6 +347,15 @@ static void control_handler(const char *request, char *out, size_t cap) {
         }
         snprintf(out, cap, "{\"ok\":true,\"binds_ok\":%d,\"avg_us\":%.1f,\"worst_us\":%.1f}", ok,
                  (double)(now_ns() - t0) / 1000.0 / (count > 0 ? count : 1), (double)worst / 1000.0);
+    } else if (strcmp(cmd, "quickbar_bank") == 0) {
+        double v;
+        bool ok = nwpad_json_get_number(request, "bank", &v) && nwpad_quickbar_debug_show_bank((int)v);
+        snprintf(out, cap, "{\"ok\":%s,\"bank\":%d}", ok ? "true" : "false", nwpad_quickbar_bank());
+    } else if (strcmp(cmd, "picker_shift") == 0) {
+        /* {"cmd":"picker_shift","dir":-1|1}: as the bank keys do */
+        double v;
+        g.picker.shift += nwpad_json_get_number(request, "dir", &v) && v < 0 ? -1 : 1;
+        snprintf(out, cap, "{\"ok\":%s}", nwpad_picker_open() ? "true" : "false");
     } else if (strcmp(cmd, "quickbar_use") == 0) {
         /* {"cmd":"quickbar_use","slot":0-35} */
         double v;
@@ -401,7 +412,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
                           "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
                           "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld},"
-                          "\"picker\":{\"open\":%s,\"selected\":%d,\"last_used\":%d,\"key_held\":%s}",
+                          "\"picker\":{\"open\":%s,\"bank\":%d,\"selected\":%d,\"last_used\":%d,\"key_held\":%s}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
@@ -409,7 +420,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           (unsigned long long)g.cursor.nudges,
                           g.cursor.sticks_since_ms ? (long long)(now_ms() - g.cursor.sticks_since_ms) : -1LL,
                           g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL,
-                          nwpad_picker_open() ? "true" : "false", nwpad_picker_selected(),
+                          nwpad_picker_open() ? "true" : "false", nwpad_picker_bank(), nwpad_picker_selected(),
                           nwpad_picker_last_used(), g.picker.held ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
@@ -551,6 +562,8 @@ static void nwpad_frame(void) {
     }
     if (g.cfg.enabled) picker_held = picker_held || g.picker.held;
     NWPAD_WHERE("picker");
+    for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
+    for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
     if (nwpad_picker_frame(picker_held, right, nwpad_backend_in_game())) right = (nwpad_vec2){0, 0};
 
     g.last_left = left;
@@ -709,17 +722,38 @@ static int nwpad_PollEvent(SDL_Event *event) {
             }
         } else if (type == SDL_KEYDOWN || type == SDL_KEYUP) {
             g.events.keys++;
-            if (!g.picker.resolved) { /* the key name, through the game's own SDL */
+            if (!g.picker.resolved) { /* the key names, through the game's own SDL */
                 g.picker.resolved = true;
                 RESOLVE_ANY(GetKeyFromName, "SDL_GetKeyFromName");
-                g.picker.sym = g.cfg.picker_key[0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(g.cfg.picker_key) : 0;
-                nwpad_log("picker key: %s (%s)", g.cfg.picker_key[0] ? g.cfg.picker_key : "none",
-                          g.picker.sym ? "ok" : "not a key name; picker off");
+                const char *names[3] = {g.cfg.picker_key, g.cfg.picker_prev_key, g.cfg.picker_next_key};
+                int32_t *syms[3] = {&g.picker.sym, &g.picker.prev_sym, &g.picker.next_sym};
+                for (int k = 0; k < 3; k++) {
+                    *syms[k] = names[k][0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(names[k]) : 0;
+                    if (names[k][0] && !*syms[k]) nwpad_log("picker key \"%s\" is not a key name; ignored", names[k]);
+                }
+                nwpad_log("picker keys: hold %s, banks %s / %s", g.cfg.picker_key, g.cfg.picker_prev_key,
+                          g.cfg.picker_next_key);
             }
-            if (g.picker.sym && event->key.sym == g.picker.sym) {
+            int32_t sym = event->key.sym;
+            if (g.picker.sym && sym == g.picker.sym) {
                 if (!event->key.repeat) g.picker.held = type == SDL_KEYDOWN;
                 g.events.filtered++;
                 continue; /* nwpad's key: the game never sees it */
+            }
+            /* Bank keys are nwpad's only while the picker is open (their key-ups follow). */
+            bool *down = sym && sym == g.picker.prev_sym ? &g.picker.prev_down
+                         : sym && sym == g.picker.next_sym ? &g.picker.next_down
+                                                           : NULL;
+            if (down && type == SDL_KEYDOWN && nwpad_picker_open()) {
+                if (!event->key.repeat) g.picker.shift += down == &g.picker.prev_down ? -1 : 1;
+                *down = true;
+                g.events.filtered++;
+                continue;
+            }
+            if (down && type == SDL_KEYUP && *down) {
+                *down = false;
+                g.events.filtered++;
+                continue;
             }
         } else if (type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
             g.picker.held = false; /* the key-up may never come */

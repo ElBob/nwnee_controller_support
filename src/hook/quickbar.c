@@ -174,6 +174,14 @@ bool nwpad_quickbar_use(int slot) {
 
 
 #ifdef NWPAD_DEBUG_SURFACES
+bool nwpad_quickbar_debug_show_bank(int bank) {
+    void *p = panel();
+    void (*activate)(void *, unsigned char) = (void (*)(void *, unsigned char))nwpad_sig(NWPAD_SIG_QUICKBAR_ACTIVATE_SET);
+    if (!p || !activate || bank < 0 || bank > 2) return false;
+    activate(p, (unsigned char)bank);
+    return true;
+}
+
 typedef void *(*player_fn)(void *app);
 typedef uint32_t (*equipped_fn)(void *creature, unsigned slot_bit);
 
