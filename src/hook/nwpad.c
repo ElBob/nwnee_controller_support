@@ -69,6 +69,8 @@ static struct {
     int32_t (*GetKeyFromName)(const char *);
 } sdl;
 
+#define PICKER_KEYUP_MS 80 /* a picker key-up counts once no key-down follows this soon */
+
 #define RESOLVE_ANY(field, name) \
     (sdl.field = (__typeof__(sdl.field))dlsym(RTLD_DEFAULT, name))
 
@@ -160,6 +162,7 @@ static struct {
     struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
         int32_t sym, prev_sym, next_sym; /* SDL_Keycodes; 0 none or not resolved */
         bool resolved, held;
+        uint64_t up_ms;                  /* a key-up waiting out PICKER_KEYUP_MS (0 none) */
         bool prev_down, next_down;       /* swallowed key-downs whose key-ups are ours too */
         int shift;                       /* bank change to apply on the next frame */
     } picker;
@@ -560,6 +563,10 @@ static void nwpad_frame(void) {
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
         }
     }
+    if (g.picker.up_ms && t - g.picker.up_ms >= PICKER_KEYUP_MS) {
+        g.picker.held = false;
+        g.picker.up_ms = 0;
+    }
     if (g.cfg.enabled) picker_held = picker_held || g.picker.held;
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
@@ -736,7 +743,15 @@ static int nwpad_PollEvent(SDL_Event *event) {
             }
             int32_t sym = event->key.sym;
             if (g.picker.sym && sym == g.picker.sym) {
-                if (!event->key.repeat) g.picker.held = type == SDL_KEYDOWN;
+                /* Held keys autorepeat, which can come as key-up + repeat key-down pairs:
+                 * any key-down holds, and a key-up only counts if no key-down follows
+                 * within PICKER_KEYUP_MS (checked per frame). */
+                if (type == SDL_KEYDOWN) {
+                    g.picker.held = true;
+                    g.picker.up_ms = 0;
+                } else {
+                    g.picker.up_ms = now_ms();
+                }
                 g.events.filtered++;
                 continue; /* nwpad's key: the game never sees it */
             }
@@ -757,6 +772,7 @@ static int nwpad_PollEvent(SDL_Event *event) {
             }
         } else if (type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
             g.picker.held = false; /* the key-up may never come */
+            g.picker.up_ms = 0;
         }
         return r;
     }

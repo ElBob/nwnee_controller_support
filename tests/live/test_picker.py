@@ -13,6 +13,14 @@ def _server_heard_nwpad(game):
     return "window does not exist: 18532" in log  # nwpad tokens 0x6e77xxxx
 
 
+def _stealth_off(ctl):
+    """Leave the test character out of stealth (its slot then reads "Cancel ...")."""
+    slot = ctl("quickbar")["slots"][STEALTH]
+    if slot["name"].startswith("Cancel"):
+        ctl("quickbar_use", slot=STEALTH)
+        time.sleep(0.5)
+
+
 def _pick(ctl, rx, ry):
     ctl("stick", picker=1)
     time.sleep(0.4)
@@ -29,10 +37,11 @@ def _pick(ctl, rx, ry):
 
 
 def test_pick_and_use(game, ctl):
+    _stealth_off(ctl)
     during, after = _pick(ctl, 1.0, 0.0)
     assert during["selected"] == STEALTH, during
     assert not after["open"] and after["last_used"] == STEALTH, after
-    _pick(ctl, 1.0, 0.0)  # stealth back off
+    _stealth_off(ctl)
     assert not _server_heard_nwpad(game)
 
 
@@ -59,6 +68,7 @@ def _key(action, key="Scroll_Lock"):
 def test_picker_key(game, ctl):
     """The picker key (picker-key, default Scroll Lock) holds the picker, as Steam
     Input would send it; the game doesn't see the key."""
+    _stealth_off(ctl)
     filtered0 = ctl("state")["events"]["filtered"]
     _key("keydown")
     try:
@@ -67,7 +77,8 @@ def test_picker_key(game, ctl):
         assert p["key_held"] and p["open"], p
         ctl("stick", rx=1.0)  # pointing, as the trackpad would
         time.sleep(0.5)
-        assert ctl("state")["picker"]["selected"] == STEALTH
+        p = ctl("state")["picker"]
+        assert p["selected"] == STEALTH, p
         ctl("release")
     finally:
         _key("keyup")
@@ -75,13 +86,14 @@ def test_picker_key(game, ctl):
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == STEALTH, p
     assert ctl("state")["events"]["filtered"] >= filtered0 + 2  # down and up swallowed
-    _pick(ctl, 1.0, 0.0)  # stealth back off
+    _stealth_off(ctl)
 
 
 def test_bank_wheels(game, ctl):
     """Three wheels: the bank keys (default "[" / "]") change the active one while the
     picker is open, and pass through to the game otherwise; a button can be used
     from a bank the quickbar isn't showing."""
+    _stealth_off(ctl)
     filtered0 = ctl("state")["events"]["filtered"]
     _key("key", "bracketright")  # picker closed: the game's key
     time.sleep(0.3)
@@ -104,9 +116,8 @@ def test_bank_wheels(game, ctl):
         ctl("release")
         time.sleep(0.6)
         assert ctl("state")["picker"]["last_used"] == STEALTH  # bank 0 * 12 + 3
-        _pick(ctl, 1.0, 0.0)  # (bank 1 slot 3 is empty: picking it uses nothing)
     finally:
         ctl("release")
         ctl("quickbar_bank", bank=0)
-    _pick(ctl, 1.0, 0.0)  # stealth back off from bank 0
+        _stealth_off(ctl)
     assert not _server_heard_nwpad(game)
