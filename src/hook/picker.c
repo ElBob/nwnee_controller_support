@@ -15,7 +15,6 @@
 #define ICON 48.0f
 #define ICON_PICKED 68.0f
 #define NAME_H 36.0f
-#define PLATE_W 200.0f /* the dark plate behind the name */
 #define PAD 28.0f       /* room for NUI's own padding (else it adds scrollbars) */
 
 static struct {
@@ -70,14 +69,10 @@ static bool build(void) {
         "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f}],"
         "\"draw_list\":["
         "{\"type\":2,\"enabled\":true,\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":150},\"fill\":true,\"line_thickness\":1.0,"
-        "\"order\":-1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}},"
-        /* a darker plate behind the name: the character stands at the screen centre */
-        "{\"type\":7,\"enabled\":{\"bind\":\"hl_on\"},\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":200},\"fill\":true,"
-        "\"line_thickness\":1.0,\"order\":-1,\"render\":0,\"arrayBinds\":false,"
-        "\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}}",
+        "\"order\":-1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}}",
+
         cx - (SIZE + PAD) / 2, cy - (SIZE + PAD) / 2, SIZE + PAD, SIZE + PAD, (SIZE - NAME_H) / 2, NAME_H,
-        (SIZE - NAME_H) / 2, SIZE / 2 - RING - 50, SIZE / 2 - RING - 50, 2 * RING + 100, 2 * RING + 100,
-        SIZE / 2 - PLATE_W / 2, SIZE / 2 - NAME_H / 2 - 2, PLATE_W, NAME_H);
+        (SIZE - NAME_H) / 2, SIZE / 2 - RING - 50, SIZE / 2 - RING - 50, 2 * RING + 100, 2 * RING + 100);
     for (int i = 0; i < NWPAD_PICKER_SLOTS && n < sizeof json; i++) {
         const nwpad_qb_slot *s = ring_slot(i);
         float x, y;
