@@ -23,6 +23,7 @@ typedef struct {
     uint32_t cursor_rehide_ms; /* after mouse motion: still mouse + held stick this long re-hides */
     uint32_t strafe_exit_ms;  /* how long outside a strafe window before it becomes a drag */
     bool enabled;             /* "Controller support": off leaves the library idle */
+    char picker_key[32];      /* SDL key name held to open the quickbar picker ("" off) */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);

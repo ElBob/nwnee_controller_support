@@ -24,10 +24,15 @@ typedef union SDL_Event {
         uint32_t type, timestamp, windowID, which, state;
         int32_t x, y, xrel, yrel;
     } motion;
+    struct { /* SDL_WindowEvent */
+        uint32_t type, timestamp, windowID;
+        uint8_t event;
+    } window;
     uint8_t padding[56];
 } SDL_Event;
 
 enum {
+    SDL_WINDOWEVENT = 0x200,
     SDL_KEYDOWN = 0x300,
     SDL_KEYUP = 0x301,
     SDL_MOUSEMOTION = 0x400,
@@ -45,7 +50,7 @@ enum {
     SDL_CONTROLLER_AXIS_RIGHTY = 3,
 };
 
-enum { SDL_CONTROLLER_BUTTON_BACK = 4 };
+enum { SDL_WINDOWEVENT_FOCUS_LOST = 13 };
 
 
 #endif

@@ -2,6 +2,7 @@
 bank as a ring, the right stick highlights a button, releasing uses it; the right
 stick doesn't move the camera meanwhile, and nothing reaches the server."""
 import os
+import subprocess
 import time
 
 STEALTH = 3  # the test character's slot 3 (test_quickbar.py); ring slot 3 is due right
@@ -43,3 +44,35 @@ def test_untouched_cancels(game, ctl):
     time.sleep(0.4)
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == before, p
+
+
+def _key(action, key="Scroll_Lock"):
+    """Press/release a key through X (XTEST keyboard events reach the game)."""
+    env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
+    win = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=env,
+                         capture_output=True, text=True).stdout.split()
+    if win:
+        subprocess.run(["xdotool", "windowactivate", "--sync", win[0]], env=env, capture_output=True)
+    subprocess.run(["xdotool", action, key], env=env, check=True)
+
+
+def test_picker_key(game, ctl):
+    """The picker key (picker-key, default Scroll Lock) holds the picker, as Steam
+    Input would send it; the game doesn't see the key."""
+    filtered0 = ctl("state")["events"]["filtered"]
+    _key("keydown")
+    try:
+        time.sleep(0.5)
+        p = ctl("state")["picker"]
+        assert p["key_held"] and p["open"], p
+        ctl("stick", rx=1.0)  # pointing, as the trackpad would
+        time.sleep(0.5)
+        assert ctl("state")["picker"]["selected"] == STEALTH
+        ctl("release")
+    finally:
+        _key("keyup")
+    time.sleep(0.6)
+    p = ctl("state")["picker"]
+    assert not p["open"] and p["last_used"] == STEALTH, p
+    assert ctl("state")["events"]["filtered"] >= filtered0 + 2  # down and up swallowed
+    _pick(ctl, 1.0, 0.0)  # stealth back off

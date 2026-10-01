@@ -66,7 +66,7 @@ static struct {
     SDL_GameController *(*GameControllerOpen)(int);
     int (*GameControllerGetAttached)(SDL_GameController *);
     int16_t (*GameControllerGetAxis)(SDL_GameController *, int);
-    uint8_t (*GameControllerGetButton)(SDL_GameController *, int);
+    int32_t (*GetKeyFromName)(const char *);
 } sdl;
 
 #define RESOLVE_ANY(field, name) \
@@ -157,6 +157,10 @@ static struct {
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
+    struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
+        int32_t sym; /* SDL_Keycode; 0 none or not resolved */
+        bool resolved, held;
+    } picker;
     int last_motion_x, last_motion_xrel; /* as SDL reported them (state shows them) */
     bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27;
                              * only with NWPAD_XWAYLAND_EDGE_FIX) */
@@ -374,7 +378,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
                           "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
                           "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld},"
-                          "\"picker\":{\"open\":%s,\"selected\":%d,\"last_used\":%d}",
+                          "\"picker\":{\"open\":%s,\"selected\":%d,\"last_used\":%d,\"key_held\":%s}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
@@ -383,7 +387,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           g.cursor.sticks_since_ms ? (long long)(now_ms() - g.cursor.sticks_since_ms) : -1LL,
                           g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL,
                           nwpad_picker_open() ? "true" : "false", nwpad_picker_selected(),
-                          nwpad_picker_last_used());
+                          nwpad_picker_last_used(), g.picker.held ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],
@@ -449,7 +453,6 @@ static bool controller_init(void) {
     RESOLVE_ANY(GameControllerOpen, "SDL_GameControllerOpen");
     RESOLVE_ANY(GameControllerGetAttached, "SDL_GameControllerGetAttached");
     RESOLVE_ANY(GameControllerGetAxis, "SDL_GameControllerGetAxis");
-    RESOLVE_ANY(GameControllerGetButton, "SDL_GameControllerGetButton"); /* optional: the picker */
     if (!sdl.InitSubSystem || !sdl.NumJoysticks || !sdl.IsGameController ||
         !sdl.GameControllerOpen || !sdl.GameControllerGetAttached || !sdl.GameControllerGetAxis) {
         nwpad_log("game SDL2 lacks GameController API; controller support disabled");
@@ -521,10 +524,9 @@ static void nwpad_frame(void) {
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
             right = nwpad_apply_deadzone(
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
-            /* Back: the Steam Input layout sends it while the picker grip is held. */
-            picker_held = sdl.GameControllerGetButton && sdl.GameControllerGetButton(g.pad, SDL_CONTROLLER_BUTTON_BACK);
         }
     }
+    if (g.cfg.enabled) picker_held = picker_held || g.picker.held;
     NWPAD_WHERE("picker");
     if (nwpad_picker_frame(picker_held, right, nwpad_backend_in_game())) right = (nwpad_vec2){0, 0};
 
@@ -684,6 +686,20 @@ static int nwpad_PollEvent(SDL_Event *event) {
             }
         } else if (type == SDL_KEYDOWN || type == SDL_KEYUP) {
             g.events.keys++;
+            if (!g.picker.resolved) { /* the key name, through the game's own SDL */
+                g.picker.resolved = true;
+                RESOLVE_ANY(GetKeyFromName, "SDL_GetKeyFromName");
+                g.picker.sym = g.cfg.picker_key[0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(g.cfg.picker_key) : 0;
+                nwpad_log("picker key: %s (%s)", g.cfg.picker_key[0] ? g.cfg.picker_key : "none",
+                          g.picker.sym ? "ok" : "not a key name; picker off");
+            }
+            if (g.picker.sym && event->key.sym == g.picker.sym) {
+                if (!event->key.repeat) g.picker.held = type == SDL_KEYDOWN;
+                g.events.filtered++;
+                continue; /* nwpad's key: the game never sees it */
+            }
+        } else if (type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+            g.picker.held = false; /* the key-up may never come */
         }
         return r;
     }

@@ -1,7 +1,9 @@
 /* The quickbar picker (quickbar plan Q2): while the picker input is held, a ring of
  * the visible quickbar bank's 12 buttons is shown in a client-side NUI window; the
  * right stick (the Deck's right trackpad, through Steam Input) highlights one, and
- * releasing the input uses it. Game thread only. */
+ * releasing the input uses it. The input is a keyboard key (`picker-key`, default
+ * Scroll Lock) that Steam Input sends from whatever button or grip the layout
+ * chooses. Game thread only. */
 #ifndef NWPAD_PICKER_H
 #define NWPAD_PICKER_H
 

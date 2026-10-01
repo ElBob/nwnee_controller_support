@@ -276,6 +276,18 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_picker_key(void) {
+    nwpad_config c;
+    nwpad_config_defaults(&c);
+    CHECK(!strcmp(c.picker_key, "ScrollLock"));
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\n\tpicker-key = \"F13\"\n") == 1 && !strcmp(c.picker_key, "F13"));
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\npicker-key = \"\"\n") == 1 && c.picker_key[0] == '\0'); /* off */
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\npicker-key = F13\n") == 0);                              /* unquoted */
+    char buf[1024];
+    nwpad_config_defaults(&c);
+    CHECK(nwpad_settings_format(&c, buf, sizeof buf) > 0 && strstr(buf, "picker-key = \"ScrollLock\""));
+}
+
 static void test_picker_select(void) {
     CHECK(nwpad_picker_select((nwpad_vec2){0, 0}, -1) == -1);       /* untouched */
     CHECK(nwpad_picker_select((nwpad_vec2){0, 1}, -1) == 0);        /* up: slot 0 */
@@ -357,7 +369,7 @@ static void test_settings_toml(void) {
     e.camera_yaw_speed = 240; e.enabled = false; e.run_threshold = 0.75f; e.strafe_window_deg = 12;
     CHECK(nwpad_settings_format(&e, buf, sizeof buf) > 0);
     nwpad_config f; nwpad_config_defaults(&f);
-    CHECK(nwpad_settings_parse(&f, buf) == 9);
+    CHECK(nwpad_settings_parse(&f, buf) == 10);
     NEAR(f.camera_yaw_speed, 240, 1e-3); CHECK(!f.enabled); NEAR(f.run_threshold, 0.75f, 1e-6);
     NEAR(f.strafe_window_deg, 12, 1e-6); CHECK(f.strafe_exit_ms == e.strafe_exit_ms);
     CHECK(nwpad_settings_format(&e, buf, 20) == -1); /* too small */
@@ -386,6 +398,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_picker_key();
     test_picker_select();
     test_ubjson();
     test_json_escape();

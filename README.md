@@ -30,6 +30,15 @@ The game log shows `[nwpad] version ... loaded` when the library is active. Set 
 - **Right stick:** turn and tilt the camera. Moving the mouse takes over the camera until it has been still for 300 ms.
 - The mouse cursor hides while the sticks are in use and comes back on the next mouse movement.
 
+## Quickbar picker
+
+Hold the picker key (default Scroll Lock; map a Steam Input button or back grip to it)
+and a ring of the visible quickbar bank appears in the middle of the screen, with the
+game's own icons. Point with the right stick (or a trackpad set to act as the right
+stick) to highlight a button; its name shows in the centre. Let go of the key to use
+it, exactly as clicking it would; let go without pointing to cancel. The camera stays
+put while the picker is open.
+
 ## Settings
 
 In the game: **Options > Game Options > Input**, in the Camera group:
@@ -45,7 +54,7 @@ you change them. Save keeps them, Cancel undoes them.
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. The last four keys
+runs with nwpad; the game keeps it when it saves its own settings. The last five keys
 below are only in the file; edit it while the game is closed.
 
 ```toml
@@ -54,6 +63,7 @@ below are only in the file; edit it while the game is closed.
 	enabled = true
 	hide-cursor = true
 	mouse-idle-ms = 300
+	picker-key = "ScrollLock"
 	[nwpad.camera]
 		tilt-speed = 90.0
 		turn-speed = 180.0
@@ -67,6 +77,7 @@ below are only in the file; edit it while the game is closed.
 |---|---|---|---|
 | `enabled` | true | | Controller support on/off. Off, the library stays loaded but idle: no stick input, no cursor hiding |
 | `hide-cursor` | true | | Hide the cursor while the sticks are in use |
+| `picker-key` | "ScrollLock" | | Key held to open the quickbar picker (an SDL key name, e.g. "F13", "Insert"; "" turns it off). nwpad takes the key; the game never sees it |
 | `cursor-rehide-ms` | 2000 | 0–10000 | Moving the mouse shows the cursor; it hides again once the mouse is still and a stick has been held this long without a break (0: at once) |
 | `mouse-idle-ms` | 300 | 100–1000 | How long the mouse must be still before the stick gets the camera back |
 | `camera.turn-speed` | 180 | 60–360 | Camera turn speed at full deflection, °/s |
