@@ -202,4 +202,10 @@ bool nwpad_json_get_number(const char *json, const char *key, double *out);
  * written, or -1 if it doesn't fit (out is then empty). */
 int nwpad_json_escape(char *out, size_t cap, const char *in);
 
+/* ---- UBJSON (the game's NUI wire format, re-notes F32) ---- */
+/* Convert JSON text to UBJSON: integers as the smallest of i/U/I/l/L, other
+ * numbers as D, strings and keys with the smallest length marker, no optimized
+ * containers. Returns the length written, or -1 on bad JSON or if out is too small. */
+int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap);
+
 #endif

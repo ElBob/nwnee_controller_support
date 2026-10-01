@@ -4,9 +4,9 @@
 
 #include "crashtrace.h"
 #include "sigs.h"
+#include "vslot.h"
 
 #include <dlfcn.h>
-#include <sys/mman.h>
 #include <stdint.h>
 
 #include <stdarg.h>
@@ -280,20 +280,14 @@ static void native_on_opened(void *window) {
  * enable_make<Nui::ConfigWindow>, found by value, so only that window class sees
  * it. Like the SDL jump-table slots, nothing in the game's code changes. */
 static bool native_hook_on_opened(void) {
-    void **vtable = (void **)((char *)nwpad_sig(NWPAD_SIG_CONFIG_WINDOW_VTABLE) + 0x10);
-    void *base = nwpad_sig(NWPAD_SIG_WINDOW_ON_OPENED);
-    for (int i = 0; i < 16; i++) { /* the class has 15 virtuals (F30) */
-        if (vtable[i] != base) continue;
-        long page = sysconf(_SC_PAGESIZE);
-        void *start = (void *)((uintptr_t)&vtable[i] & ~(uintptr_t)(page - 1));
-        if (mprotect(start, (size_t)page, PROT_READ | PROT_WRITE) != 0) return false; /* RELRO */
-        nat.on_opened = (void (*)(void *))vtable[i];
-        vtable[i] = (void *)native_on_opened;
-        mprotect(start, (size_t)page, PROT_READ);
-        return true;
+    void *original;
+    if (!nwpad_vslot_swap(nwpad_sig(NWPAD_SIG_CONFIG_WINDOW_VTABLE), 16 /* 15 virtuals, F30 */,
+                          nwpad_sig(NWPAD_SIG_WINDOW_ON_OPENED), (void *)native_on_opened, &original)) {
+        say("native settings: OnOpened not found in the Options window's vtable");
+        return false;
     }
-    say("native settings: OnOpened not found in the Options window's vtable");
-    return false;
+    nat.on_opened = (void (*)(void *))original;
+    return true;
 }
 
 static bool native_register(void) {

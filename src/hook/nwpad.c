@@ -20,6 +20,8 @@
 #include "sigs.h"
 #include "settings.h"
 #include "quickbar.h"
+#include "nui.h"
+extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -286,6 +288,23 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           name);
         }
         if (n > 0 && (size_t)n < cap) snprintf(out + n, cap - (size_t)n, "]}");
+    } else if (strcmp(cmd, "nui_create") == 0 || strcmp(cmd, "nui_bind") == 0 ||
+               strcmp(cmd, "nui_destroy") == 0) {
+        /* {"cmd":"nui_create","token":n,"id":"..","json":"<definition>"},
+         * {"cmd":"nui_bind","token":n,"name":"..","json":"<value>"}, {"cmd":"nui_destroy","token":n} */
+        static char text[32768], name[128];
+        double token;
+        bool ok = nwpad_json_get_number(request, "token", &token);
+        if (ok && cmd[4] == 'c')
+            ok = nwpad_json_get_string(request, "id", name, sizeof name) &&
+                 nwpad_json_get_string(request, "json", text, sizeof text) && nwpad_nui_create((int)token, name, text);
+        else if (ok && cmd[4] == 'b')
+            ok = nwpad_json_get_string(request, "name", name, sizeof name) &&
+                 nwpad_json_get_string(request, "json", text, sizeof text) && nwpad_nui_bind((int)token, name, text);
+        else if (ok)
+            ok = nwpad_nui_destroy((int)token);
+        snprintf(out, cap, "{\"ok\":%s,\"events_pending\":%s,\"windows\":%d,\"size\":%u}", ok ? "true" : "false",
+                 nwpad_nui_events_pending() ? "true" : "false", nwpad_nui_window_count(), nwpad_nui_last_size);
     } else if (strcmp(cmd, "quickbar_use") == 0) {
         /* {"cmd":"quickbar_use","slot":0-35} */
         double v;

@@ -462,3 +462,167 @@ int nwpad_json_escape(char *out, size_t cap, const char *in) {
     out[n] = '\0';
     return (int)n;
 }
+
+/* ---- UBJSON ---- */
+
+typedef struct {
+    const char *p;
+    uint8_t *out;
+    size_t n, cap;
+    bool ok;
+} ubj;
+
+static void ubj_byte(ubj *u, uint8_t b) {
+    if (u->n < u->cap) u->out[u->n] = b;
+    else u->ok = false;
+    u->n++;
+}
+
+static void ubj_be(ubj *u, uint64_t v, int bytes) {
+    for (int i = bytes - 1; i >= 0; i--) ubj_byte(u, (uint8_t)(v >> (8 * i)));
+}
+
+static void ubj_int(ubj *u, int64_t v) {
+    if (v >= -128 && v <= 127) { ubj_byte(u, 'i'); ubj_be(u, (uint64_t)v, 1); }
+    else if (v >= 0 && v <= 255) { ubj_byte(u, 'U'); ubj_be(u, (uint64_t)v, 1); }
+    else if (v >= -32768 && v <= 32767) { ubj_byte(u, 'I'); ubj_be(u, (uint64_t)v, 2); }
+    else if (v >= INT32_MIN && v <= INT32_MAX) { ubj_byte(u, 'l'); ubj_be(u, (uint64_t)v, 4); }
+    else { ubj_byte(u, 'L'); ubj_be(u, (uint64_t)v, 8); }
+}
+
+static void ubj_ws(ubj *u) {
+    while (*u->p == ' ' || *u->p == '\t' || *u->p == '\n' || *u->p == '\r') u->p++;
+}
+
+static int hexval(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+/* A JSON string at u->p ('"'), as UTF-8 bytes into buf. Returns its length or -1. */
+static int ubj_string_text(ubj *u, char *buf, size_t cap) {
+    size_t n = 0;
+    if (*u->p != '"') return -1;
+    u->p++;
+    while (*u->p && *u->p != '"') {
+        uint32_t c = (unsigned char)*u->p++;
+        if (c == '\\') {
+            char e = *u->p++;
+            switch (e) {
+            case '"': case '\\': case '/': c = (uint32_t)e; break;
+            case 'b': c = '\b'; break;
+            case 'f': c = '\f'; break;
+            case 'n': c = '\n'; break;
+            case 'r': c = '\r'; break;
+            case 't': c = '\t'; break;
+            case 'u': {
+                c = 0;
+                for (int i = 0; i < 4; i++) {
+                    int h = hexval(*u->p++);
+                    if (h < 0) return -1;
+                    c = c * 16 + (uint32_t)h;
+                }
+                break;
+            }
+            default: return -1;
+            }
+            if (e == 'u' && c >= 0x80) { /* UTF-8 (no surrogate pairs: not needed here) */
+                char enc[3];
+                int len = 0;
+                if (c < 0x800) { enc[len++] = (char)(0xc0 | (c >> 6)); }
+                else { enc[len++] = (char)(0xe0 | (c >> 12)); enc[len++] = (char)(0x80 | ((c >> 6) & 0x3f)); }
+                enc[len++] = (char)(0x80 | (c & 0x3f));
+                if (n + (size_t)len > cap) return -1;
+                memcpy(buf + n, enc, (size_t)len);
+                n += (size_t)len;
+                continue;
+            }
+        }
+        if (n + 1 > cap) return -1;
+        buf[n++] = (char)c;
+    }
+    if (*u->p != '"') return -1;
+    u->p++;
+    return (int)n;
+}
+
+static void ubj_value(ubj *u, int depth);
+
+static void ubj_sized(ubj *u, const char *text, int len) { /* key or string body */
+    ubj_int(u, len);
+    for (int i = 0; i < len; i++) ubj_byte(u, (uint8_t)text[i]);
+}
+
+static void ubj_value(ubj *u, int depth) {
+    char text[1024];
+    ubj_ws(u);
+    if (depth > 64) { u->ok = false; return; }
+    char c = *u->p;
+    if (c == '{' || c == '[') {
+        bool object = c == '{';
+        ubj_byte(u, (uint8_t)c);
+        u->p++;
+        ubj_ws(u);
+        if (*u->p == (object ? '}' : ']')) {
+            u->p++;
+        } else {
+            for (;;) {
+                if (object) {
+                    ubj_ws(u);
+                    int len = ubj_string_text(u, text, sizeof text);
+                    if (len < 0) { u->ok = false; return; }
+                    ubj_sized(u, text, len);
+                    ubj_ws(u);
+                    if (*u->p++ != ':') { u->ok = false; return; }
+                }
+                ubj_value(u, depth + 1);
+                if (!u->ok) return;
+                ubj_ws(u);
+                if (*u->p == ',') { u->p++; continue; }
+                if (*u->p == (object ? '}' : ']')) { u->p++; break; }
+                u->ok = false;
+                return;
+            }
+        }
+        ubj_byte(u, object ? '}' : ']');
+    } else if (c == '"') {
+        int len = ubj_string_text(u, text, sizeof text);
+        if (len < 0) { u->ok = false; return; }
+        ubj_byte(u, 'S');
+        ubj_sized(u, text, len);
+    } else if (!strncmp(u->p, "true", 4)) { ubj_byte(u, 'T'); u->p += 4; }
+    else if (!strncmp(u->p, "false", 5)) { ubj_byte(u, 'F'); u->p += 5; }
+    else if (!strncmp(u->p, "null", 4)) { ubj_byte(u, 'Z'); u->p += 4; }
+    else if (c == '-' || (c >= '0' && c <= '9')) {
+        const char *start = u->p;
+        bool is_float = false;
+        while (*u->p == '-' || *u->p == '+' || (*u->p >= '0' && *u->p <= '9') || *u->p == '.' || *u->p == 'e' ||
+               *u->p == 'E') {
+            if (*u->p == '.' || *u->p == 'e' || *u->p == 'E') is_float = true;
+            u->p++;
+        }
+        char num[64];
+        size_t len = (size_t)(u->p - start);
+        if (len >= sizeof num) { u->ok = false; return; }
+        memcpy(num, start, len);
+        num[len] = '\0';
+        if (is_float) {
+            double d = strtod(num, NULL);
+            uint64_t bits;
+            memcpy(&bits, &d, sizeof bits);
+            ubj_byte(u, 'D');
+            ubj_be(u, bits, 8);
+        } else {
+            ubj_int(u, strtoll(num, NULL, 10));
+        }
+    } else {
+        u->ok = false;
+    }
+}
+
+int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap) {
+    ubj u = {json, out, 0, cap, true};
+    ubj_value(&u, 0);
+    ubj_ws(&u);
+    if (*u.p) u.ok = false;
+    return u.ok ? (int)u.n : -1;
+}

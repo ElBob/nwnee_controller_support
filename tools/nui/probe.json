@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "title": "nwpad",
+  "root": {"type": "col", "label": null, "value": null, "children": [
+    {"type": "image", "label": null, "value": {"bind": "icon"}, "image_aspect": 0, "image_halign": 0, "image_valign": 0,
+     "width": 64.0, "height": 64.0},
+    {"type": "label", "label": null, "value": {"bind": "name"}, "text_halign": 0, "text_valign": 0, "height": 30.0}
+  ]},
+  "geometry": {"x": 100.0, "y": 100.0, "w": 260.0, "h": 160.0},
+  "resizable": false, "collapsed": false, "closable": false, "transparent": false, "border": true,
+  "accepts_input": false, "size_constraint": null, "edge_constraint": null, "font": ""
+}

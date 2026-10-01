@@ -132,3 +132,46 @@ signatures:
   exo_string_dtor:         # CExoString::~CExoString()
     note: F31
     symbol: _ZN10CExoStringD1Ev
+  # Client-side NUI windows (quickbar plan Q0.5)
+  nui_handle_server_message:  # CNWCMessage::HandleServerToPlayerNuiEvent(unsigned char): 1 create, 2 destroy, 4 binds
+    note: F32
+    symbol: _ZN11CNWCMessage28HandleServerToPlayerNuiEventEh
+  message_ctor:            # CNWMessage::CNWMessage()
+    note: F32
+    symbol: _ZN10CNWMessageC1Ev
+  message_create_write:    # CNWMessage::CreateWriteMessage(unsigned int, unsigned int, int)
+    note: F32
+    symbol: _ZN10CNWMessage18CreateWriteMessageEjji
+  message_write_int:       # CNWMessage::WriteINT(int, int bits)
+    note: F32
+    symbol: _ZN10CNWMessage8WriteINTEii
+  message_write_dword:     # CNWMessage::WriteDWORD(unsigned int, int bits)
+    note: F32
+    symbol: _ZN10CNWMessage10WriteDWORDEji
+  message_write_string:    # CNWMessage::WriteCExoString(CExoString, int bits)
+    note: F32
+    symbol: _ZN10CNWMessage15WriteCExoStringE10CExoStringi
+  message_write_bytes:     # CNWMessage::WriteVOIDPtr(void*, int bytes)
+    note: F32
+    symbol: _ZN10CNWMessage12WriteVOIDPtrEPvi
+  message_get_write:       # CNWMessage::GetWriteMessage(unsigned char**, unsigned int*)
+    note: F32
+    symbol: _ZN10CNWMessage15GetWriteMessageEPPhPj
+  message_set_read:        # CNWMessage::SetReadMessage(unsigned char*, unsigned int, unsigned int, int)
+    note: F32
+    symbol: _ZN10CNWMessage14SetReadMessageEPhjji
+  nui_event_queue:         # Nui::JSON::JsonWindow::s_event_queue: std::queue (deque) sent to the server by FlushQueues
+    note: F32
+    symbol: _ZN3Nui4JSON10JsonWindow13s_event_queueE
+  message_write_type:      # CNWMessage::WriteType(MessageType): tag ReadJSON expects (0x10) before a JSON blob
+    note: F32
+    symbol: _ZN10CNWMessage9WriteTypeENS_11MessageTypeE
+  nui_window_vtable:       # vtable for enable_make<Nui::JSON::JsonWindow> (every NUI window)
+    note: F32
+    symbol: _ZTV11enable_makeIN3Nui4JSON10JsonWindowEE
+  nui_window_on_opened:    # Nui::JSON::JsonWindow::OnOpened(): queues the "open" event for the server
+    note: F32
+    symbol: _ZN3Nui4JSON10JsonWindow8OnOpenedEv
+  nui_window_on_closed:    # Nui::JSON::JsonWindow::OnClosed(): queues the "close" event
+    note: F32
+    symbol: _ZN3Nui4JSON10JsonWindow8OnClosedEv

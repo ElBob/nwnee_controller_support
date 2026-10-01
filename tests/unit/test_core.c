@@ -276,6 +276,27 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_ubjson(void) {
+    uint8_t b[256];
+    CHECK(nwpad_ubjson_from_json("true", b, sizeof b) == 1 && b[0] == 'T');
+    CHECK(nwpad_ubjson_from_json(" 7 ", b, sizeof b) == 2 && b[0] == 'i' && b[1] == 7);
+    CHECK(nwpad_ubjson_from_json("200", b, sizeof b) == 2 && b[0] == 'U' && b[1] == 200);
+    CHECK(nwpad_ubjson_from_json("-300", b, sizeof b) == 3 && b[0] == 'I' && b[1] == 0xfe && b[2] == 0xd4);
+    CHECK(nwpad_ubjson_from_json("70000", b, sizeof b) == 5 && b[0] == 'l' && b[3] == 0x11 && b[4] == 0x70);
+    CHECK(nwpad_ubjson_from_json("1.5", b, sizeof b) == 9 && b[0] == 'D' && b[1] == 0x3f && b[2] == 0xf8);
+    static const uint8_t str[] = {'S', 'i', 2, 'h', 'i'};
+    CHECK(nwpad_ubjson_from_json("\"hi\"", b, sizeof b) == 5 && !memcmp(b, str, 5));
+    static const uint8_t obj[] = {'{', 'i', 1, 'a', '[', 'i', 1, 'Z', ']', '}'};
+    CHECK(nwpad_ubjson_from_json("{\"a\": [1, null]}", b, sizeof b) == 10 && !memcmp(b, obj, 10));
+    static const uint8_t esc[] = {'S', 'i', 4, 'a', '"', 0xc3, 0xa9};
+    CHECK(nwpad_ubjson_from_json("\"a\\\"\\u00e9\"", b, sizeof b) == 7 && !memcmp(b, esc, 7));
+    CHECK(nwpad_ubjson_from_json("{}", b, sizeof b) == 2 && b[0] == '{' && b[1] == '}');
+    CHECK(nwpad_ubjson_from_json("{\"a\":}", b, sizeof b) == -1);
+    CHECK(nwpad_ubjson_from_json("[1,2", b, sizeof b) == -1);
+    CHECK(nwpad_ubjson_from_json("[1] x", b, sizeof b) == -1);
+    CHECK(nwpad_ubjson_from_json("\"long string\"", b, 4) == -1);
+}
+
 static void test_json_escape(void) {
     char b[64];
     CHECK(nwpad_json_escape(b, sizeof b, "Fireball") == 8 && !strcmp(b, "Fireball"));
@@ -353,6 +374,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_ubjson();
     test_json_escape();
     test_cursor_rehide();
     test_settings_toml();

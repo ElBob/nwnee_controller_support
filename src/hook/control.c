@@ -16,7 +16,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define REQUEST_MAX 1024
+#define REQUEST_MAX 32768 /* NUI window definitions */
 #define REPLY_MAX 16384 /* the quickbar listing is ~7 KB */
 #define REPLY_TIMEOUT_MS 2000 /* the main thread must answer within this */
 
