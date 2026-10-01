@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 #define REQUEST_MAX 1024
-#define REPLY_MAX 4096
+#define REPLY_MAX 16384 /* the quickbar listing is ~7 KB */
 #define REPLY_TIMEOUT_MS 2000 /* the main thread must answer within this */
 
 enum { MB_IDLE, MB_PENDING, MB_DONE };

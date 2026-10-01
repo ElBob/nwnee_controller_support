@@ -101,3 +101,34 @@ signatures:
   config_window_vtable:  # vtable for enable_make<Nui::ConfigWindow> (the Options window)
     note: F30
     symbol: _ZTV11enable_makeIN3Nui12ConfigWindowEE
+  # Quickbar (quickbar plan Q1)
+  client_get_in_game_gui:  # CClientExoApp::GetInGameGui() -> CGuiInGame* (quickbar panel at +0x60)
+    note: F31
+    symbol: _ZN13CClientExoApp12GetInGameGuiEv
+  quickbutton_left:        # CGuiQuickButton::HandleLeftButton(): what clicking the button does
+    note: F31
+    symbol: _ZN15CGuiQuickButton16HandleLeftButtonEv
+  tlk_table:               # CTlkTable* global
+    note: F31
+    symbol: g_pTlkTable
+  tlk_get_simple_string:   # CExoString CTlkTable::GetSimpleString(unsigned int)
+    note: F31
+    symbol: _ZN9CTlkTable15GetSimpleStringEj
+  rules:                   # CNWRules* global; the CNWSpellArray* is at +0xd0
+    note: F31
+    symbol: g_pRules
+  spell_array_get_spell:   # CNWSpell* CNWSpellArray::GetSpell(int) const
+    note: F31
+    symbol: _ZNK13CNWSpellArray8GetSpellEi
+  spell_get_name_text:     # CExoString CNWSpell::GetSpellNameText()
+    note: F31
+    symbol: _ZN8CNWSpell16GetSpellNameTextEv
+  client_get_item_by_id:   # CNWCItem* CClientExoApp::GetItemByGameObjectID(unsigned int)
+    note: F31
+    symbol: _ZN13CClientExoApp21GetItemByGameObjectIDEj
+  item_get_name:           # CExoString CNWCItem::GetName(int)
+    note: F31
+    symbol: _ZN8CNWCItem7GetNameEi
+  exo_string_dtor:         # CExoString::~CExoString()
+    note: F31
+    symbol: _ZN10CExoStringD1Ev

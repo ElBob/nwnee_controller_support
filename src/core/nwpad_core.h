@@ -196,5 +196,10 @@ const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_patt
 bool nwpad_json_get_string(const char *json, const char *key, char *out, size_t cap);
 /* Read the numeric value of "key". Returns false if missing or not a number. */
 bool nwpad_json_get_number(const char *json, const char *key, double *out);
+/* Write in as the body of a JSON string (no quotes) into out: escapes quotes,
+ * backslashes and control characters, and bytes >= 0x80 as \u00XX (the game's
+ * strings are Windows-1252; Latin-1 is close enough here). Returns the length
+ * written, or -1 if it doesn't fit (out is then empty). */
+int nwpad_json_escape(char *out, size_t cap, const char *in);
 
 #endif

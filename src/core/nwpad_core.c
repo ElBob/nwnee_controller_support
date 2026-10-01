@@ -437,3 +437,28 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      cfg->run_threshold, (unsigned)cfg->strafe_exit_ms, cfg->strafe_window_deg);
     return n > 0 && (size_t)n < cap ? n : -1;
 }
+
+int nwpad_json_escape(char *out, size_t cap, const char *in) {
+    size_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)in; *p; p++) {
+        char esc[8];
+        const char *add = esc;
+        if (*p == '"') add = "\\\"";
+        else if (*p == '\\') add = "\\\\";
+        else if (*p < 0x20 || *p >= 0x80) snprintf(esc, sizeof esc, "\\u%04x", *p);
+        else { esc[0] = (char)*p; esc[1] = '\0'; }
+        size_t len = strlen(add);
+        if (n + len + 1 > cap) {
+            if (cap) out[0] = '\0';
+            return -1;
+        }
+        memcpy(out + n, add, len);
+        n += len;
+    }
+    if (n + 1 > cap) {
+        if (cap) out[0] = '\0';
+        return -1;
+    }
+    out[n] = '\0';
+    return (int)n;
+}

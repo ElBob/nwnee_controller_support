@@ -276,6 +276,14 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_json_escape(void) {
+    char b[64];
+    CHECK(nwpad_json_escape(b, sizeof b, "Fireball") == 8 && !strcmp(b, "Fireball"));
+    CHECK(nwpad_json_escape(b, sizeof b, "a\"b\\c\n") > 0 && !strcmp(b, "a\\\"b\\\\c\\u000a"));
+    CHECK(nwpad_json_escape(b, sizeof b, "Caf\xe9") > 0 && !strcmp(b, "Caf\\u00e9"));
+    CHECK(nwpad_json_escape(b, 4, "Fireball") == -1 && b[0] == '\0');
+}
+
 static void test_cursor_rehide(void) {
     nwpad_config c;
     nwpad_config_defaults(&c); /* cursor_rehide_ms 2000 */
@@ -345,6 +353,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_json_escape();
     test_cursor_rehide();
     test_settings_toml();
     printf("%d checks, %d failures\n", checks, failures);

@@ -19,6 +19,7 @@
 #include "control.h"
 #include "sigs.h"
 #include "settings.h"
+#include "quickbar.h"
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -267,6 +268,29 @@ static void control_handler(const char *request, char *out, size_t cap) {
             snprintf(out, cap, "{\"ok\":false,\"error\":\"drive unavailable\"}");
         else
             snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "quickbar") == 0) {
+        /* {"cmd":"quickbar"}: all 36 buttons (bank * 12 + slot) with name and icon. */
+        static nwpad_qb_slot slots[NWPAD_QB_SLOTS];
+        if (!nwpad_quickbar_read(slots)) {
+            snprintf(out, cap, "{\"ok\":false,\"error\":\"no quickbar (not in a game?)\"}");
+            return;
+        }
+        int n = snprintf(out, cap, "{\"ok\":true,\"bank\":%d,\"slots\":[", nwpad_quickbar_bank());
+        for (int i = 0; i < NWPAD_QB_SLOTS && n > 0 && (size_t)n < cap; i++) {
+            char name[300], icon[120];
+            nwpad_json_escape(name, sizeof name, slots[i].name);
+            nwpad_json_escape(icon, sizeof icon, slots[i].icon);
+            n += snprintf(out + n, cap - (size_t)n,
+                          "%s{\"slot\":%d,\"type\":%u,\"data\":%llu,\"item\":%u,\"icon\":\"%s\",\"name\":\"%s\"}",
+                          i ? "," : "", i, slots[i].type, (unsigned long long)slots[i].data, slots[i].item, icon,
+                          name);
+        }
+        if (n > 0 && (size_t)n < cap) snprintf(out + n, cap - (size_t)n, "]}");
+    } else if (strcmp(cmd, "quickbar_use") == 0) {
+        /* {"cmd":"quickbar_use","slot":0-35} */
+        double v;
+        bool ok = nwpad_json_get_number(request, "slot", &v) && nwpad_quickbar_use((int)v);
+        snprintf(out, cap, "{\"ok\":%s}", ok ? "true" : "false");
     } else if (strcmp(cmd, "always_run") == 0) {
         /* {"cmd":"always_run","on":1} (tests) */
         double on = 0;
