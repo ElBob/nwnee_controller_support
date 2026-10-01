@@ -276,6 +276,18 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_picker_select(void) {
+    CHECK(nwpad_picker_select((nwpad_vec2){0, 0}, -1) == -1);       /* untouched */
+    CHECK(nwpad_picker_select((nwpad_vec2){0, 1}, -1) == 0);        /* up: slot 0 */
+    CHECK(nwpad_picker_select((nwpad_vec2){1, 0}, -1) == 3);        /* right: a quarter round */
+    CHECK(nwpad_picker_select((nwpad_vec2){0, -1}, -1) == 6);       /* down */
+    CHECK(nwpad_picker_select((nwpad_vec2){-1, 0}, -1) == 9);       /* left */
+    CHECK(nwpad_picker_select((nwpad_vec2){-0.2f, 0.98f}, -1) == 0); /* just left of up: still 0 */
+    CHECK(nwpad_picker_select((nwpad_vec2){-0.6f, 0.8f}, -1) == 11); /* ~37 degrees left of up */
+    CHECK(nwpad_picker_select((nwpad_vec2){0.3f, 0}, 4) == 4);      /* thumb lifted: keep */
+    CHECK(nwpad_picker_select((nwpad_vec2){0.6f, 0}, 4) == 3);
+}
+
 static void test_ubjson(void) {
     uint8_t b[256];
     CHECK(nwpad_ubjson_from_json("true", b, sizeof b) == 1 && b[0] == 'T');
@@ -374,6 +386,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_picker_select();
     test_ubjson();
     test_json_escape();
     test_cursor_rehide();

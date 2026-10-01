@@ -11,7 +11,8 @@
 
 /* Create (or replace) window `token` from its NUI JSON definition. */
 bool nwpad_nui_create(int token, const char *id, const char *json);
-/* Set bind `name` of window `token` to a JSON value. */
+/* Set bind `name` of window `token` to a JSON value. Only binds the window's
+ * definition uses can be set (others would reach the server, F32). */
 bool nwpad_nui_bind(int token, const char *name, const char *json_value);
 bool nwpad_nui_destroy(int token);
 /* Whether the game has NUI events queued for the server (none should be ours). */

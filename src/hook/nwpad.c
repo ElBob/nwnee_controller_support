@@ -21,6 +21,7 @@
 #include "settings.h"
 #include "quickbar.h"
 #include "nui.h"
+#include "picker.h"
 extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
@@ -64,6 +65,7 @@ static struct {
     SDL_GameController *(*GameControllerOpen)(int);
     int (*GameControllerGetAttached)(SDL_GameController *);
     int16_t (*GameControllerGetAxis)(SDL_GameController *, int);
+    uint8_t (*GameControllerGetButton)(SDL_GameController *, int);
 } sdl;
 
 #define RESOLVE_ANY(field, name) \
@@ -166,6 +168,7 @@ static struct {
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
         nwpad_vec2 left, right;
+        bool picker; /* the picker input held */
         uint64_t until_ms; /* 0: until released */
     } virt;
 } g;
@@ -219,6 +222,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
         g.virt.left.y = nwpad_json_get_number(request, "ly", &v) ? (float)v : 0.0f;
         g.virt.right.x = nwpad_json_get_number(request, "rx", &v) ? (float)v : 0.0f;
         g.virt.right.y = nwpad_json_get_number(request, "ry", &v) ? (float)v : 0.0f;
+        g.virt.picker = nwpad_json_get_number(request, "picker", &v) && v != 0;
         g.virt.until_ms = nwpad_json_get_number(request, "hold_ms", &v) && v > 0
                               ? now_ms() + (uint64_t)v : 0;
         g.virt.active = true;
@@ -360,14 +364,17 @@ static void control_handler(const char *request, char *out, size_t cap) {
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
                           "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
-                          "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld}",
+                          "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld},"
+                          "\"picker\":{\"open\":%s,\"selected\":%d,\"last_used\":%d}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
                           sdl.ShowCursor && sdl.ShowCursor(SDL_QUERY) == SDL_ENABLE ? "true" : "false",
                           (unsigned long long)g.cursor.nudges,
                           g.cursor.sticks_since_ms ? (long long)(now_ms() - g.cursor.sticks_since_ms) : -1LL,
-                          g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL);
+                          g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL,
+                          nwpad_picker_open() ? "true" : "false", nwpad_picker_selected(),
+                          nwpad_picker_last_used());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],
@@ -433,6 +440,7 @@ static bool controller_init(void) {
     RESOLVE_ANY(GameControllerOpen, "SDL_GameControllerOpen");
     RESOLVE_ANY(GameControllerGetAttached, "SDL_GameControllerGetAttached");
     RESOLVE_ANY(GameControllerGetAxis, "SDL_GameControllerGetAxis");
+    RESOLVE_ANY(GameControllerGetButton, "SDL_GameControllerGetButton"); /* optional: the picker */
     if (!sdl.InitSubSystem || !sdl.NumJoysticks || !sdl.IsGameController ||
         !sdl.GameControllerOpen || !sdl.GameControllerGetAttached || !sdl.GameControllerGetAxis) {
         nwpad_log("game SDL2 lacks GameController API; controller support disabled");
@@ -490,10 +498,12 @@ static void nwpad_frame(void) {
      * character that was moving still gets its stop. So does "Controller support"
      * off, which otherwise does nothing. */
     nwpad_vec2 left = {0, 0}, right = {0, 0};
+    bool picker_held = false;
     if (!g.cfg.enabled) {
     } else if (g.virt.active) {
         left = nwpad_apply_deadzone(g.virt.left);
         right = nwpad_apply_deadzone(g.virt.right);
+        picker_held = g.virt.picker;
     } else if (controller_init()) {
         controller_ensure_open(t);
         if (g.pad) {
@@ -502,8 +512,12 @@ static void nwpad_frame(void) {
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_LEFTX), -axis(SDL_CONTROLLER_AXIS_LEFTY)});
             right = nwpad_apply_deadzone(
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
+            /* Back: the Steam Input layout sends it while the picker grip is held. */
+            picker_held = sdl.GameControllerGetButton && sdl.GameControllerGetButton(g.pad, SDL_CONTROLLER_BUTTON_BACK);
         }
     }
+    NWPAD_WHERE("picker");
+    if (nwpad_picker_frame(picker_held, right, nwpad_backend_in_game())) right = (nwpad_vec2){0, 0};
 
     g.last_left = left;
     g.last_right = right;

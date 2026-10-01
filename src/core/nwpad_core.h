@@ -202,6 +202,14 @@ bool nwpad_json_get_number(const char *json, const char *key, double *out);
  * written, or -1 if it doesn't fit (out is then empty). */
 int nwpad_json_escape(char *out, size_t cap, const char *in);
 
+/* ---- Quickbar picker (quickbar plan Q2) ---- */
+#define NWPAD_PICKER_SLOTS 12
+#define NWPAD_PICKER_MIN 0.5f /* stick/trackpad deflection that picks a slot */
+/* The ring slot the stick points at: 0 at the top, clockwise, NWPAD_PICKER_SLOTS
+ * sectors. Below NWPAD_PICKER_MIN, `current` is kept (lifting the thumb keeps the
+ * highlight). -1 means nothing picked yet. */
+int nwpad_picker_select(nwpad_vec2 stick, int current);
+
 /* ---- UBJSON (the game's NUI wire format, re-notes F32) ---- */
 /* Convert JSON text to UBJSON: integers as the smallest of i/U/I/l/L, other
  * numbers as D, strings and keys with the smallest length marker, no optimized

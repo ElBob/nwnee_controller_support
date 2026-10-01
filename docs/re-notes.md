@@ -307,7 +307,15 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Schema** (from the base game's `nw_inc_nui.nss`, read for reference only): window `{version:1, title, root, geometry{x,y,w,h}, resizable, collapsed, closable, transparent, border, accepts_input, size_constraint, edge_constraint, font}`; elements `{type, label, value, ...}` (`col`/`row` with `children`, `label` with `text_halign`/`text_valign`, `image` with value = resref and `image_aspect`/`image_halign`/`image_valign`), common `id`, `width`, `height`, `draw_list` + `draw_list_scissor` (items: `type`, `enabled`, `color`, `fill`, `line_thickness`, `order`, `render`, `arrayBinds`, plus `rect`/`image`/`text` by kind); values may be `{bind, number_flags, number_precision, text_flags}`.
 - **Events to the server:** `JsonWindow::FlushQueues` sends `s_event_queue` and `s_bindupdate_queue` (global, all windows) every frame via `SendPlayerToServerNui_Events/_Binds`. `JsonWindow::OnOpened`/`OnClosed` (vtable `enable_make<Nui::JSON::JsonWindow>`) queue `_window_` "open"/"close" events with the token at `JsonWindow+0x1e0`. With `accepts_input: false`, hovering and clicking queue nothing. nwpad swaps the two slots for wrappers that drop the event for its own tokens (`0x6e77xxxx`) and call the original otherwise.
 - **Runtime:** a window created this way renders natively (icon by resref and label by bind); before the filter, the local server logged `HandlePlayerToServerNuiEvent: Update invalid: window does not exist: <token>` once per create; with it, nothing, while a window with token 5 still reaches the server (live test `test_nui.py`).
+- **Unused binds leak:** setting a bind that no element of the window uses makes the client send that bind back to the server (`Nui::JSON::DynamicBinding::NotifyParent` → `s_bindupdate_queue`); one server log line per such bind. Binds the window uses don't. nwpad only sets bind names that appear in the window's definition.
 - Confidence: confirmed by disassembly/Ghidra and at runtime in single-player. Not yet tried against a remote server.
+
+### F33: The quickbar picker (quickbar plan Q2)
+- Binary / hash: nwmain-linux 6d19c39b
+- **Centring:** NUI geometry is in GUI units: screen size (`g_pGuiMan+0xb8/+0xbc`, pixels) over `CAurora::GetGUIScale()` (static, returns float).
+- **Using a button:** `CGuiQuickButton::HandleLeftButton` on any of the 36 buttons acts as clicking it: modes toggle at once (Stealth Mode, runtime), targeted spells enter the game's targeting mode as a click would.
+- **Runtime:** the ring (12 icons in a client-side NUI window, draw-list images, circles and text, `accepts_input: false`, transparent, no title) renders natively and updates through binds; no NUI message for nwpad's tokens reaches the local server across open, selection changes and close (live test `test_picker.py`).
+- Confidence: runtime on the test box (Xbox-pad path emulated by the control socket's virtual stick).
 
 ## Conventions to confirm
 

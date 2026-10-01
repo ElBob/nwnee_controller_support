@@ -117,8 +117,50 @@ static bool deliver(void *msg, unsigned char subtype) {
     return ((handle_fn)nwpad_sig(NWPAD_SIG_NUI_HANDLE_SERVER_MESSAGE))(msg, subtype);
 }
 
+/* Setting a bind no element of the window uses makes the client send it to the
+ * server (DynamicBinding::NotifyParent, F32). So each window's bind names are
+ * taken from its definition, and only those may be set. */
+#define MAX_WINDOWS 4
+#define MAX_BINDS 64
+static struct {
+    int token;
+    int count;
+    char names[MAX_BINDS][32];
+} binds[MAX_WINDOWS];
+
+static void record_binds(int token, const char *json) {
+    int w = 0;
+    for (int i = 0; i < MAX_WINDOWS; i++)
+        if (binds[i].token == token || binds[i].token == 0) { w = i; break; }
+    binds[w].token = token;
+    binds[w].count = 0;
+    for (const char *p = json; (p = strstr(p, "\"bind\"")) != NULL; p += 6) {
+        const char *q = p + 6;
+        while (*q == ' ' || *q == ':') q++;
+        if (*q != '"') continue;
+        const char *end = strchr(++q, '"');
+        if (!end || end - q >= 32) continue;
+        bool seen = false;
+        for (int i = 0; i < binds[w].count; i++)
+            if ((size_t)(end - q) == strlen(binds[w].names[i]) && !strncmp(binds[w].names[i], q, (size_t)(end - q))) seen = true;
+        if (!seen && binds[w].count < MAX_BINDS) {
+            memcpy(binds[w].names[binds[w].count], q, (size_t)(end - q));
+            binds[w].names[binds[w].count++][end - q] = '\0';
+        }
+    }
+}
+
+static bool bind_known(int token, const char *name) {
+    for (int w = 0; w < MAX_WINDOWS; w++)
+        if (binds[w].token == token)
+            for (int i = 0; i < binds[w].count; i++)
+                if (!strcmp(binds[w].names[i], name)) return true;
+    return false;
+}
+
 bool nwpad_nui_create(int token, const char *id, const char *json) {
     if (!ready()) return false;
+    record_binds(token, json);
     void *msg = message();
     begin(msg);
     put_int(msg, token);
@@ -129,7 +171,7 @@ bool nwpad_nui_create(int token, const char *id, const char *json) {
 }
 
 bool nwpad_nui_bind(int token, const char *name, const char *json_value) {
-    if (!ready()) return false;
+    if (!ready() || !bind_known(token, name)) return false;
     void *msg = message();
     begin(msg);
     put_int(msg, 1);
@@ -141,6 +183,8 @@ bool nwpad_nui_bind(int token, const char *name, const char *json_value) {
 
 bool nwpad_nui_destroy(int token) {
     if (!ready()) return false;
+    for (int w = 0; w < MAX_WINDOWS; w++)
+        if (binds[w].token == token) binds[w].token = 0;
     void *msg = message();
     begin(msg);
     put_int(msg, token);

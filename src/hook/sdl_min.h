@@ -45,5 +45,7 @@ enum {
     SDL_CONTROLLER_AXIS_RIGHTY = 3,
 };
 
+enum { SDL_CONTROLLER_BUTTON_BACK = 4 };
+
 
 #endif

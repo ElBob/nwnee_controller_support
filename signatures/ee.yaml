@@ -175,3 +175,6 @@ signatures:
   nui_window_on_closed:    # Nui::JSON::JsonWindow::OnClosed(): queues the "close" event
     note: F32
     symbol: _ZN3Nui4JSON10JsonWindow8OnClosedEv
+  gui_scale:               # static float CAurora::GetGUIScale(): screen pixels per GUI unit
+    note: F33
+    symbol: _ZN7CAurora11GetGUIScaleEv

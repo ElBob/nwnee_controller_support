@@ -626,3 +626,12 @@ int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap) {
     if (*u.p) u.ok = false;
     return u.ok ? (int)u.n : -1;
 }
+
+int nwpad_picker_select(nwpad_vec2 stick, int current) {
+    if (nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return current;
+    /* Bearing clockwise from up (+y), in sectors centred on each slot. */
+    float deg = atan2f(stick.x, stick.y) * 180.0f / (float)M_PI;
+    if (deg < 0) deg += 360.0f;
+    float sector = 360.0f / NWPAD_PICKER_SLOTS;
+    return (int)floorf((deg + sector / 2) / sector) % NWPAD_PICKER_SLOTS;
+}

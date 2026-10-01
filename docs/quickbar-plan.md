@@ -1,6 +1,6 @@
 # Quickbar picker plan
 
-Status: **draft** (2026-09-30). Written with the test box off: the reverse-engineering targets below are what we expect to find, not findings. Decisions for Robert are in §3.
+Status: **Q0–Q2 done** (2026-09-30). Robert at the Q0 checkpoint: D1 hold a back grip + right trackpad, release to use; D2 a client-side NUI window (F32); D3 the visible bank (12); layout: radial ring; D4 the game's own button function. Q1 data (F31), client-side NUI (F32) and the picker prototype (F33) work on the test box. Next: Q3, the Deck bindings and playtest. Open: item icons, a remote-server check.
 
 ## 1. Goal
 
