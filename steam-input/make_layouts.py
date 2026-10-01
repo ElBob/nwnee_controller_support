@@ -7,7 +7,8 @@ The Xbox layout ports Robert's Deck layout, "Neverwinter Nights Console Port"
 (workshop 3095778009), to the Xbox pad. It keeps its buttons, and both sticks
 become gamepad joysticks, which nwpad needs: left stick moves, right stick
 turns the camera. The Xbox pad has no trackpad, so holding LB turns the right
-stick into the mouse.
+stick into the mouse. Holding the left stick click opens nwpad's quickbar
+picker (it sends Scroll Lock); LB and RB send [ and ] for its banks.
 """
 import os
 
@@ -27,8 +28,9 @@ def block(ind, name, body):
 
 
 def press(ind, source, binding):
-    """One input with a single Full_Press binding."""
-    act = block(ind + 3, "bindings", kv(ind + 4, "binding", binding))
+    """One input with a Full_Press binding (or a list of them, all at once)."""
+    bindings = binding if isinstance(binding, list) else [binding]
+    act = block(ind + 3, "bindings", "".join(kv(ind + 4, "binding", b) for b in bindings))
     body = block(ind + 1, "activators", block(ind + 2, "Full_Press", act)) + block(ind + 1, "disabled_activators", "")
     return block(ind, source, body)
 
@@ -56,15 +58,18 @@ def xbox():
             ("dpad_west", "key_press M, Show/Hide Map, , "),
         ]),
         # Both sticks as gamepad joysticks (a joystick_move group outputs the stick
-        # on its own side); clicks carry Tab and Space from the Deck's back grips.
-        group(2, "joystick_move", [("click", "key_press TAB, Highlight Objects, , ")]),
+        # on its own side). Holding the left stick click holds nwpad's picker key
+        # (Scroll Lock); the right stick picks. The right click carries Space.
+        group(2, "joystick_move", [("click", "key_press SCROLL_LOCK, Quickbar picker, , ")]),
         group(3, "joystick_move", [("click", "key_press SPACE, Pause, , ")]),
         group(4, "trigger", [("click", "mouse_button RIGHT, , ")]),
         group(5, "trigger", [("click", "mouse_button LEFT, , ")]),
         group(6, "switches", [
             ("button_escape", "key_press ESCAPE, Esc, , "),
             ("button_menu", "key_press G, Play and Pause, , "),
-            ("left_bumper", "mode_shift right_joystick 7"),
+            # While the picker is open, [ and ] change its bank (nwpad's picker-prev-key /
+            # picker-next-key); otherwise they're the game's.
+            ("left_bumper", ["mode_shift right_joystick 7", "key_press LEFT_BRACKET, Picker: previous bank, , "]),
             ("right_bumper", "key_press RIGHT_BRACKET, , "),
         ]),
         # Hold LB: the right stick is the mouse (the Deck's right trackpad).
@@ -81,7 +86,7 @@ def xbox():
         kv(3, "6", "switch active"),
         kv(3, "7", "right_joystick active modeshift"),
     ])))
-    head = (kv(1, "version", "3") + kv(1, "revision", "1") +
+    head = (kv(1, "version", "3") + kv(1, "revision", "2") +
             kv(1, "title", "NWN Console Port + nwpad (Xbox)") +
             kv(1, "description", "Left stick moves and right stick turns the camera through nwpad; "
                                  "hold LB to use the right stick as the mouse. Buttons from the "
