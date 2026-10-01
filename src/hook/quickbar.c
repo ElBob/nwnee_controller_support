@@ -2,6 +2,7 @@
 #include "quickbar.h"
 
 #include "sigs.h"
+#include "icons.h"
 #include "../core/nwpad_core.h"
 
 #include <stdio.h>
@@ -99,6 +100,12 @@ static void item_icon_parts(uint32_t oid, char parts[3][17]) {
     void *vptr = *(void **)icon;
     char *composite = nwpad_sig(NWPAD_SIG_COMPOSITE_ICON_VTABLE), *single = nwpad_sig(NWPAD_SIG_GUI_ICON_VTABLE);
     static const size_t at[] = {0x08, 0x48, 0x59};
+    char *layered = nwpad_sig(NWPAD_SIG_LAYERED_ICON_VTABLE), *armor = nwpad_sig(NWPAD_SIG_ARMOR_ICON_VTABLE);
+    if ((layered && vptr == layered + 0x10) || (armor && vptr == armor + 0x10)) {
+        /* Palette textures NUI can't draw: render them to an image (F35). */
+        if (!nwpad_icon_render_plt(icon, vptr == layered + 0x10 ? 'L' : 'A', parts[0])) parts[0][0] = '\0';
+        return;
+    }
     int count = composite && vptr == composite + 0x10 ? 3 : single && vptr == single + 0x10 ? 1 : 0;
     for (int k = 0; k < count; k++) {
         memcpy(parts[k], icon + at[k], 16);
@@ -165,3 +172,56 @@ bool nwpad_quickbar_use(int slot) {
     return true;
 }
 
+
+#ifdef NWPAD_DEBUG_SURFACES
+typedef void *(*player_fn)(void *app);
+typedef uint32_t (*equipped_fn)(void *creature, unsigned slot_bit);
+
+/* Debug: describe the icon object of the player's item in `slot_bit`: class,
+ * resrefs and colour count (F34). */
+void nwpad_quickbar_debug_equipped_icon(unsigned slot_bit, char *out, size_t cap) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    player_fn pc_of = (player_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_PLAYER_CREATURE);
+    equipped_fn equipped = (equipped_fn)nwpad_sig(NWPAD_SIG_CREATURE_EQUIPPED_ITEM);
+    void *pc = app_manager && *app_manager && pc_of ? pc_of(*(void **)*app_manager) : NULL;
+    uint32_t oid = pc && equipped ? equipped(pc, slot_bit) : 0x7f000000;
+    char *item = item_of(oid);
+    char *icon = item ? *(char **)(item + 0x258) : NULL;
+    if (!icon) {
+        snprintf(out, cap, "{\"oid\":%u,\"icon\":null}", oid);
+        return;
+    }
+    char *vptr = *(char **)icon;
+    const char *cls = vptr == (char *)nwpad_sig(NWPAD_SIG_LAYERED_ICON_VTABLE) + 0x10   ? "layered"
+                      : vptr == (char *)nwpad_sig(NWPAD_SIG_ARMOR_ICON_VTABLE) + 0x10   ? "armor"
+                      : vptr == (char *)nwpad_sig(NWPAD_SIG_COMPOSITE_ICON_VTABLE) + 0x10 ? "composite"
+                      : vptr == (char *)nwpad_sig(NWPAD_SIG_GUI_ICON_VTABLE) + 0x10     ? "single"
+                                                                                        : "?";
+    char name[128];
+    item_name(oid, name, sizeof name);
+    char esc[160];
+    nwpad_json_escape(esc, sizeof esc, name);
+    size_t n = (size_t)snprintf(out, cap, "{\"oid\":%u,\"name\":\"%s\",\"class\":\"%s\",\"refs\":[", oid, esc, cls);
+    size_t at[8], count = 0;
+    at[count++] = 0x08;
+    if (!strcmp(cls, "armor")) for (int k = 0; k < 6; k++) at[count++] = 0x48 + 0x11 * (size_t)k;
+    for (size_t k = 0; k < count && n < cap; k++) {
+        char ref[17];
+        memcpy(ref, icon + at[k], 16);
+        ref[16] = '\0';
+        nwpad_json_escape(esc, sizeof esc, ref);
+        n += (size_t)snprintf(out + n, cap - n, "%s\"%s\"", k ? "," : "", esc);
+    }
+    int colours = !strcmp(cls, "layered") ? *(int *)(icon + 0x48) : !strcmp(cls, "armor") ? *(int *)(icon + 0xb0) : 0;
+    uint16_t *table = !strcmp(cls, "layered") ? *(uint16_t **)(icon + 0x50) : !strcmp(cls, "armor") ? *(uint16_t **)(icon + 0xb8) : NULL;
+    if (n < cap) n += (size_t)snprintf(out + n, cap - n, "],\"colours\":[");
+    for (int k = 0; table && k < colours && k < 16 && n < cap; k++)
+        n += (size_t)snprintf(out + n, cap - n, "%s%u", k ? "," : "", table[k]);
+    char rendered[17] = "";
+    if (!strcmp(cls, "layered") || !strcmp(cls, "armor"))
+        nwpad_icon_render_plt(icon, !strcmp(cls, "layered") ? 'L' : 'A', rendered);
+    if (n < cap)
+        snprintf(out + n, cap - n, "],\"rendered\":\"%s\",\"served\":%zu}", rendered,
+                 rendered[0] ? nwpad_icon_debug_fetch(rendered) : 0);
+}
+#endif

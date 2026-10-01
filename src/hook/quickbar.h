@@ -23,6 +23,9 @@ typedef struct {
 bool nwpad_quickbar_read(nwpad_qb_slot out[NWPAD_QB_SLOTS]);
 /* The visible bank (0-2), or -1. */
 int nwpad_quickbar_bank(void);
+#ifdef NWPAD_DEBUG_SURFACES
+void nwpad_quickbar_debug_equipped_icon(unsigned slot_bit, char *out, size_t cap);
+#endif
 /* Use slot 0-35 as clicking it would. */
 bool nwpad_quickbar_use(int slot);
 

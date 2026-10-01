@@ -70,7 +70,7 @@ static void config_toml_path(char *out, size_t cap) {
 }
 
 /* The game's user directory: its -userdirectory argument, else the default. */
-static void user_directory(char *out, size_t cap) {
+void nwpad_user_directory(char *out, size_t cap) {
     size_t len = 0;
     char *cmd = slurp("/proc/self/cmdline", &len);
     if (cmd) {
@@ -120,7 +120,7 @@ void nwpad_settings_load(nwpad_config *cfg) {
     }
     char toml_path[4096], dir[4000], settings[4096];
     config_toml_path(toml_path, sizeof toml_path);
-    user_directory(dir, sizeof dir);
+    nwpad_user_directory(dir, sizeof dir);
     snprintf(settings, sizeof settings, "%s/settings.tml", dir);
 
     char *text = slurp(settings, NULL);

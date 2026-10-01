@@ -323,8 +323,20 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Icon classes:** `CCompositeIcon` (vtable `_ZTV14CCompositeIcon`): three part images, CResRefs at `+0x08` (bottom), `+0x48` (middle), `+0x59` (top), 16 chars each, NUL bytes at `+0x58`/`+0x69`; used for weapons, and at runtime also for the test character's potion. `CGuiIcon`: one image at `+0x08` (`CGuiIcon::Initialize` copies the CResRef there). `CLayeredIcon`: one image at `+0x08` plus per-part colours (cloaks, helmets: coloured PLT textures; not yet seen at runtime). `CArmorIcon`: built from about a dozen body-part models with colours; no single image.
 - **Names:** `CNWBaseItem::GetIconResRef(part, model)` formats `i<base prefix>_<part>_<model:03d>` for multi-part items (part `B`/`M`/`T`) or a single-image form; case as stored (e.g. `iWBwXl_B_011`, `iWSwDg_M_021`, `iit_potion_T_032`).
 - **Runtime:** the three parts drawn as NUI draw-list images in the same rect, bottom to top, reproduce the game's icon (crossbow, dagger, potion). Inventory icons are taller than square; `image_aspect` 0 (fit) keeps them whole.
-- **Open:** `CLayeredIcon` (does NUI tint PLT textures?) and `CArmorIcon` (armor shows its name for now).
+- **Open:** superseded by F35 (`CLayeredIcon`, `CArmorIcon`).
 - Confidence: Ghidra + runtime (`quickbar` command `parts`, live test).
+
+### F35: Palette-texture (PLT) icons: armor, cloaks, helmets
+- Binary / hash: nwmain-linux 6d19c39b
+- **NUI can't draw PLTs:** `nk_loadimg` logs `failed to load texture '<plt>' with ANY, no compatible format found`. nwpad renders them to TGA itself.
+- **Icon data:** `CLayeredIcon`: PLT resref `+0x08`, colour count `+0x48`, `uint16` colours `+0x50` (one per PLT layer). `CArmorIcon`: up to six PLT resrefs at `+0x48`, 0x11 apart (`+0x08` repeats the first); colour count `+0xb0`, base colours `+0xb8`, optional per-part colours `+0xc0` (count × 6; `LoadArmorLayeredIconModel` uses part k's row when present); parts are layered in order on one icon model (`s_pReplacedTexNames`), missing ones skipped (`CExoResMan::Exists(ref, 6)`).
+- **Colouring (the engine's):** `AurSetPalette(i, name)` stacks the palettes at 256 rows each: 0 `pal_skin01`, 1 `pal_hair01`, 2 `pal_armor01`, 3 `pal_armor02`, 4 `pal_cloth01`, 5 `pal_leath01`, 6 `pal_tattoo01` (256 × 176 32-bit TGAs, bottom-up, flipped on load); `Material::ReplaceTexturePLT` passes colour / 1792 (= 7 × 256) to the shader. So a colour value is `palette << 8 | row`, and a PLT pixel (shade, layer) is palette[v >> 8] row (v & 0xff), column shade. Shade 255 has alpha 0 (transparent background).
+- **PLT format:** `PLT V1  `, u32 10 (layers), u32 0, u32 width, u32 height, then width × height (shade, layer) byte pairs, rows bottom to top. Armor and cloak icons are 64 × 128, helmets 64 × 64.
+- **Raw resources:** `CExoResMan::Get(ret, resman, CResRef, type)` returns `shared_ptr<DataBlock>`; the DataBlock holds a `shared_ptr` to `{data, size, ...}`; release the returned control block with `_Sp_counted_base::_M_release`.
+- **Serving images:** `CExoResMan::AddKeyTable(id, name, 2 /* directory */, dynamic_reload, filter)` with name `TEMPCLIENT:nwpadicons` (an `ALIAS:subdir` name resolved through `CExoAliasList::GetAliasPath` at `*(g_pExoBase+0x20)`; `TEMPCLIENT` is `<userdir>/tempclient`). Adding a table with a name that exists rebuilds it (`RebuildTable`), which is how new files become visible. `CExoString`'s second field is the length without the NUL; passing length + 1 made the table silently fail (`BuildNewTable` → 0). A plain absolute path isn't an alias and scanned an unrelated directory (duplicate-resource errors).
+- **Runtime:** the Performer's Outfit, Pot Helmet and Cloak of the Bat render pixel-for-pixel like the game's inventory icons; NUI draws them from `TEMPCLIENT:nwpadicons` (live test `test_icons.py`; picker screenshot). `CreateItemOnObject` fails in the test module; `CreateObject` at the player's location + pick up + equip works (magic items must be identified).
+- **Open:** per-part colours (no test item yet); the game may clear `tempclient`, after which icons are re-rendered on the next read.
+- Confidence: Ghidra + runtime.
 
 ## Conventions to confirm
 

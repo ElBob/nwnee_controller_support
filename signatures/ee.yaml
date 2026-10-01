@@ -184,3 +184,25 @@ signatures:
   gui_icon_vtable:         # vtable for CGuiIcon: a single-image icon
     note: F34
     symbol: _ZTV8CGuiIcon
+  creature_equipped_item:  # unsigned CNWCCreature::GetEquippedItemID(unsigned slot_bit) (head 0x1, chest 0x2, cloak 0x40)
+    note: F34
+    symbol: _ZN12CNWCCreature17GetEquippedItemIDEj
+    debug: true
+  layered_icon_vtable:     # vtable for CLayeredIcon: one PLT texture + colours (cloaks, helmets)
+    note: F34
+    symbol: _ZTV12CLayeredIcon
+  armor_icon_vtable:       # vtable for CArmorIcon: up to six PLT textures + colours
+    note: F34
+    symbol: _ZTV10CArmorIcon
+  res_man:                 # CExoResMan* global
+    note: F35
+    symbol: g_pExoResMan
+  res_get:                 # shared_ptr<DataBlock{data, size}> CExoResMan::Get(CResRef const&, unsigned short type)
+    note: F35
+    symbol: _ZN10CExoResMan3GetERK7CResReft
+  res_add_key_table:       # int CExoResMan::AddKeyTable(unsigned id, CExoString const& name, unsigned type, int dynamic_reload, filter); same name again rebuilds it
+    note: F35
+    symbol: _ZN10CExoResMan11AddKeyTableEjRK10CExoStringjiPFbP12CExoKeyTableRK7CResReftE
+  shared_release:          # std::_Sp_counted_base<_S_atomic>::_M_release() (to drop Get's shared_ptr)
+    note: F35
+    symbol: _ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv

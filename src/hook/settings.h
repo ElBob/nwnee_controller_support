@@ -12,6 +12,11 @@
 
 #include "../core/nwpad_core.h"
 
+#include <stddef.h>
+
+/* The game's user directory: its -userdirectory argument, else the default. */
+void nwpad_user_directory(char *out, size_t cap);
+
 /* Fill cfg. Call from the library constructor, before the game starts. */
 void nwpad_settings_load(nwpad_config *cfg);
 

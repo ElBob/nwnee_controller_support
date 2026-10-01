@@ -22,6 +22,7 @@
 #include "quickbar.h"
 #include "nui.h"
 #include "picker.h"
+#include "icons.h"
 extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
@@ -311,6 +312,12 @@ static void control_handler(const char *request, char *out, size_t cap) {
             ok = nwpad_nui_destroy((int)token);
         snprintf(out, cap, "{\"ok\":%s,\"events_pending\":%s,\"windows\":%d,\"size\":%u}", ok ? "true" : "false",
                  nwpad_nui_events_pending() ? "true" : "false", nwpad_nui_window_count(), nwpad_nui_last_size);
+    } else if (strcmp(cmd, "equipped_icon") == 0) {
+        /* {"cmd":"equipped_icon","slot_bit":1}: the player's equipped item's icon (debug, F34) */
+        double v;
+        char desc[1024];
+        nwpad_quickbar_debug_equipped_icon(nwpad_json_get_number(request, "slot_bit", &v) ? (unsigned)v : 2, desc, sizeof desc);
+        snprintf(out, cap, "{\"ok\":true,\"icon\":%s}", desc);
     } else if (strcmp(cmd, "quickbar_use") == 0) {
         /* {"cmd":"quickbar_use","slot":0-35} */
         double v;

@@ -1,6 +1,6 @@
 # Quickbar picker plan
 
-Status: **Q0–Q2 done** (2026-09-30). Robert at the Q0 checkpoint: D1 hold a back grip + right trackpad, release to use; D2 a client-side NUI window (F32); D3 the visible bank (12); layout: radial ring; D4 the game's own button function. Q1 data (F31), client-side NUI (F32) and the picker prototype (F33) work on the test box. Next: Q3, the Deck bindings and playtest. Open: item icons, a remote-server check.
+Status: **Q0–Q2 done** (2026-09-30). Robert at the Q0 checkpoint: D1 hold a back grip + right trackpad, release to use; D2 a client-side NUI window (F32); D3 the visible bank (12); layout: radial ring; D4 the game's own button function. Q1 data (F31), client-side NUI (F32) and the picker prototype (F33) work on the test box. Next: Q3, the Deck bindings and playtest. Item icons done (F34 composite, F35 PLT: armor, cloaks, helmets). Open: a remote-server check.
 
 ## 1. Goal
 
