@@ -5,6 +5,7 @@
 #define NWPAD_QUICKBAR_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define NWPAD_QB_SLOTS 36
@@ -13,7 +14,8 @@ typedef struct {
     uint8_t type;   /* CGuiQuickButton type: 0 empty, 1 item, 2 spell, 3 skill, 4 feat, ... (F31) */
     uint64_t data;  /* type-specific id word (spell: id | class and metamagic bits) */
     uint32_t item;  /* item object id, for items */
-    char icon[17];  /* icon resref */
+    char icon[17];  /* icon resref (not items) */
+    char parts[3][17]; /* items: icon images, bottom to top (one, or three for composite icons); "" unused */
     char name[128]; /* as the game names it ("Empowered Fireball", item name, feat name) */
 } nwpad_qb_slot;
 

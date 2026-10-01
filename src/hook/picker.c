@@ -38,7 +38,7 @@ static int rect_json(char *out, size_t cap, float cx, float cy, float size) {
 }
 
 static const nwpad_qb_slot *ring_slot(int i) { return &pk.slots[pk.bank * NWPAD_PICKER_SLOTS + i]; }
-static bool has_icon(const nwpad_qb_slot *s) { return s->type != 0 && s->icon[0]; }
+static bool has_icon(const nwpad_qb_slot *s) { return s->type != 0 && (s->icon[0] || s->parts[0][0]); }
 
 /* Window centre in GUI units: the screen is g_pGuiMan's size over the GUI scale. */
 static void screen_centre(float *x, float *y) {
@@ -76,13 +76,18 @@ static bool build(void) {
             n += (size_t)snprintf(json + n, sizeof json - n,
                 ",{\"type\":2,\"enabled\":true,\"color\":{\"r\":255,\"g\":255,\"b\":255,\"a\":40},\"fill\":false,"
                 "\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,\"rect\":%s}", rect);
-        } else if (has_icon(s)) {
-            nwpad_json_escape(esc, sizeof esc, s->icon);
-            n += (size_t)snprintf(json + n, sizeof json - n,
-                ",{\"type\":5,\"enabled\":true,\"color\":null,\"fill\":null,\"line_thickness\":null,\"order\":1,"
-                "\"render\":0,\"arrayBinds\":false,\"image\":\"%s\",\"rect\":{\"bind\":\"r%d\"},"
-                "\"image_aspect\":0,\"image_halign\":0,\"image_valign\":0}", esc, i);
-        } else {  /* no icon resref (items, F31): its name, small */
+        } else if (has_icon(s)) { /* one image, or an item's parts bottom to top (F34) */
+            const char *refs[3] = {s->icon[0] ? s->icon : s->parts[0], s->icon[0] ? "" : s->parts[1],
+                                   s->icon[0] ? "" : s->parts[2]};
+            for (int k = 0; k < 3 && n < sizeof json; k++) {
+                if (!refs[k][0]) continue;
+                nwpad_json_escape(esc, sizeof esc, refs[k]);
+                n += (size_t)snprintf(json + n, sizeof json - n,
+                    ",{\"type\":5,\"enabled\":true,\"color\":null,\"fill\":null,\"line_thickness\":null,\"order\":1,"
+                    "\"render\":0,\"arrayBinds\":false,\"image\":\"%s\",\"rect\":{\"bind\":\"r%d\"},"
+                    "\"image_aspect\":0,\"image_halign\":0,\"image_valign\":0}", esc, i);
+            }
+        } else {  /* no icon images (armor): its name, small */
             char shortname[12];
             snprintf(shortname, sizeof shortname, "%s", s->name);
             nwpad_json_escape(esc, sizeof esc, shortname);

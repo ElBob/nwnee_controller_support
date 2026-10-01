@@ -23,4 +23,8 @@ def test_quickbar_contents(ctl):
         s = slots[slot]
         assert (s["type"], s["name"], s["icon"]) == (kind, name, icon), s
     assert slots[8]["data"] & 0xFFFF == 0x66  # Mage Armor's spell id
+    # Item icons: composite parts, bottom to top (re-notes F34)
+    assert slots[5]["parts"] == ["iWSwDg_B_011", "iWSwDg_M_021", "iWSwDg_T_011"], slots[5]
+    assert slots[6]["parts"][0].startswith("iit_potion_B_"), slots[6]
+    assert slots[8]["parts"] == ["", "", ""]
     assert sum(1 for s in slots.values() if s["type"] == 0) == 23

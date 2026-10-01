@@ -2,6 +2,7 @@
 #include "quickbar.h"
 
 #include "sigs.h"
+#include "../core/nwpad_core.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -82,6 +83,29 @@ static void spell_name(uint64_t data, char *out, size_t cap) {
     snprintf(out, cap, "%s%s%s", prefix, prefix[0] ? " " : "", name);
 }
 
+static void *item_of(uint32_t oid) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    item_by_id_fn by_id = (item_by_id_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_ITEM_BY_ID);
+    return app_manager && *app_manager && by_id ? by_id(*(void **)*app_manager, oid) : NULL;
+}
+
+/* An item's icon images, as its quickbar icon (CNWCItem+0x258, built by
+ * CNWCItem::UpdateIcons) holds them (F34): CCompositeIcon parts at +0x08 (bottom),
+ * +0x48 (middle), +0x59 (top); a plain CGuiIcon has one at +0x08. Others (armor) none. */
+static void item_icon_parts(uint32_t oid, char parts[3][17]) {
+    char *item = item_of(oid);
+    char *icon = item ? *(char **)(item + 0x258) : NULL;
+    if (!icon) return;
+    void *vptr = *(void **)icon;
+    char *composite = nwpad_sig(NWPAD_SIG_COMPOSITE_ICON_VTABLE), *single = nwpad_sig(NWPAD_SIG_GUI_ICON_VTABLE);
+    static const size_t at[] = {0x08, 0x48, 0x59};
+    int count = composite && vptr == composite + 0x10 ? 3 : single && vptr == single + 0x10 ? 1 : 0;
+    for (int k = 0; k < count; k++) {
+        memcpy(parts[k], icon + at[k], 16);
+        parts[k][16] = '\0';
+    }
+}
+
 static void item_name(uint32_t oid, char *out, size_t cap) {
     void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
     item_by_id_fn by_id = (item_by_id_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_ITEM_BY_ID);
@@ -111,6 +135,7 @@ bool nwpad_quickbar_read(nwpad_qb_slot out[NWPAD_QB_SLOTS]) {
             spell_name(s->data, s->name, sizeof s->name);
         } else if (s->type == QB_ITEM) {
             item_name(s->item, s->name, sizeof s->name);
+            item_icon_parts(s->item, s->parts);
         } else if (s->type == QB_COMMAND) {
             exo_string *label = (exo_string *)(b + BUTTON_LABEL);
             snprintf(s->name, sizeof s->name, "%s", label->ptr ? label->ptr : "");
@@ -139,3 +164,4 @@ bool nwpad_quickbar_use(int slot) {
     left(button(p, slot));
     return true;
 }
+

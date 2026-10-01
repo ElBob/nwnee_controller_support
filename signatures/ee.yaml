@@ -178,3 +178,9 @@ signatures:
   gui_scale:               # static float CAurora::GetGUIScale(): screen pixels per GUI unit
     note: F33
     symbol: _ZN7CAurora11GetGUIScaleEv
+  composite_icon_vtable:   # vtable for CCompositeIcon: item icons made of bottom/middle/top parts
+    note: F34
+    symbol: _ZTV14CCompositeIcon
+  gui_icon_vtable:         # vtable for CGuiIcon: a single-image icon
+    note: F34
+    symbol: _ZTV8CGuiIcon

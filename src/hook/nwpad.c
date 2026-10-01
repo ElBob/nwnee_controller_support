@@ -283,13 +283,15 @@ static void control_handler(const char *request, char *out, size_t cap) {
         }
         int n = snprintf(out, cap, "{\"ok\":true,\"bank\":%d,\"slots\":[", nwpad_quickbar_bank());
         for (int i = 0; i < NWPAD_QB_SLOTS && n > 0 && (size_t)n < cap; i++) {
-            char name[300], icon[120];
+            char name[300], icon[120], parts[3][120];
+            for (int k = 0; k < 3; k++) nwpad_json_escape(parts[k], sizeof parts[k], slots[i].parts[k]);
             nwpad_json_escape(name, sizeof name, slots[i].name);
             nwpad_json_escape(icon, sizeof icon, slots[i].icon);
             n += snprintf(out + n, cap - (size_t)n,
-                          "%s{\"slot\":%d,\"type\":%u,\"data\":%llu,\"item\":%u,\"icon\":\"%s\",\"name\":\"%s\"}",
+                          "%s{\"slot\":%d,\"type\":%u,\"data\":%llu,\"item\":%u,\"icon\":\"%s\",\"name\":\"%s\","
+                          "\"parts\":[\"%s\",\"%s\",\"%s\"]}",
                           i ? "," : "", i, slots[i].type, (unsigned long long)slots[i].data, slots[i].item, icon,
-                          name);
+                          name, parts[0], parts[1], parts[2]);
         }
         if (n > 0 && (size_t)n < cap) snprintf(out + n, cap - (size_t)n, "]}");
     } else if (strcmp(cmd, "nui_create") == 0 || strcmp(cmd, "nui_bind") == 0 ||

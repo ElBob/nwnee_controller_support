@@ -317,6 +317,15 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Runtime:** the ring (12 icons in a client-side NUI window, draw-list images, circles and text, `accepts_input: false`, transparent, no title) renders natively and updates through binds; no NUI message for nwpad's tokens reaches the local server across open, selection changes and close (live test `test_picker.py`).
 - Confidence: runtime on the test box (Xbox-pad path emulated by the control socket's virtual stick).
 
+### F34: Item icons
+- Binary / hash: nwmain-linux 6d19c39b
+- **Where the quickbar gets them:** `CGuiQuickButton::SetButtonItem` (0x6b1270) calls `SetIcon(item+0x258, other+0x258)`: each `CNWCItem` carries a ready-built `CGuiIcon*` at `+0x258` (0x258 = 600), made by `CNWCItem::UpdateIcons` (0x7cbc50) from the base item's model type (`CNWBaseItem+0x16`, base item from `CNWBaseItemArray::GetBaseItem(*(g_pRules+0x20), item+0x40)`).
+- **Icon classes:** `CCompositeIcon` (vtable `_ZTV14CCompositeIcon`): three part images, CResRefs at `+0x08` (bottom), `+0x48` (middle), `+0x59` (top), 16 chars each, NUL bytes at `+0x58`/`+0x69`; used for weapons, and at runtime also for the test character's potion. `CGuiIcon`: one image at `+0x08` (`CGuiIcon::Initialize` copies the CResRef there). `CLayeredIcon`: one image at `+0x08` plus per-part colours (cloaks, helmets: coloured PLT textures; not yet seen at runtime). `CArmorIcon`: built from about a dozen body-part models with colours; no single image.
+- **Names:** `CNWBaseItem::GetIconResRef(part, model)` formats `i<base prefix>_<part>_<model:03d>` for multi-part items (part `B`/`M`/`T`) or a single-image form; case as stored (e.g. `iWBwXl_B_011`, `iWSwDg_M_021`, `iit_potion_T_032`).
+- **Runtime:** the three parts drawn as NUI draw-list images in the same rect, bottom to top, reproduce the game's icon (crossbow, dagger, potion). Inventory icons are taller than square; `image_aspect` 0 (fit) keeps them whole.
+- **Open:** `CLayeredIcon` (does NUI tint PLT textures?) and `CArmorIcon` (armor shows its name for now).
+- Confidence: Ghidra + runtime (`quickbar` command `parts`, live test).
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.
