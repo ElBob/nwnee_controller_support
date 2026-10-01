@@ -322,6 +322,29 @@ static void control_handler(const char *request, char *out, size_t cap) {
         char desc[1024];
         nwpad_quickbar_debug_equipped_icon(nwpad_json_get_number(request, "slot_bit", &v) ? (unsigned)v : 2, desc, sizeof desc);
         snprintf(out, cap, "{\"ok\":true,\"icon\":%s}", desc);
+    } else if (strcmp(cmd, "nui_bench") == 0) {
+        /* {"cmd":"nui_bench","token":n,"name":"geo","count":n,"x0":..,"dx":..,"y":..,"w":..,"h":..}:
+         * time `count` geometry binds (quickbar plan: animation spike) */
+        double token = 0, count = 1, x0 = 0, dx = 1, y = 0, w = 100, h = 100;
+        char name[64] = "geo", value[160];
+        nwpad_json_get_number(request, "token", &token);
+        nwpad_json_get_number(request, "count", &count);
+        nwpad_json_get_number(request, "x0", &x0);
+        nwpad_json_get_number(request, "dx", &dx);
+        nwpad_json_get_number(request, "y", &y);
+        nwpad_json_get_number(request, "w", &w);
+        nwpad_json_get_number(request, "h", &h);
+        nwpad_json_get_string(request, "name", name, sizeof name);
+        uint64_t t0 = now_ns(), worst = 0;
+        int ok = 0;
+        for (int i = 0; i < (int)count; i++) {
+            snprintf(value, sizeof value, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", x0 + dx * i, y, w, h);
+            uint64_t a = now_ns();
+            ok += nwpad_nui_bind((int)token, name, value);
+            if (now_ns() - a > worst) worst = now_ns() - a;
+        }
+        snprintf(out, cap, "{\"ok\":true,\"binds_ok\":%d,\"avg_us\":%.1f,\"worst_us\":%.1f}", ok,
+                 (double)(now_ns() - t0) / 1000.0 / (count > 0 ? count : 1), (double)worst / 1000.0);
     } else if (strcmp(cmd, "quickbar_use") == 0) {
         /* {"cmd":"quickbar_use","slot":0-35} */
         double v;

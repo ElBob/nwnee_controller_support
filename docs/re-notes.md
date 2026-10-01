@@ -315,6 +315,7 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Centring:** NUI geometry is in GUI units: screen size (`g_pGuiMan+0xb8/+0xbc`, pixels) over `CAurora::GetGUIScale()` (static, returns float).
 - **Using a button:** `CGuiQuickButton::HandleLeftButton` on any of the 36 buttons acts as clicking it: modes toggle at once (Stealth Mode, runtime), targeted spells enter the game's targeting mode as a click would.
 - **Runtime:** the ring (12 icons in a client-side NUI window, draw-list images, circles and text, `accepts_input: false`, transparent, no title) renders natively and updates through binds; no NUI message for nwpad's tokens reaches the local server across open, selection changes and close (live test `test_picker.py`).
+- **Animation spike (2026-10-01):** a bind costs ~5 µs (worst 19 µs; debug `nui_bench`); moving a window by its bound `geometry` once per frame for 2 s ran at 61 updates/s with nwpad's frame cost unchanged and nothing sent to the server. But NUI clamps windows to the screen: geometry at x = −120 or past the right edge is drawn fully on screen at the edge. `edge_constraint` only adds margins (`nw_inc_nui`), so a window can't slide off-screen; sliding rings must move inside one window (draw-list rects by bind) instead.
 - Confidence: runtime on the test box (Xbox-pad path emulated by the control socket's virtual stick).
 
 ### F34: Item icons
