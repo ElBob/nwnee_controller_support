@@ -15,6 +15,7 @@
 #define ICON 48.0f
 #define ICON_PICKED 68.0f
 #define NAME_H 36.0f
+#define PLATE_W 200.0f /* the dark plate behind the name */
 #define PAD 28.0f       /* room for NUI's own padding (else it adds scrollbars) */
 
 static struct {
@@ -60,13 +61,23 @@ static bool build(void) {
         "{\"version\":1,\"title\":false,\"resizable\":false,\"collapsed\":false,\"closable\":false,"
         "\"transparent\":true,\"border\":false,\"accepts_input\":false,\"size_constraint\":null,"
         "\"edge_constraint\":null,\"font\":\"\",\"geometry\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f},"
-        "\"root\":{\"type\":\"col\",\"label\":null,\"value\":null,\"children\":["
-        "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"width\":%.1f,\"height\":%.1f,\"draw_list_scissor\":false,"
+        /* The ring is the root column's draw list; its children put the name in the
+         * middle: spacer, label, spacer. The dark disc is drawn before them. */
+        "\"root\":{\"type\":\"col\",\"label\":null,\"value\":null,\"draw_list_scissor\":false,\"children\":["
+        "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f},"
+        "{\"type\":\"label\",\"label\":null,\"value\":{\"bind\":\"name\"},\"text_halign\":0,\"text_valign\":0,"
+        "\"height\":%.1f},"
+        "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f}],"
         "\"draw_list\":["
         "{\"type\":2,\"enabled\":true,\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":150},\"fill\":true,\"line_thickness\":1.0,"
-        "\"order\":1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}}",
-        cx - (SIZE + PAD) / 2, cy - (SIZE + PAD) / 2, SIZE + PAD, SIZE + NAME_H + PAD, SIZE, SIZE - NAME_H,
-        SIZE / 2 - RING - 50, SIZE / 2 - RING - 50, 2 * RING + 100, 2 * RING + 100);
+        "\"order\":-1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}},"
+        /* a darker plate behind the name: the character stands at the screen centre */
+        "{\"type\":7,\"enabled\":{\"bind\":\"hl_on\"},\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":200},\"fill\":true,"
+        "\"line_thickness\":1.0,\"order\":-1,\"render\":0,\"arrayBinds\":false,"
+        "\"rect\":{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}}",
+        cx - (SIZE + PAD) / 2, cy - (SIZE + PAD) / 2, SIZE + PAD, SIZE + PAD, (SIZE - NAME_H) / 2, NAME_H,
+        (SIZE - NAME_H) / 2, SIZE / 2 - RING - 50, SIZE / 2 - RING - 50, 2 * RING + 100, 2 * RING + 100,
+        SIZE / 2 - PLATE_W / 2, SIZE / 2 - NAME_H / 2 - 2, PLATE_W, NAME_H);
     for (int i = 0; i < NWPAD_PICKER_SLOTS && n < sizeof json; i++) {
         const nwpad_qb_slot *s = ring_slot(i);
         float x, y;
@@ -100,9 +111,7 @@ static bool build(void) {
     if (n < sizeof json)
         n += (size_t)snprintf(json + n, sizeof json - n,
             ",{\"type\":2,\"enabled\":{\"bind\":\"hl_on\"},\"color\":{\"r\":235,\"g\":190,\"b\":80,\"a\":255},\"fill\":false,"
-            "\"line_thickness\":3.0,\"order\":1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"bind\":\"hl\"}}]},"
-            "{\"type\":\"label\",\"label\":null,\"value\":{\"bind\":\"name\"},\"text_halign\":0,\"text_valign\":0,"
-            "\"height\":%.1f}]}}", NAME_H);
+            "\"line_thickness\":3.0,\"order\":1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"bind\":\"hl\"}}]}}");
     if (n >= sizeof json || !nwpad_nui_create(TOKEN, "nwpad_picker", json)) return false;
     for (int i = 0; i < NWPAD_PICKER_SLOTS; i++) {
         if (!has_icon(ring_slot(i))) continue; /* only icons have a rect bind */
