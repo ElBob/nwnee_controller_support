@@ -28,7 +28,6 @@ typedef struct {
     char picker_next_key[32];
     char picker_confirm_key[32]; /* while open: use the highlighted button and close */
     char picker_cancel_key[32];  /* while open: close without using anything */
-    bool picker_toggle;       /* true: a press opens, another (or cancel) closes; false: held */
 } nwpad_config;
 
 void nwpad_config_defaults(nwpad_config *cfg);

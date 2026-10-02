@@ -40,8 +40,7 @@ centre. Press the confirm key (Enter; right stick click in the layout) to use it
 exactly as clicking it would, or the cancel key (Escape; View) or the picker key
 again to close it. The other two banks show as smaller wheels on either side; `[`
 and `]` (LB / RB) make the previous or next one the active wheel. Enter, Escape, `[`
-and `]` are only nwpad's while the picker is open. With `picker-mode = "hold"` the
-picker is open while the key is held, and letting go uses the pick.
+and `]` are only nwpad's while the picker is open.
 
 ## Settings
 
@@ -58,7 +57,7 @@ you change them. Save keeps them, Cancel undoes them.
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. The last ten keys
+runs with nwpad; the game keeps it when it saves its own settings. The last nine keys
 below are only in the file; edit it while the game is closed.
 
 ```toml
@@ -70,7 +69,6 @@ below are only in the file; edit it while the game is closed.
 	picker-cancel-key = "Escape"
 	picker-confirm-key = "Return"
 	picker-key = "ScrollLock"
-	picker-mode = "toggle"
 	picker-next-key = "]"
 	picker-prev-key = "["
 	[nwpad.camera]
@@ -86,8 +84,7 @@ below are only in the file; edit it while the game is closed.
 |---|---|---|---|
 | `enabled` | true | | Controller support on/off. Off, the library stays loaded but idle: no stick input, no cursor hiding |
 | `hide-cursor` | true | | Hide the cursor while the sticks are in use |
-| `picker-key` | "ScrollLock" | | Key held to open the quickbar picker (an SDL key name, e.g. "F13", "Insert"; "" turns it off). nwpad takes the key; the game never sees it |
-| `picker-mode` | "toggle" | | "toggle": a press opens, confirm/cancel (or another press) closes; "hold": open while held, letting go uses the pick |
+| `picker-key` | "ScrollLock" | | Key that opens (and closes) the quickbar picker (an SDL key name, e.g. "F13", "Insert"; "" turns it off). nwpad takes the key; the game never sees it |
 | `picker-confirm-key` / `picker-cancel-key` | "Return" / "Escape" | | While the picker is open: use the highlighted button / close without using |
 | `picker-prev-key` / `picker-next-key` | "[" / "]" | | While the picker is open: make the previous / next quickbar bank the active wheel |
 | `cursor-rehide-ms` | 2000 | 0–10000 | Moving the mouse shows the cursor; it hides again once the mouse is still and a stick has been held this long without a break (0: at once) |

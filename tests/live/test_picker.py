@@ -1,6 +1,7 @@
-"""Quickbar picker (quickbar plan Q2): holding the picker input shows the visible
-bank as a ring, the right stick highlights a button, releasing uses it; the right
-stick doesn't move the camera meanwhile, and nothing reaches the server."""
+"""Quickbar picker (quickbar plan Q2), like Baldur's Gate 3's radial: opening it
+shows the quickbar banks as wheels, the right stick highlights a button, confirming
+uses it; the right stick doesn't move the camera meanwhile, and nothing reaches the
+server."""
 import os
 import subprocess
 import time
@@ -22,16 +23,17 @@ def _stealth_off(ctl):
 
 
 def _pick(ctl, rx, ry):
-    ctl("stick", picker=1)
+    ctl("picker", action="open")
     time.sleep(0.4)
     p = ctl("state")["picker"]
     assert p["open"] and p["selected"] == -1, p
     yaw0 = ctl("state")["camera"]["yaw"]
-    ctl("stick", picker=1, rx=rx, ry=ry)
+    ctl("stick", rx=rx, ry=ry)
     time.sleep(0.5)
     s = ctl("state")
     assert abs(s["camera"]["yaw"] - yaw0) < 0.5, "the right stick turned the camera while picking"
     ctl("release")
+    ctl("picker", action="confirm")
     time.sleep(0.6)
     return s["picker"], ctl("state")["picker"]
 
@@ -45,11 +47,11 @@ def test_pick_and_use(game, ctl):
     assert not _server_heard_nwpad(game)
 
 
-def test_untouched_cancels(game, ctl):
+def test_confirm_without_pick_uses_nothing(game, ctl):
     before = ctl("state")["picker"]["last_used"]
-    ctl("stick", picker=1)
+    ctl("picker", action="open")
     time.sleep(0.4)
-    ctl("release")
+    ctl("picker", action="confirm")
     time.sleep(0.4)
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == before, p
@@ -67,8 +69,7 @@ def _key(action, key="Scroll_Lock"):
 
 
 def test_picker_key_toggle(game, ctl):
-    """Toggle mode (the default, like Baldur's Gate 3's radial): a press of the picker
-    key (ScrollLock) opens the picker and it stays open; the confirm key (Enter) uses
+    """A press of the picker key (ScrollLock) opens the picker and it stays open; the confirm key (Enter) uses
     the highlighted button, the cancel key (Escape) or another press closes it. The
     game sees none of these keys while the picker is open, and Enter/Escape otherwise."""
     _stealth_off(ctl)
@@ -117,7 +118,7 @@ def test_bank_wheels(game, ctl):
     assert ctl("state")["events"]["filtered"] == filtered0
     assert ctl("quickbar_bank", bank=1)["ok"]  # the quickbar shows bank 1
     try:
-        ctl("stick", picker=1)
+        ctl("picker", action="open")
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 1
         _key("key", "bracketright")  # open: next bank (wraps to 2)
@@ -128,13 +129,15 @@ def test_bank_wheels(game, ctl):
         _key("key", "bracketleft")
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 0
-        ctl("stick", picker=1, rx=1.0)  # bank 0, slot 3: Stealth Mode
+        ctl("stick", rx=1.0)  # bank 0, slot 3: Stealth Mode
         time.sleep(0.5)
         ctl("release")
+        ctl("picker", action="confirm")
         time.sleep(0.6)
         assert ctl("state")["picker"]["last_used"] == STEALTH  # bank 0 * 12 + 3
     finally:
         ctl("release")
+        ctl("picker", action="cancel")
         ctl("quickbar_bank", bank=0)
         _stealth_off(ctl)
     assert not _server_heard_nwpad(game)

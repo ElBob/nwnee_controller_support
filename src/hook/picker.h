@@ -1,10 +1,9 @@
-/* The quickbar picker (quickbar plan Q2): while the picker input is held, a ring of
- * the visible quickbar bank's 12 buttons is shown in a client-side NUI window; the
- * right stick (the Deck's right trackpad, through Steam Input) highlights one, and
- * releasing the input uses it (hold mode), or a press opens it and the confirm or
- * cancel key closes it (toggle mode). The input is a keyboard key (`picker-key`, default
- * Scroll Lock) that Steam Input sends from whatever button or grip the layout
- * chooses. Game thread only. */
+/* The quickbar picker (quickbar plan Q2), like Baldur's Gate 3's radial: a press of
+ * the picker key (`picker-key`, default Scroll Lock, which Steam Input sends from any
+ * button) opens a client-side NUI window with the quickbar banks as three wheels;
+ * the right stick (the Deck's right trackpad, through Steam Input) highlights a
+ * button on the active one; the confirm key uses it and closes, the cancel key or
+ * another press closes. Game thread only. */
 #ifndef NWPAD_PICKER_H
 #define NWPAD_PICKER_H
 
@@ -12,9 +11,10 @@
 
 #include "../core/nwpad_core.h"
 
-/* Per frame. Returns true while the picker is open: the right stick is the
- * picker's, not the camera's. */
-bool nwpad_picker_frame(bool held, nwpad_vec2 right, bool in_game);
+/* Per frame: open the picker while `want` (and in a game), track the highlight, and
+ * close it without using when no longer wanted. Returns true while open: the right
+ * stick is the picker's, not the camera's. */
+bool nwpad_picker_frame(bool want, nwpad_vec2 right, bool in_game);
 
 /* While open: show the previous (-1) or next (+1) quickbar bank as the active wheel.
  * False if the picker isn't open (the key is then the game's). */

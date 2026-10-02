@@ -198,9 +198,9 @@ void nwpad_picker_close(bool use) {
     pk.selected = -1;
 }
 
-bool nwpad_picker_frame(bool held, nwpad_vec2 right, bool in_game) {
+bool nwpad_picker_frame(bool want, nwpad_vec2 right, bool in_game) {
     if (!pk.open) {
-        if (!held || !in_game) return false;
+        if (!want || !in_game) return false;
         int bank = nwpad_quickbar_bank();
         if (bank < 0 || !nwpad_quickbar_read(pk.slots)) return false;
         pk.bank = bank;
@@ -208,18 +208,13 @@ bool nwpad_picker_frame(bool held, nwpad_vec2 right, bool in_game) {
         pk.open = build();
         return pk.open;
     }
-    if (held && in_game) {
+    if (want && in_game) {
         int now = nwpad_picker_select(right, pk.selected);
         if (now != pk.selected && now >= 0) show_selection(pk.selected, now);
         pk.selected = now;
         return true;
     }
-    /* Released: close, and use the highlighted button (if any, and not empty). */
-    nwpad_nui_destroy(TOKEN);
-    pk.open = false;
-    if (in_game && pk.selected >= 0 && ring_slot(pk.selected)->type != 0 &&
-        nwpad_quickbar_use(pk.bank * NWPAD_PICKER_SLOTS + pk.selected))
-        pk.last_used = pk.bank * NWPAD_PICKER_SLOTS + pk.selected;
-    pk.selected = -1;
+    /* No longer wanted (cancelled, or out of the game): close without using. */
+    nwpad_picker_close(false);
     return false;
 }

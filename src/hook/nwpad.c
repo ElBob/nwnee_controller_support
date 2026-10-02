@@ -162,8 +162,7 @@ static struct {
     struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
         int32_t sym, prev_sym, next_sym, confirm_sym, cancel_sym; /* SDL_Keycodes; 0 none */
         bool resolved, held;             /* held: the picker key is down (debounced) */
-        bool was_held, latched;          /* toggle mode: last frame's key, and open by a press */
-        bool suppress;                   /* hold mode: closed by confirm/cancel; wait for release */
+        bool was_held, latched;          /* last frame's key, and open by a press */
         int action;                      /* 1 confirm, 2 cancel: applied on the next frame */
         bool confirm_down, cancel_down;
         uint64_t up_ms;                  /* a key-up waiting out PICKER_KEYUP_MS (0 none) */
@@ -182,7 +181,6 @@ static struct {
     struct { /* control socket override (plan §8.3), core convention */
         bool active;
         nwpad_vec2 left, right;
-        bool picker; /* the picker input held */
         uint64_t until_ms; /* 0: until released */
     } virt;
 } g;
@@ -236,7 +234,6 @@ static void control_handler(const char *request, char *out, size_t cap) {
         g.virt.left.y = nwpad_json_get_number(request, "ly", &v) ? (float)v : 0.0f;
         g.virt.right.x = nwpad_json_get_number(request, "rx", &v) ? (float)v : 0.0f;
         g.virt.right.y = nwpad_json_get_number(request, "ry", &v) ? (float)v : 0.0f;
-        g.virt.picker = nwpad_json_get_number(request, "picker", &v) && v != 0;
         g.virt.until_ms = nwpad_json_get_number(request, "hold_ms", &v) && v > 0
                               ? now_ms() + (uint64_t)v : 0;
         g.virt.active = true;
@@ -358,6 +355,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
         double v;
         bool ok = nwpad_json_get_number(request, "bank", &v) && nwpad_quickbar_debug_show_bank((int)v);
         snprintf(out, cap, "{\"ok\":%s,\"bank\":%d}", ok ? "true" : "false", nwpad_quickbar_bank());
+    } else if (strcmp(cmd, "picker") == 0) {
+        /* {"cmd":"picker","action":"open"|"confirm"|"cancel"}: as the picker keys do */
+        char action[16] = "";
+        nwpad_json_get_string(request, "action", action, sizeof action);
+        if (!strcmp(action, "open")) g.picker.latched = true;
+        else if (!strcmp(action, "confirm")) g.picker.action = 1;
+        else if (!strcmp(action, "cancel")) g.picker.action = 2;
+        snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
     } else if (strcmp(cmd, "picker_shift") == 0) {
         /* {"cmd":"picker_shift","dir":-1|1}: as the bank keys do */
         double v;
@@ -551,12 +556,10 @@ static void nwpad_frame(void) {
      * character that was moving still gets its stop. So does "Controller support"
      * off, which otherwise does nothing. */
     nwpad_vec2 left = {0, 0}, right = {0, 0};
-    bool picker_held = false;
     if (!g.cfg.enabled) {
     } else if (g.virt.active) {
         left = nwpad_apply_deadzone(g.virt.left);
         right = nwpad_apply_deadzone(g.virt.right);
-        picker_held = g.virt.picker;
     } else if (controller_init()) {
         controller_ensure_open(t);
         if (g.pad) {
@@ -571,29 +574,21 @@ static void nwpad_frame(void) {
         g.picker.held = false;
         g.picker.up_ms = 0;
     }
-    /* Toggle mode: each press of the picker key opens, or closes without using.
-     * Hold mode: held means open. */
+    /* Each press of the picker key opens the picker, or closes it without using. */
     bool key = g.cfg.enabled && g.picker.held;
-    if (g.cfg.picker_toggle) {
-        if (key && !g.picker.was_held) {
-            if (nwpad_picker_open() && g.picker.latched) nwpad_picker_close(false);
-            g.picker.latched = !g.picker.latched;
-        }
-    } else if (!key) {
-        g.picker.suppress = false;
-    }
+    if (key && !g.picker.was_held) g.picker.latched = !(g.picker.latched && nwpad_picker_open());
     g.picker.was_held = key;
     if (g.picker.action) { /* confirm / cancel */
         nwpad_picker_close(g.picker.action == 1);
         g.picker.action = 0;
         g.picker.latched = false;
-        if (key) g.picker.suppress = true;
     }
-    picker_held = picker_held || (g.cfg.picker_toggle ? g.picker.latched : key && !g.picker.suppress);
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
-    if (nwpad_picker_frame(picker_held, right, nwpad_backend_in_game())) right = (nwpad_vec2){0, 0};
+    bool picking = nwpad_picker_frame(g.cfg.enabled && g.picker.latched, right, nwpad_backend_in_game());
+    if (!picking) g.picker.latched = false; /* e.g. left the game */
+    if (picking) right = (nwpad_vec2){0, 0};
 
     g.last_left = left;
     g.last_right = right;
@@ -762,8 +757,7 @@ static int nwpad_PollEvent(SDL_Event *event) {
                     *syms[k] = names[k][0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(names[k]) : 0;
                     if (names[k][0] && !*syms[k]) nwpad_log("picker key \"%s\" is not a key name; ignored", names[k]);
                 }
-                nwpad_log("picker keys: %s %s, banks %s / %s, confirm %s, cancel %s",
-                          g.cfg.picker_toggle ? "toggle" : "hold", g.cfg.picker_key, g.cfg.picker_prev_key,
+                nwpad_log("picker keys: open %s, banks %s / %s, confirm %s, cancel %s", g.cfg.picker_key, g.cfg.picker_prev_key,
                           g.cfg.picker_next_key, g.cfg.picker_confirm_key, g.cfg.picker_cancel_key);
             }
             int32_t sym = event->key.sym;
