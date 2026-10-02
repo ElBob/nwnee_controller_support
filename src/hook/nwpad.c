@@ -160,8 +160,12 @@ static struct {
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
     struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
-        int32_t sym, prev_sym, next_sym; /* SDL_Keycodes; 0 none or not resolved */
-        bool resolved, held;
+        int32_t sym, prev_sym, next_sym, confirm_sym, cancel_sym; /* SDL_Keycodes; 0 none */
+        bool resolved, held;             /* held: the picker key is down (debounced) */
+        bool was_held, latched;          /* toggle mode: last frame's key, and open by a press */
+        bool suppress;                   /* hold mode: closed by confirm/cancel; wait for release */
+        int action;                      /* 1 confirm, 2 cancel: applied on the next frame */
+        bool confirm_down, cancel_down;
         uint64_t up_ms;                  /* a key-up waiting out PICKER_KEYUP_MS (0 none) */
         bool prev_down, next_down;       /* swallowed key-downs whose key-ups are ours too */
         int shift;                       /* bank change to apply on the next frame */
@@ -567,7 +571,25 @@ static void nwpad_frame(void) {
         g.picker.held = false;
         g.picker.up_ms = 0;
     }
-    if (g.cfg.enabled) picker_held = picker_held || g.picker.held;
+    /* Toggle mode: each press of the picker key opens, or closes without using.
+     * Hold mode: held means open. */
+    bool key = g.cfg.enabled && g.picker.held;
+    if (g.cfg.picker_toggle) {
+        if (key && !g.picker.was_held) {
+            if (nwpad_picker_open() && g.picker.latched) nwpad_picker_close(false);
+            g.picker.latched = !g.picker.latched;
+        }
+    } else if (!key) {
+        g.picker.suppress = false;
+    }
+    g.picker.was_held = key;
+    if (g.picker.action) { /* confirm / cancel */
+        nwpad_picker_close(g.picker.action == 1);
+        g.picker.action = 0;
+        g.picker.latched = false;
+        if (key) g.picker.suppress = true;
+    }
+    picker_held = picker_held || (g.cfg.picker_toggle ? g.picker.latched : key && !g.picker.suppress);
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
@@ -732,14 +754,17 @@ static int nwpad_PollEvent(SDL_Event *event) {
             if (!g.picker.resolved) { /* the key names, through the game's own SDL */
                 g.picker.resolved = true;
                 RESOLVE_ANY(GetKeyFromName, "SDL_GetKeyFromName");
-                const char *names[3] = {g.cfg.picker_key, g.cfg.picker_prev_key, g.cfg.picker_next_key};
-                int32_t *syms[3] = {&g.picker.sym, &g.picker.prev_sym, &g.picker.next_sym};
-                for (int k = 0; k < 3; k++) {
+                const char *names[5] = {g.cfg.picker_key, g.cfg.picker_prev_key, g.cfg.picker_next_key,
+                                        g.cfg.picker_confirm_key, g.cfg.picker_cancel_key};
+                int32_t *syms[5] = {&g.picker.sym, &g.picker.prev_sym, &g.picker.next_sym, &g.picker.confirm_sym,
+                                    &g.picker.cancel_sym};
+                for (int k = 0; k < 5; k++) {
                     *syms[k] = names[k][0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(names[k]) : 0;
                     if (names[k][0] && !*syms[k]) nwpad_log("picker key \"%s\" is not a key name; ignored", names[k]);
                 }
-                nwpad_log("picker keys: hold %s, banks %s / %s", g.cfg.picker_key, g.cfg.picker_prev_key,
-                          g.cfg.picker_next_key);
+                nwpad_log("picker keys: %s %s, banks %s / %s, confirm %s, cancel %s",
+                          g.cfg.picker_toggle ? "toggle" : "hold", g.cfg.picker_key, g.cfg.picker_prev_key,
+                          g.cfg.picker_next_key, g.cfg.picker_confirm_key, g.cfg.picker_cancel_key);
             }
             int32_t sym = event->key.sym;
             if (g.picker.sym && sym == g.picker.sym) {
@@ -755,12 +780,20 @@ static int nwpad_PollEvent(SDL_Event *event) {
                 g.events.filtered++;
                 continue; /* nwpad's key: the game never sees it */
             }
-            /* Bank keys are nwpad's only while the picker is open (their key-ups follow). */
-            bool *down = sym && sym == g.picker.prev_sym ? &g.picker.prev_down
-                         : sym && sym == g.picker.next_sym ? &g.picker.next_down
-                                                           : NULL;
+            /* Bank, confirm and cancel keys are nwpad's only while the picker is open
+             * (their key-ups follow); otherwise the game's (Enter: chat, Esc: menu). */
+            bool *down = sym && sym == g.picker.prev_sym      ? &g.picker.prev_down
+                         : sym && sym == g.picker.next_sym    ? &g.picker.next_down
+                         : sym && sym == g.picker.confirm_sym ? &g.picker.confirm_down
+                         : sym && sym == g.picker.cancel_sym  ? &g.picker.cancel_down
+                                                              : NULL;
             if (down && type == SDL_KEYDOWN && nwpad_picker_open()) {
-                if (!event->key.repeat) g.picker.shift += down == &g.picker.prev_down ? -1 : 1;
+                if (!event->key.repeat) {
+                    if (down == &g.picker.prev_down || down == &g.picker.next_down)
+                        g.picker.shift += down == &g.picker.prev_down ? -1 : 1;
+                    else
+                        g.picker.action = down == &g.picker.confirm_down ? 1 : 2;
+                }
                 *down = true;
                 g.events.filtered++;
                 continue;
@@ -773,6 +806,7 @@ static int nwpad_PollEvent(SDL_Event *event) {
         } else if (type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
             g.picker.held = false; /* the key-up may never come */
             g.picker.up_ms = 0;
+            g.picker.latched = false;
         }
         return r;
     }

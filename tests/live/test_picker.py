@@ -56,6 +56,7 @@ def test_untouched_cancels(game, ctl):
 
 
 def _key(action, key="Scroll_Lock"):
+    """action: keydown, keyup or key (a tap)."""
     """Press/release a key through X (XTEST keyboard events reach the game)."""
     env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
     win = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=env,
@@ -65,28 +66,44 @@ def _key(action, key="Scroll_Lock"):
     subprocess.run(["xdotool", action, key], env=env, check=True)
 
 
-def test_picker_key(game, ctl):
-    """The picker key (picker-key, default Scroll Lock) holds the picker, as Steam
-    Input would send it; the game doesn't see the key."""
+def test_picker_key_toggle(game, ctl):
+    """Toggle mode (the default, like Baldur's Gate 3's radial): a press of the picker
+    key (ScrollLock) opens the picker and it stays open; the confirm key (Enter) uses
+    the highlighted button, the cancel key (Escape) or another press closes it. The
+    game sees none of these keys while the picker is open, and Enter/Escape otherwise."""
     _stealth_off(ctl)
     filtered0 = ctl("state")["events"]["filtered"]
-    _key("keydown")
-    try:
-        time.sleep(0.5)
-        p = ctl("state")["picker"]
-        assert p["key_held"] and p["open"], p
-        ctl("stick", rx=1.0)  # pointing, as the trackpad would
-        time.sleep(0.5)
-        p = ctl("state")["picker"]
-        assert p["selected"] == STEALTH, p
-        ctl("release")
-    finally:
-        _key("keyup")
+    _key("key", "Return")  # closed: the game's (opens the chat bar) ...
+    time.sleep(0.3)
+    assert ctl("state")["events"]["filtered"] == filtered0
+    _key("key", "Escape")  # ... and closes it again
+    time.sleep(0.3)
+    _key("key")  # open
+    time.sleep(0.5)
+    p = ctl("state")["picker"]
+    assert p["open"], p
+    ctl("stick", rx=1.0)  # pointing, as the trackpad would
+    time.sleep(0.5)
+    ctl("release")
+    time.sleep(0.3)
+    assert ctl("state")["picker"]["open"], "the picker closed when the stick let go"
+    _key("key", "Return")  # confirm: uses Stealth Mode
     time.sleep(0.6)
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == STEALTH, p
-    assert ctl("state")["events"]["filtered"] >= filtered0 + 2  # down and up swallowed
     _stealth_off(ctl)
+    for close in ("Escape", "Scroll_Lock"):  # cancel, or the picker key again
+        before = ctl("state")["picker"]["last_used"]
+        _key("key")
+        time.sleep(0.4)
+        ctl("stick", rx=1.0)
+        time.sleep(0.4)
+        ctl("release")
+        _key("key", close)
+        time.sleep(0.5)
+        p = ctl("state")["picker"]
+        assert not p["open"] and p["last_used"] == before, (close, p)
+    assert not _server_heard_nwpad(game)
 
 
 def test_bank_wheels(game, ctl):

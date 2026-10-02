@@ -7,8 +7,9 @@ The Xbox layout ports Robert's Deck layout, "Neverwinter Nights Console Port"
 (workshop 3095778009), to the Xbox pad. It keeps its buttons, and both sticks
 become gamepad joysticks, which nwpad needs: left stick moves, right stick
 turns the camera. The Xbox pad has no trackpad, so holding LB turns the right
-stick into the mouse. Holding the left stick click opens nwpad's quickbar
-picker (it sends Scroll Lock); LB and RB send [ and ] for its banks.
+stick into the mouse (its click is the left click). RT opens nwpad's quickbar
+picker (Scroll Lock), clicking the right stick uses the pick (Enter), View closes
+it (Esc); LB and RB send [ and ] for its banks.
 """
 import os
 
@@ -58,12 +59,13 @@ def xbox():
             ("dpad_west", "key_press M, Show/Hide Map, , "),
         ]),
         # Both sticks as gamepad joysticks (a joystick_move group outputs the stick
-        # on its own side). Holding the left stick click holds nwpad's picker key
-        # (Scroll Lock); the right stick picks. The right click carries Space.
-        group(2, "joystick_move", [("click", "key_press SCROLL_LOCK, Quickbar picker, , ")]),
-        group(3, "joystick_move", [("click", "key_press SPACE, Pause, , ")]),
+        # on its own side). nwpad's quickbar picker, like Baldur's Gate 3's radial:
+        # RT opens it (Scroll Lock), the right stick picks, clicking the right stick
+        # uses the pick (Enter), View closes it (Esc). LS click is Space (pause).
+        group(2, "joystick_move", [("click", "key_press SPACE, Pause, , ")]),
+        group(3, "joystick_move", [("click", "key_press RETURN, Picker: use, , ")]),
         group(4, "trigger", [("click", "mouse_button RIGHT, , ")]),
-        group(5, "trigger", [("click", "mouse_button LEFT, , ")]),
+        group(5, "trigger", [("click", "key_press SCROLL_LOCK, Quickbar picker, , ")]),
         group(6, "switches", [
             ("button_escape", "key_press ESCAPE, Esc, , "),
             ("button_menu", "key_press G, Play and Pause, , "),
@@ -86,7 +88,7 @@ def xbox():
         kv(3, "6", "switch active"),
         kv(3, "7", "right_joystick active modeshift"),
     ])))
-    head = (kv(1, "version", "3") + kv(1, "revision", "2") +
+    head = (kv(1, "version", "3") + kv(1, "revision", "3") +
             kv(1, "title", "NWN Console Port + nwpad (Xbox)") +
             kv(1, "description", "Left stick moves and right stick turns the camera through nwpad; "
                                  "hold LB to use the right stick as the mouse. Buttons from the "

@@ -78,7 +78,7 @@ python3 - "$S" <<'PY'
 import sys; p = sys.argv[1]; t = open(p).read()
 t = t.replace("turn-speed = 240", "turn-speed = 300", 1); open(p, "w").write(t)
 PY
-launch; grep -qa 'settings .*settings.tml: 12 setting(s) applied' "$RUN/game.log" || fail "settings.tml not read"
+launch; grep -qa 'settings .*settings.tml: 15 setting(s) applied' "$RUN/game.log" || fail "settings.tml not read"
 status; status | grep -q 'turn_speed=300.0' || fail "settings.tml value not used"
 quit; echo "ok: settings.tml wins"
 

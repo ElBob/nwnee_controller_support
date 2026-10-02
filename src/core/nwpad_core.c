@@ -27,6 +27,9 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     /* Only taken while the picker is open; otherwise the game gets them. */
     snprintf(cfg->picker_prev_key, sizeof cfg->picker_prev_key, "%s", "[");
     snprintf(cfg->picker_next_key, sizeof cfg->picker_next_key, "%s", "]");
+    snprintf(cfg->picker_confirm_key, sizeof cfg->picker_confirm_key, "%s", "Return");
+    snprintf(cfg->picker_cancel_key, sizeof cfg->picker_cancel_key, "%s", "Escape");
+    cfg->picker_toggle = true; /* like Baldur's Gate 3's radial: press to open, confirm or cancel */
 }
 
 static const char *skip_ws(const char *s) {
@@ -356,9 +359,17 @@ static float clampf(double v, float lo, float hi) { return v < lo ? lo : v > hi 
 
 /* Apply one full key path (e.g. "nwpad.camera.turn-speed"). Returns 1 if known. */
 static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
+    if (!strcmp(key, "nwpad.picker-mode")) { /* "toggle" or "hold" */
+        if (!strncmp(val, "\"toggle\"", 8)) cfg->picker_toggle = true;
+        else if (!strncmp(val, "\"hold\"", 6)) cfg->picker_toggle = false;
+        else return 0;
+        return 1;
+    }
     char *text = !strcmp(key, "nwpad.picker-key")        ? cfg->picker_key
                  : !strcmp(key, "nwpad.picker-prev-key") ? cfg->picker_prev_key
                  : !strcmp(key, "nwpad.picker-next-key") ? cfg->picker_next_key
+                 : !strcmp(key, "nwpad.picker-confirm-key") ? cfg->picker_confirm_key
+                 : !strcmp(key, "nwpad.picker-cancel-key")  ? cfg->picker_cancel_key
                                                          : NULL;
     if (text) { /* a quoted string (key names fit the 32-byte fields) */
         const char *q = val[0] == '"' ? strchr(val + 1, '"') : NULL;
@@ -439,7 +450,10 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\tenabled = %s\n"
                      "\tcursor-rehide-ms = %u\n"
                      "\thide-cursor = %s\n"
+                     "\tpicker-cancel-key = \"%s\"\n"
+                     "\tpicker-confirm-key = \"%s\"\n"
                      "\tpicker-key = \"%s\"\n"
+                     "\tpicker-mode = \"%s\"\n"
                      "\tpicker-next-key = \"%s\"\n"
                      "\tpicker-prev-key = \"%s\"\n"
                      "\tmouse-idle-ms = %u\n"
@@ -451,7 +465,8 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\t\tstrafe-exit-ms = %u\n"
                      "\t\tstrafe-window = %.1f\n",
                      cfg->enabled ? "true" : "false", (unsigned)cfg->cursor_rehide_ms,
-                     cfg->hide_cursor ? "true" : "false", cfg->picker_key,
+                     cfg->hide_cursor ? "true" : "false", cfg->picker_cancel_key, cfg->picker_confirm_key,
+                     cfg->picker_key, cfg->picker_toggle ? "toggle" : "hold",
                      cfg->picker_next_key, cfg->picker_prev_key,
                      (unsigned)cfg->mouse_idle_ms, cfg->camera_pitch_speed, cfg->camera_yaw_speed,
                      cfg->run_threshold, (unsigned)cfg->strafe_exit_ms, cfg->strafe_window_deg);

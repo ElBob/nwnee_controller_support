@@ -1,7 +1,7 @@
 "controller_mappings"
 {
 	"version"		"3"
-	"revision"		"2"
+	"revision"		"3"
 	"title"		"NWN Console Port + nwpad (Xbox)"
 	"description"		"Left stick moves and right stick turns the camera through nwpad; hold LB to use the right stick as the mouse. Buttons from the Neverwinter Nights Console Port layout."
 	"creator"		"76561198024955725"
@@ -172,7 +172,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"key_press SCROLL_LOCK, Quickbar picker, , "
+							"binding"		"key_press SPACE, Pause, , "
 						}
 					}
 				}
@@ -198,7 +198,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"key_press SPACE, Pause, , "
+							"binding"		"key_press RETURN, Picker: use, , "
 						}
 					}
 				}
@@ -250,7 +250,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"mouse_button LEFT, , "
+							"binding"		"key_press SCROLL_LOCK, Quickbar picker, , "
 						}
 					}
 				}

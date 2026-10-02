@@ -188,6 +188,16 @@ bool nwpad_picker_shift(int direction) {
 
 int nwpad_picker_bank(void) { return pk.open ? pk.bank : -1; }
 
+void nwpad_picker_close(bool use) {
+    if (!pk.open) return;
+    nwpad_nui_destroy(TOKEN);
+    pk.open = false;
+    if (use && pk.selected >= 0 && ring_slot(pk.selected)->type != 0 &&
+        nwpad_quickbar_use(pk.bank * NWPAD_PICKER_SLOTS + pk.selected))
+        pk.last_used = pk.bank * NWPAD_PICKER_SLOTS + pk.selected;
+    pk.selected = -1;
+}
+
 bool nwpad_picker_frame(bool held, nwpad_vec2 right, bool in_game) {
     if (!pk.open) {
         if (!held || !in_game) return false;
