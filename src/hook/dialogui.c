@@ -8,6 +8,7 @@
 
 #define SEP_H 8.0f   /* the line under the NPC's text */
 #define SCROLL_W 18.0f /* the text's scrollbar (the skin's scrollbar_size) */
+#define BAR_TRIM 18.0f /* ends the scrollbar with the last line of text, not the text box */
 #define ROWS 6       /* reply rows when they scroll (4 replies + "..." rows) */
 #define ROW_GAP 4.0f /* NUI's spacing between rows */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
@@ -240,7 +241,7 @@ static bool build(void) {
         "\"fill\":null,\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,"
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
-        scrolls ? scrollbar(body_h) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
+        scrolls ? scrollbar(body_h - BAR_TRIM) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
     /* The replies. If they don't all fit, ROWS rows: replies around the highlight,
      * with "..." in place of the first / last row when there are more that way. */
     static float rh[NWPAD_DIALOG_REPLIES];
