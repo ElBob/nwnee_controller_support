@@ -7,6 +7,7 @@
 #include "sigs.h"
 
 #define SEP_H 8.0f   /* the line under the NPC's text */
+#define SCROLL_W 18.0f /* the text's scrollbar (the skin's scrollbar_size) */
 #define ROWS 6       /* reply rows when they scroll (4 replies + "..." rows) */
 #define ROW_GAP 4.0f /* NUI's spacing between rows */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
@@ -146,6 +147,40 @@ static void wrap(const char *text, int cols) {
     if (!ui.lines) ui.line_at[ui.lines++] = 0;
 }
 
+/* A scrollbar beside the text, drawn with the skin's own scrollbar images (NUI's
+ * only exists while NUI scrolls the text itself): arrows, track, and a thumb whose
+ * place is a bind. */
+static float bar_h;
+static const char *scrollbar(float h) {
+    static char out[2048];
+    bar_h = h;
+    static const char img[] = "{\"type\":5,\"enabled\":true,\"color\":null,\"fill\":null,\"line_thickness\":null,"
+                              "\"order\":1,\"render\":0,\"arrayBinds\":false,\"image\":\"%s\",\"rect\":%s,"
+                              "\"image_aspect\":5,\"image_halign\":0,\"image_valign\":0}";
+    char a[400], b[400], c[400], d[400], r[96];
+    snprintf(r, sizeof r, "{\"x\":0.0,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", SCROLL_W, SCROLL_W, h - 2 * SCROLL_W);
+    snprintf(a, sizeof a, img, "nui_windowv", r);
+    snprintf(r, sizeof r, "{\"x\":0.0,\"y\":0.0,\"w\":%.1f,\"h\":%.1f}", SCROLL_W, SCROLL_W);
+    snprintf(b, sizeof b, img, "nui_cnt_up", r);
+    snprintf(r, sizeof r, "{\"x\":0.0,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", h - SCROLL_W, SCROLL_W, SCROLL_W);
+    snprintf(c, sizeof c, img, "nui_cnt_down", r);
+    snprintf(d, sizeof d, img, "nui_scrollv", "{\"bind\":\"thumb\"}");
+    snprintf(out, sizeof out,
+             ",{\"type\":\"spacer\",\"label\":null,\"value\":null,\"width\":%.1f,\"height\":%.1f,"
+             "\"draw_list_scissor\":false,\"draw_list\":[%s,%s,%s,%s]}", SCROLL_W, h, a, b, c, d);
+    return out;
+}
+
+static void show_thumb(void) {
+    if (ui.lines <= ui.visible) return;
+    float track = bar_h - 2 * SCROLL_W, th = track * (float)ui.visible / (float)ui.lines;
+    if (th < 20) th = 20;
+    float y = SCROLL_W + (track - th) * (float)ui.top / (float)(ui.lines - ui.visible);
+    char r[96];
+    snprintf(r, sizeof r, "{\"x\":0.0,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", y, SCROLL_W, th);
+    nwpad_nui_bind(TOKEN, "thumb", r);
+}
+
 /* Show lines [top, top + visible) of the NPC's line. */
 static void show_body(void) {
     static char text[4200], esc[9000], value[9100];
@@ -155,6 +190,7 @@ static void show_body(void) {
     nwpad_json_escape(esc, sizeof esc, text);
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "body", value);
+    show_thumb();
 }
 
 /* Screen height in GUI units (as the picker centres itself). */
@@ -173,7 +209,11 @@ static bool build(void) {
           lh = big_font ? BIG_LINE_H : LINE_H;
     wrap(ui.d.line, (int)floorf(text_w / char_w));
     ui.visible = ui.lines;
-    if (ui.visible * lh > LINE_MAX_H) ui.visible = (int)(LINE_MAX_H / lh); /* the sticks scroll the rest */
+    bool scrolls = ui.visible * lh > LINE_MAX_H;
+    if (scrolls) { /* the sticks scroll the rest: make room for a scrollbar */
+        wrap(ui.d.line, (int)floorf((text_w - SCROLL_W - 6) / char_w));
+        ui.visible = (int)(LINE_MAX_H / lh);
+    }
     if (ui.top > ui.lines - ui.visible) ui.top = ui.lines - ui.visible;
     if (ui.top < 0) ui.top = 0;
     float body_h = (float)ui.visible * lh + 6;
@@ -191,15 +231,16 @@ static bool build(void) {
         "{\"type\":\"col\",\"label\":null,\"value\":null,\"children\":["
         "{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":1,\"text_valign\":0,\"height\":%.1f,"
         "\"foreground_color\":{\"r\":125,\"g\":180,\"b\":255,\"a\":255}},"
+        "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
         "{\"type\":\"text\",\"label\":null,\"value\":{\"bind\":\"body\"},\"border\":false,\"scrollbars\":0,"
-        "\"height\":%.1f%s}]}]},"
+        "\"height\":%.1f%s}%s]}]}]},"
         /* a subtle line between the NPC's text and the replies */
         "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f,\"draw_list_scissor\":false,"
         "\"draw_list\":[{\"type\":6,\"enabled\":true,\"color\":{\"r\":173,\"g\":142,\"b\":96,\"a\":110},"
         "\"fill\":null,\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,"
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
-        SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
+        scrolls ? scrollbar(body_h) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
     /* The replies. If they don't all fit, ROWS rows: replies around the highlight,
      * with "..." in place of the first / last row when there are more that way. */
     static float rh[NWPAD_DIALOG_REPLIES];
