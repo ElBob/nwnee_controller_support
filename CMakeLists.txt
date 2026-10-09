@@ -42,7 +42,7 @@ add_custom_command(
   COMMENT "Generating signatures_gen.h from ${NWPAD_SIGNATURES}")
 
 # The preload library.
-add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend.c src/hook/settings.c src/hook/quickbar.c src/hook/nui.c src/hook/picker.c src/hook/icons.c
+add_library(nwpad SHARED src/hook/nwpad.c src/hook/sigs.c src/hook/backend.c src/hook/settings.c src/hook/quickbar.c src/hook/nui.c src/hook/picker.c src/hook/icons.c src/hook/dialog.c
   $<$<BOOL:${NWPAD_CRASH_TRACE}>:src/hook/crashtrace.c>
   ${NWPAD_SIG_HEADER}
   $<$<BOOL:${NWPAD_DEBUG_SURFACES}>:src/hook/control.c>)

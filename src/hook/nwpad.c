@@ -23,6 +23,7 @@
 #include "nui.h"
 #include "picker.h"
 #include "icons.h"
+#include "dialog.h"
 extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
@@ -355,6 +356,15 @@ static void control_handler(const char *request, char *out, size_t cap) {
         double v;
         bool ok = nwpad_json_get_number(request, "bank", &v) && nwpad_quickbar_debug_show_bank((int)v);
         snprintf(out, cap, "{\"ok\":%s,\"bank\":%d}", ok ? "true" : "false", nwpad_quickbar_bank());
+    } else if (strcmp(cmd, "dialog_find") == 0) {
+        char needle[128] = "", paths[4000];
+        nwpad_json_get_string(request, "text", needle, sizeof needle);
+        nwpad_dialog_debug_find(needle, paths, sizeof paths);
+        snprintf(out, cap, "{\"ok\":true,\"paths\":%s}", paths);
+    } else if (strcmp(cmd, "dialog") == 0) {
+        static char d[12000];
+        nwpad_dialog_debug_json(d, sizeof d);
+        snprintf(out, cap, "{\"ok\":true,\"dialog\":%s}", d);
     } else if (strcmp(cmd, "picker") == 0) {
         /* {"cmd":"picker","action":"open"|"confirm"|"cancel"}: as the picker keys do */
         char action[16] = "";

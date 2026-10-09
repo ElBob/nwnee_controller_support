@@ -1,6 +1,6 @@
 # Dialog plan
 
-Status: **D0 research** (2026-10-08). Robert's decisions: a **vertical list**; our window **replicates the game's dialog window and covers it**, with the NPC's text in a **larger font**; the highlight moves with the **D-pad, either stick, or the arrow keys**; the whole feature can be **turned on or off in the config** (`nwpad.dialog`, default on). §2 marks what's confirmed and what's still a lead.
+Status: **D0 research mostly done** (2026-10-08; re-notes F36): replies and the selection path confirmed at runtime; the NPC's line is captured by wrapping `StringGob::SetText` (one vtable slot), which is also the trigger. Robert's decisions: a **vertical list**; our window **replicates the game's dialog window and covers it**, with the NPC's text in a **larger font**; the highlight moves with the **D-pad, either stick, or the arrow keys**; the whole feature can be **turned on or off in the config** (`nwpad.dialog`, default on). §2 marks what's confirmed and what's still a lead.
 
 ## 1. Goal
 

@@ -339,6 +339,16 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Open:** per-part colours (no test item yet); the game may clear `tempclient`, after which icons are re-rendered on the next read.
 - Confidence: Ghidra + runtime.
 
+### F36: NPC conversations on the client (dialog plan D0)
+- Binary / hash: nwmain-linux 6d19c39b
+- **The window:** `CGuiInGame+0x70` → `CGuiInGameChatDialog*` (0xd10 bytes, vtable `_ZTV20CGuiInGameChatDialog`), created by `CGuiInGame::ShowDialogEntry` (0x6710d0) on the first line of a conversation, freed and nulled by `CGuiInGame::CloseDialog` (0x670320). Fed by `CNWCMessage::HandleServerToPlayerDialog(subtype)` (0x799d00): 1 = an NPC line (`ShowDialogEntry(text, speaker, object)` → `CGuiInGameChatDialog::SetDialogMessage`), 2 = the replies (`ShowDialogReplies(count, CExoString* texts, unsigned* ids, …, conversation, single)` → `SetReplies`), 5 = close. Text is resolved on the client (`CTlkTable::ParseStr`, so tokens like `<FirstName>` are already filled in).
+- **Replies (runtime-confirmed):** count `+0x130` (int); texts `+0x128` = `new[]`'d `CExoString` array (16 bytes each: `char*`, len, cap); ids `+0x110` (`unsigned[]`, what the server gets back); flags `+0x138` (`unsigned[]`, bit 0 = not selectable); speaker object id `+0x140`; conversation `+0x144`; `+0xd08` = 1 for a lone Continue/End; `+0xd04` busy. Rules Enforcer D in the test module: "Welcome to the Contest Of Champions!" with replies "What is the Contest Of Champions?" (id 0) and "CONTINUE" (id 1).
+- **The NPC's line:** `SetDialogMessage` (0x67cd10) only calls `SetText` on the message's text object (`+0x278`, a `StringGob`, through its secondary vtable: slot `+0xd8` = `non-virtual thunk to StringGob::SetText(const char*)`); the dialog object keeps no copy (a pointer search from the object found only coincidental heap neighbours). So the line is captured by wrapping that `SetText` slot and keeping the text when the object is the open dialog's `+0x278`. The same wrapper is the "new line" trigger. `StringGob` is the game's general text object, so the wrapper sees every text change in the GUI (one pointer compare each).
+- **Answering:** `CGuiInGame::HandleDialogNumKey(n)` → `CGuiInGameChatDialog::SelectReply(n − 1)` is the game's number-key path (checks the busy flag, the reply count and the not-selectable bit, then `CGuiInGame::HandleDialogSelection`, which sends `CNWCMessage::SendPlayerToServerDialog_Reply(speaker, id, end, conversation)`). `HandleDialogSelection(-2)` closes; `(-3)` ends the conversation.
+- **Starting one in tests:** `AssignCommand(npc, ActionStartConversation(GetFirstPC(), "", FALSE, FALSE))` via the debug script chunk (the nearest NPC, Rules Enforcer D, has a conversation).
+- **Open:** the `StringGob` wrapper itself (D1); reply-change timing (replies arrive in a separate message after the line); markup in real conversations (colours, `<StartAction>` etc.).
+- Confidence: replies and selection path Ghidra + runtime; the text path Ghidra + runtime class identification (dladdr).
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.
