@@ -13,7 +13,7 @@ X Y are X-screen pixel coordinates (as xdotool reports them). --jiggle moves
 the pointer back and forth N times around the target, one event per interval.
 --drag presses the left button at X Y, moves to X+DX Y+DY, holds for S
 seconds, and releases (NWN's click-and-drag movement). --click clicks the left
-button at X Y (driving menus in the settings checks).
+button at X Y (driving menus in the settings checks); --wheel N turns the wheel.
 """
 import argparse
 import os
@@ -45,12 +45,14 @@ def main() -> int:
     ap.add_argument("--drag", nargs=2, type=int, metavar=("DX", "DY"))
     ap.add_argument("--hold", type=float, default=1.0, help="drag: seconds to hold at the end point")
     ap.add_argument("--click", action="store_true", help="left-click at X Y")
+    ap.add_argument("--wheel", type=int, default=0, help="wheel notches at X Y (positive: up)")
     ap.add_argument("--settle", type=float, default=1.0, help="wait for the compositor to add the device")
     a = ap.parse_args()
 
     sw, sh = screen_size()
     caps = {
         e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+        e.EV_REL: [e.REL_WHEEL],
         e.EV_ABS: [(e.ABS_X, AbsInfo(0, 0, ABS_MAX, 0, 0, 0)),
                    (e.ABS_Y, AbsInfo(0, 0, ABS_MAX, 0, 0, 0))],
     }
@@ -73,6 +75,10 @@ def main() -> int:
             ui.syn()
             time.sleep(0.08)
             ui.write(e.EV_KEY, e.BTN_LEFT, 0)
+            ui.syn()
+        for _ in range(abs(a.wheel)):
+            time.sleep(0.1)
+            ui.write(e.EV_REL, e.REL_WHEEL, 1 if a.wheel > 0 else -1)
             ui.syn()
         if a.drag:
             time.sleep(0.1)

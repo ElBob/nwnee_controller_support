@@ -171,11 +171,12 @@ static struct {
         int32_t up_sym, down_sym;        /* the dialog window's highlight keys */
         bool up_down, down_down;
         int dialog_step, dialog_action;  /* queued for the next frame: highlight, 1 answer / 2 end */
+        int dialog_press;                /* row a left button went down on (-1 none) */
         uint64_t up_ms;                  /* a key-up waiting out PICKER_KEYUP_MS (0 none) */
         bool prev_down, next_down;       /* swallowed key-downs whose key-ups are ours too */
         int shift;                       /* bank change to apply on the next frame */
     } picker;
-    int last_motion_x, last_motion_xrel; /* as SDL reported them (state shows them) */
+    int last_motion_x, last_motion_y, last_motion_xrel; /* as SDL reported them (state shows them) */
     bool right_edge_pinned; /* pointer pushed onto the last reachable column (re-notes F27;
                              * only with NWPAD_XWAYLAND_EDGE_FIX) */
     struct { uint64_t moves, stops, last_move_ms, min_gap_ms; } sends; /* rate-cap evidence */
@@ -365,6 +366,12 @@ static void control_handler(const char *request, char *out, size_t cap) {
         static char d[12000];
         nwpad_dialog_debug_json(d, sizeof d);
         snprintf(out, cap, "{\"ok\":true,\"dialog\":%s}", d);
+    } else if (strcmp(cmd, "dialog_hit") == 0) {
+        /* {"cmd":"dialog_hit","x":px,"y":py}: what the mouse would hit (debug) */
+        double x = 0, y = 0;
+        nwpad_json_get_number(request, "x", &x);
+        nwpad_json_get_number(request, "y", &y);
+        snprintf(out, cap, "{\"ok\":true,\"hit\":%d}", nwpad_dialogui_hit((int)x, (int)y));
     } else if (strcmp(cmd, "dialog_ui") == 0) {
         /* {"cmd":"dialog_ui","step":-1|1} / {"action":"confirm"|"cancel"}: as the keys do */
         double v;
@@ -533,6 +540,7 @@ __attribute__((constructor)) static void nwpad_init(void) {
     }
     nwpad_sigs_resolve();
     nwpad_settings_load(&g.cfg);
+    g.picker.dialog_press = -1;
     nwpad_send_policy_defaults(&g.send_policy);
     nwpad_arbiter_init(&g.arbiter);
     nwpad_backend_init();
@@ -789,8 +797,36 @@ static int nwpad_PollEvent(SDL_Event *event) {
             g.events.filtered++;
             continue; /* the game never sees controller events; Steam Input covers buttons */
         }
+        /* The mouse on nwpad's conversation window: the game's (hidden) window and the
+         * world behind never see its clicks; hover highlights, a click answers. */
+        if (nwpad_dialogui_open() && (type == SDL_MOUSEBUTTONDOWN || type == SDL_MOUSEBUTTONUP)) {
+            int hit = nwpad_dialogui_hit(event->button.x, event->button.y);
+            if (hit != NWPAD_DLG_OUTSIDE) {
+                if (event->button.button == SDL_BUTTON_LEFT) {
+                    if (type == SDL_MOUSEBUTTONDOWN) g.picker.dialog_press = hit;
+                    else if (hit >= 0 && hit == g.picker.dialog_press) nwpad_dialogui_click(hit);
+                }
+                if (type == SDL_MOUSEBUTTONUP) g.picker.dialog_press = -1;
+                g.events.filtered++;
+                continue;
+            }
+        }
+        if (nwpad_dialogui_open() && type == SDL_MOUSEWHEEL) {
+            int mx = g.last_motion_x, my = g.last_motion_y;
+            int hit = nwpad_dialogui_hit(mx, my);
+            if (hit != NWPAD_DLG_OUTSIDE) {
+                nwpad_dialogui_wheel(hit, event->wheel.y);
+                g.events.filtered++;
+                continue;
+            }
+        }
+        if (type == SDL_MOUSEMOTION && nwpad_dialogui_open()) {
+            int hit = nwpad_dialogui_hit(event->motion.x, event->motion.y);
+            if (hit >= 0) nwpad_dialogui_hover(hit);
+        }
         if (type == SDL_MOUSEMOTION) {
             g.last_motion_x = event->motion.x;
+            g.last_motion_y = event->motion.y;
             g.last_motion_xrel = event->motion.xrel;
 #ifdef NWPAD_XWAYLAND_EDGE_FIX
             /* Under 2x desktop scaling on XWayland, X pointer coordinates are even,

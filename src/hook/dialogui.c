@@ -9,6 +9,10 @@
 #define SEP_H 8.0f   /* the line under the NPC's text */
 #define SCROLL_W 18.0f /* the text's scrollbar (the skin's scrollbar_size) */
 #define BAR_TRIM 18.0f /* ends the scrollbar with the last line of text, not the text box */
+#define WIN_X 2.0f   /* the window's place (geometry bind) */
+#define WIN_Y 2.0f
+#define HIT_TOP 22.0f /* NUI's offsets inside the window, measured from screenshots (hit tests) */
+#define HIT_ROWS -10.0f
 #define ROWS 6       /* reply rows when they scroll (4 replies + "..." rows) */
 #define ROW_GAP 4.0f /* NUI's spacing between rows */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
@@ -44,6 +48,7 @@ static struct {
     int nrows, row_kind[ROWS + 2]; /* the rows: a reply index, or -1 for "..." */
     float row_h[ROWS + 2];
     int bound_kind[ROWS + 2], bound_colour[ROWS + 2]; /* what each row's binds hold (-2 nothing) */
+    float win_h, text_y0, text_y1, rows_y0; /* the layout, GUI units from the window's top (hit tests) */
     char wrapped[4200];   /* the NPC's line, wrapped by nwpad: lines separated by '\n' */
     int line_at[512], lines, top, visible; /* line starts in wrapped; the shown range */
     uint32_t seq;
@@ -319,6 +324,9 @@ static bool build(void) {
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
         scrolls ? scrollbar(body_h - BAR_TRIM) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
+    ui.text_y0 = HIT_TOP + LINE_H;           /* the NPC's text, under the name */
+    ui.text_y1 = ui.text_y0 + body_h;
+    ui.rows_y0 = h + HIT_ROWS;               /* the first reply row */
     ui.room = screen_h() - h - 2 * PAD - QUICKBAR_H;
     for (int i = 0; i < ui.d.count; i++) {
         char numbered[600];
@@ -333,6 +341,7 @@ static bool build(void) {
             "\"height\":%.1f,\"foreground_color\":{\"bind\":\"c%d\"}}", k, ui.row_h[k] - ROW_GAP, k);
     }
     if (ui.d.panel_h + 4 > h) h = ui.d.panel_h + 4; /* never smaller than the game's window */
+    ui.win_h = h;
     static char window[70000];
     int w = snprintf(window, sizeof window,
         "{\"version\":1,\"title\":false,\"resizable\":false,\"collapsed\":false,\"closable\":false,"
@@ -351,7 +360,7 @@ static bool build(void) {
     /* Placed by a bind: a window created right after another one closes was
      * sometimes centred by NUI when the geometry was in the definition. */
     char geo[96];
-    snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h);
+    snprintf(geo, sizeof geo, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", WIN_X, WIN_Y, WIDTH, h);
     nwpad_nui_bind(TOKEN, "geo", geo);
     for (int k = 0; k < ROWS + 2; k++) ui.bound_kind[k] = ui.bound_colour[k] = -2;
     for (int k = 0; k < ui.nrows; k++) bind_row(k);
@@ -409,6 +418,52 @@ void nwpad_dialogui_move(int step) {
         return;
     }
     for (int k = 0; k < ui.nrows; k++) bind_row(k); /* scrolled or not: just the binds */
+}
+
+/* GUI units per window pixel (NUI geometry is in GUI units). */
+static float gui_scale(void) {
+    float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
+    float s = scale ? scale() : 1.0f;
+    return s > 0 ? s : 1.0f;
+}
+
+int nwpad_dialogui_hit(int px, int py) {
+    if (!ui.open) return NWPAD_DLG_OUTSIDE;
+    float s = gui_scale(), x = (float)px / s - WIN_X, y = (float)py / s - WIN_Y;
+    if (x < 0 || y < 0 || x >= WIDTH || y >= ui.win_h) return NWPAD_DLG_OUTSIDE;
+    if (y >= ui.text_y0 && y < ui.text_y1 && x >= PORTRAIT_W) return NWPAD_DLG_TEXT;
+    float top = ui.rows_y0;
+    for (int k = 0; k < ui.nrows; k++) {
+        if (y >= top && y < top + ui.row_h[k]) return k;
+        top += ui.row_h[k];
+    }
+    return NWPAD_DLG_OTHER;
+}
+
+void nwpad_dialogui_hover(int row) {
+    if (!ui.open || row < 0 || row >= ui.nrows) return;
+    int i = ui.row_kind[row];
+    if (i < 0 || i == ui.highlight || !ui.d.replies[i].selectable) return;
+    ui.highlight = i; /* it's on screen: only colours change */
+    for (int k = 0; k < ui.nrows; k++) bind_row(k);
+}
+
+void nwpad_dialogui_click(int row) {
+    if (!ui.open || row < 0 || row >= ui.nrows) return;
+    int i = ui.row_kind[row];
+    if (i < 0) { /* "...": the next reply that way */
+        nwpad_dialogui_move(row == 0 ? -1 : 1);
+        return;
+    }
+    if (!ui.d.replies[i].selectable) return;
+    ui.highlight = i;
+    nwpad_dialogui_confirm();
+}
+
+void nwpad_dialogui_wheel(int hit, int notches) {
+    if (!ui.open || !notches) return;
+    if (hit == NWPAD_DLG_TEXT) nwpad_dialogui_scroll(-3 * notches); /* wheel up: earlier lines */
+    else nwpad_dialogui_move(notches > 0 ? -1 : 1);
 }
 
 void nwpad_dialogui_confirm(void) {

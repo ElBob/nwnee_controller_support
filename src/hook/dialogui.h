@@ -23,6 +23,13 @@ void nwpad_dialogui_move(int step);
 /* While open: scroll the NPC's text by `lines` (negative: back). */
 void nwpad_dialogui_scroll(int lines);
 int nwpad_dialogui_text_top(void); /* first shown line of the NPC's text */
+
+/* The mouse (window pixels, as SDL reports them). What's under it: */
+enum { NWPAD_DLG_OUTSIDE = -1, NWPAD_DLG_TEXT = -2, NWPAD_DLG_OTHER = -3 }; /* or a row, 0.. */
+int nwpad_dialogui_hit(int x, int y);
+void nwpad_dialogui_hover(int row);   /* highlight the reply in that row */
+void nwpad_dialogui_click(int row);   /* answer with it ("...": scroll that way) */
+void nwpad_dialogui_wheel(int hit, int notches); /* over the text: scroll it; elsewhere: the replies */
 void nwpad_dialogui_confirm(void);
 void nwpad_dialogui_cancel(void);
 int nwpad_dialogui_highlight(void); /* -1 when closed */

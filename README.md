@@ -49,7 +49,8 @@ game's: the speaker's portrait and name, their line in a larger font, and the
 numbered replies with one highlighted. Move the highlight with the D-pad / arrow keys,
 scroll a long line with either stick, answer with Enter (right stick click in the
 nwpad Xbox layout), or end the conversation with Escape (View). "..." above or below
-the replies means there are more to scroll to. The number keys and the mouse still work as
+the replies means there are more to scroll to. With the mouse, hover a reply to
+highlight it and click to answer; the wheel scrolls the text (over it) or the replies. The number keys and the mouse still work as
 usual. While the window is up, the arrow keys, Enter and Escape are nwpad's, and the
 sticks don't move or turn anything. `dialog = false` in `[nwpad]` turns it off and
 leaves the game's own window.

@@ -169,3 +169,48 @@ def test_test_conversation(game, ctl, tmp_path):
     _dialog(ctl, want=lambda d: d is None)
     log = open(os.path.join(game, "game.log"), errors="replace").read()
     assert "window does not exist: 18532" not in log
+
+
+def test_mouse(game, ctl):
+    """The mouse on nwpad's conversation window: hovering a reply highlights it, a
+    click answers with it (and reaches neither the game's hidden window nor the
+    world), the wheel scrolls the replies or, over the text, the text."""
+    import os
+    import subprocess
+    from conftest import ROOT
+    env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
+    geo = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced", "getwindowgeometry"],
+                         env=env, capture_output=True, text=True).stdout
+    wx, wy = [int(v) for v in geo.split("Position: ")[1].split()[0].split(",")]
+
+    def mouse(x, y, *args):
+        subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(wx + x), str(wy + y),
+                        "--settle", "0.6", *args], env=env, check=True, capture_output=True)
+        time.sleep(0.4)
+
+    def row_y(k):  # the middle of row k, as nwpad's hit test sees it
+        ys = [y for y in range(0, 700, 2) if ctl("dialog_hit", x=100, y=y)["hit"] == k]
+        assert ys, f"no row {k}"
+        return (ys[0] + ys[-1]) // 2
+
+    if ctl("dialog")["dialog"]:
+        ctl("dialog_select", end=1)
+        _dialog(ctl, want=lambda d: d is None)
+    dlg = os.path.join("/tmp", "nwpadtest.dlg")
+    subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
+    assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
+    ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
+    d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
+    time.sleep(0.5)
+    mouse(100, row_y(2), "--jiggle", "4")
+    assert ctl("dialog_ui")["highlight"] == 2
+    filtered = ctl("state")["events"]["filtered"]
+    seq = d["seq"]
+    mouse(100, row_y(1), "--click")  # "Many replies."
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 83)
+    assert ctl("state")["events"]["filtered"] >= filtered + 2  # press and release were nwpad's
+    time.sleep(0.5)
+    mouse(100, row_y(0), "--wheel", "-3")  # hover row 0, then three down
+    assert ctl("dialog_ui")["highlight"] == 3
+    ctl("dialog_select", end=1)
+    _dialog(ctl, want=lambda d: d is None)

@@ -24,6 +24,16 @@ typedef union SDL_Event {
         uint32_t type, timestamp, windowID, which, state;
         int32_t x, y, xrel, yrel;
     } motion;
+    struct { /* SDL_MouseButtonEvent */
+        uint32_t type, timestamp, windowID, which;
+        uint8_t button, state, clicks, padding1;
+        int32_t x, y;
+    } button;
+    struct { /* SDL_MouseWheelEvent */
+        uint32_t type, timestamp, windowID, which;
+        int32_t x, y;
+        uint32_t direction;
+    } wheel;
     struct { /* SDL_WindowEvent */
         uint32_t type, timestamp, windowID;
         uint8_t event;
@@ -36,6 +46,9 @@ enum {
     SDL_KEYDOWN = 0x300,
     SDL_KEYUP = 0x301,
     SDL_MOUSEMOTION = 0x400,
+    SDL_MOUSEBUTTONDOWN = 0x401,
+    SDL_MOUSEBUTTONUP = 0x402,
+    SDL_MOUSEWHEEL = 0x403,
     SDL_CONTROLLER_FIRST = 0x650, /* SDL_CONTROLLERAXISMOTION */
     SDL_CONTROLLER_LAST = 0x6FF,  /* covers button, device, touchpad, sensor events */
 };
@@ -51,6 +64,7 @@ enum {
 };
 
 enum { SDL_WINDOWEVENT_FOCUS_LOST = 13 };
+enum { SDL_BUTTON_LEFT = 1 };
 
 
 #endif
