@@ -1,6 +1,6 @@
 # Dialog plan
 
-Status: **draft** (2026-10-08). Based on a first pass over the binary (symbols, Ghidra); §3 marks what's confirmed and what's still a lead. Decisions for Robert are in §6.
+Status: **D0 research** (2026-10-08). Robert's decisions: a **vertical list**; our window **replicates the game's dialog window and covers it**, with the NPC's text in a **larger font**; the highlight moves with the **D-pad, either stick, or the arrow keys**; the whole feature can be **turned on or off in the config** (`nwpad.dialog`, default on). §2 marks what's confirmed and what's still a lead.
 
 ## 1. Goal
 
@@ -67,9 +67,9 @@ The game already maps the number keys 1–9 to replies, so Steam Input alone cou
 
 | ID | Question | Options |
 |---|---|---|
-| D1 | How are replies chosen? | A vertical list moved with the left stick / D-pad up-down (like most console RPGs) / a wheel like the picker (fast for ≤ 8 replies, awkward for long lines) |
-| D2 | What happens to the game's own dialog window? | Keep it as it is, ours alongside / hide it while ours is up |
-| D3 | Which keys? | Confirm = Enter (as the picker), cancel = Escape; the highlight on D-pad or stick. The layout's D-pad is zoom/journal/map today, so moving it needs the same "only while open" treatment |
+| D1 (decided: list) | How are replies chosen? | A vertical list moved with the left stick / D-pad up-down (like most console RPGs) / a wheel like the picker (fast for ≤ 8 replies, awkward for long lines) |
+| D2 (decided: ours covers it, same layout, larger NPC text) | What happens to the game's own dialog window? | Keep it as it is, ours alongside / hide it while ours is up |
+| D3 (decided: D-pad, either stick, arrow keys; the layout's D-pad already sends the arrow keys) | Which keys? | Confirm = Enter (as the picker), cancel = Escape; the highlight on D-pad or stick. The layout's D-pad is zoom/journal/map today, so moving it needs the same "only while open" treatment |
 
 ## 7. Risks
 
