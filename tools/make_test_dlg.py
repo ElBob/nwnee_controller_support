@@ -18,8 +18,12 @@ LONG_REPLY = ("A long reply: " + "the quick brown fox jumps over the lazy dog, "
 MANY = 83
 
 
-def node(text, links):
-    return {"text": text, "links": links}
+def node(text, links, speaker=""):
+    return {"text": text, "links": links, "speaker": speaker}
+
+# Spoken by another creature (dialog plan: 3,664 campaign lines have a Speaker tag);
+# the tests create it next to the player.
+SPEAKER_TAG = "nwpad_speaker"
 
 
 def build():
@@ -35,10 +39,17 @@ def build():
     many = [reply("Option %d of %d." % (i + 1, MANY), 0) for i in range(MANY)]
     entries.append(node("Pick one of many.", many))  # 2
     entries.append(node("Short line, long reply below.", [reply(LONG_REPLY, 0), reply("Back.", 0)]))  # 3
+    entries.append(node("The end: no replies (the game adds one).", []))  # 4
+    # 5: what the campaigns have that the rest doesn't: cp1252 characters, leading and
+    # trailing spaces, a blank line, another speaker, and an empty reply (the game
+    # shows "[Continue]") leading to a line without replies
+    entries.append(node("   Another speaker: it\u2019s caf\u00e9, ch\u00e2teau, fl\u00fbte.\n\nAfter a blank line.  ",
+                        [reply("", 4), reply("Back.", 0)], SPEAKER_TAG))
     entries[0] = node("<StartAction>[Nods]</Start> Hello, <FirstName>. <StartCheck>[Persuade]</Start> "
                       "and <StartHighlight>highlighted</Start> text.",
                       [reply("The long line, please.", 1), reply("Many replies.", 2),
-                       reply("<StartCheck>[Intimidate]</Start> A long reply.", 3), reply("Goodbye.")])
+                       reply("<StartCheck>[Intimidate]</Start> A long reply.", 3),
+                       reply("Somebody else, please.", 5), reply("Goodbye.")])
     return entries, replies
 
 
@@ -107,7 +118,7 @@ def write(path):
     common = lambda text: [(DWORD, "Animation", 0), (BYTE, "AnimLoop", 1), (LOCSTRING, "Text", text),
                            (RESREF, "Script", ""), (DWORD, "Delay", 0xFFFFFFFF), (EXOSTRING, "Comment", ""),
                            (RESREF, "Sound", ""), (EXOSTRING, "Quest", "")]
-    es = [g.struct(i, [(EXOSTRING, "Speaker", "")] + common(e["text"]) +
+    es = [g.struct(i, [(EXOSTRING, "Speaker", e["speaker"])] + common(e["text"]) +
                    [(LIST, "RepliesList", links(g, e["links"]))]) for i, e in enumerate(entries)]
     rs = [g.struct(i, common(r["text"]) + [(LIST, "EntriesList", links(g, r["links"]))]) for i, r in enumerate(replies)]
     start = g.struct(0, [(DWORD, "Index", 0), (RESREF, "Active", "")])

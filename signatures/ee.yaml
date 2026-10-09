@@ -232,3 +232,12 @@ signatures:
   nui_reload_skin:         # Nui__ReloadSkin(): reloads nui_skin.tml (fonts are rebaked on the next render)
     note: F36
     symbol: _Z15Nui__ReloadSkinv
+  client_last_dialog_speaker:  # unsigned CClientExoApp::GetLastDialogSpeaker(): the object speaking the current line
+    note: F36
+    symbol: _ZN13CClientExoApp20GetLastDialogSpeakerEv
+  encoding_to_utf8:        # std::string Encoding::ToUTF8(const char*, Encoding::Locale): the game's text to UTF-8
+    note: F36
+    symbol: _ZN8Encoding6ToUTF8B5cxx11EPKcNS_6LocaleE
+  encoding_default_locale: # Encoding::g_DefaultLocale (the install's language)
+    note: F36
+    symbol: _ZN8Encoding15g_DefaultLocaleE

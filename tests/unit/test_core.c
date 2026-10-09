@@ -276,6 +276,12 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_fold_punctuation(void) {
+    char t[128] = "it\xe2\x80\x99s \xe2\x80\x9cq\xe2\x80\x9d \xe2\x80\x93 wait\xe2\x80\xa6 caf\xc3\xa9 \xe2\x84\xa2";
+    nwpad_utf8_fold_punctuation(t);
+    CHECK(!strcmp(t, "it's \"q\" - wait... caf\xc3\xa9 TM"));
+}
+
 static void test_strip_colour_codes(void) {
     char t[128] = "<c\x01\xfe\x01>[Nods]</c> Hello, Aluvian. <c\xfe\x01\x01>[Persuade]</c> and <c>> not one";
     nwpad_strip_colour_codes(t);
@@ -340,6 +346,7 @@ static void test_json_escape(void) {
     CHECK(nwpad_json_escape(b, sizeof b, "a\"b\\c\n") > 0 && !strcmp(b, "a\\\"b\\\\c\\u000a"));
     CHECK(nwpad_json_escape(b, sizeof b, "Caf\xe9") > 0 && !strcmp(b, "Caf\\u00e9"));
     CHECK(nwpad_json_escape(b, 4, "Fireball") == -1 && b[0] == '\0');
+    CHECK(nwpad_json_escape_utf8(b, sizeof b, "it\xe2\x80\x99s \"x\"") > 0 && !strcmp(b, "it\xe2\x80\x99s \\\"x\\\""));
 }
 
 static void test_cursor_rehide(void) {
@@ -411,6 +418,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_fold_punctuation();
     test_strip_colour_codes();
     test_picker_key();
     test_picker_select();

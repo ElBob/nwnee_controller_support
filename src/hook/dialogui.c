@@ -39,6 +39,11 @@ static struct {
     bool preview;         /* debug: a made-up conversation is shown */
     int flip;             /* which of the two tokens is current */
     int first, last;      /* the replies shown (more than fit on screen scroll) */
+    float rh[NWPAD_DIALOG_REPLIES]; /* each reply's row height */
+    float room;           /* height available for the replies */
+    int nrows, row_kind[ROWS + 2]; /* the rows: a reply index, or -1 for "..." */
+    float row_h[ROWS + 2];
+    int bound_kind[ROWS + 2], bound_colour[ROWS + 2]; /* what each row's binds hold (-2 nothing) */
     char wrapped[4200];   /* the NPC's line, wrapped by nwpad: lines separated by '\n' */
     int line_at[512], lines, top, visible; /* line starts in wrapped; the shown range */
     uint32_t seq;
@@ -113,13 +118,20 @@ static float text_height_at(const char *text, float width, float char_w, float l
 
 static float text_height(const char *text, float width) { return text_height_at(text, width, CHAR_W, LINE_H); }
 
-static void colour(int i) {
-    char name[16];
-    snprintf(name, sizeof name, "c%d", i);
-    const char *c = !ui.d.replies[i].selectable  ? "{\"r\":128,\"g\":128,\"b\":128,\"a\":255}"
-                    : i == ui.highlight          ? "{\"r\":235,\"g\":190,\"b\":80,\"a\":255}"
-                                                 : "{\"r\":125,\"g\":180,\"b\":255,\"a\":255}";
-    nwpad_nui_bind(TOKEN, name, c);
+
+static void trim(char *s) { /* leading and trailing blanks (the campaigns have many) */
+    size_t a = strspn(s, " \t\r\n"), n = strlen(s);
+    while (n > a && strchr(" \t\r\n", s[n - 1])) n--;
+    memmove(s, s + a, n - a);
+    s[n - a] = '\0';
+}
+
+/* Game text -> JSON string body, through the game's UTF-8 conversion. */
+static void game_json(char *out, size_t cap, const char *text) {
+    static char utf8[12000];
+    nwpad_text_utf8(text, utf8, sizeof utf8);
+    nwpad_utf8_fold_punctuation(utf8);
+    nwpad_json_escape_utf8(out, cap, utf8);
 }
 
 /* Wrap the NPC's line into ui.wrapped at `cols` characters (word boundaries). */
@@ -188,10 +200,76 @@ static void show_body(void) {
     int from = ui.line_at[ui.top], last = ui.top + ui.visible;
     size_t to = last < ui.lines ? (size_t)ui.line_at[last] - 1 : strlen(ui.wrapped);
     snprintf(text, sizeof text, "%.*s", (int)(to - (size_t)from), ui.wrapped + from);
-    nwpad_json_escape(esc, sizeof esc, text);
+    game_json(esc, sizeof esc, text);
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "body", value);
     show_thumb();
+}
+
+static void reply_text(int i, char *out, size_t cap) {
+    char numbered[600];
+    snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
+    game_json(out, cap, numbered);
+}
+
+/* Row k's text and colour (the rows are binds, so scrolling needn't rebuild). */
+static void bind_row(int k) {
+    static char esc[2400], value[2500];
+    static const char *const colours[] = {"{\"r\":150,\"g\":150,\"b\":150,\"a\":255}",  /* ... */
+                                          "{\"r\":128,\"g\":128,\"b\":128,\"a\":255}",  /* not selectable */
+                                          "{\"r\":235,\"g\":190,\"b\":80,\"a\":255}",   /* highlighted */
+                                          "{\"r\":125,\"g\":180,\"b\":255,\"a\":255}"}; /* a reply */
+    char name[16];
+    int i = ui.row_kind[k];
+    int c = i < 0 ? 0 : !ui.d.replies[i].selectable ? 1 : i == ui.highlight ? 2 : 3;
+    if (c != ui.bound_colour[k]) { /* only what changed: binds go through the game's NUI handler */
+        snprintf(name, sizeof name, "c%d", k);
+        nwpad_nui_bind(TOKEN, name, colours[c]);
+        ui.bound_colour[k] = c;
+    }
+    if (i == ui.bound_kind[k]) return;
+    ui.bound_kind[k] = i;
+    if (i < 0) snprintf(esc, sizeof esc, "...");
+    else reply_text(i, esc, sizeof esc);
+    snprintf(value, sizeof value, "\"%s\"", esc);
+    snprintf(name, sizeof name, "t%d", k);
+    nwpad_nui_bind(TOKEN, name, value);
+}
+
+/* Which replies show, as rows: all if they fit, else ROWS rows around the highlight
+ * with "..." in place of the first / last row when there are more that way. */
+static void layout(void) {
+    float total = 0, dots_h = LINE_H + 6 + ROW_GAP;
+    for (int i = 0; i < ui.d.count; i++) total += ui.rh[i];
+    ui.last = ui.d.count - 1;
+    bool above = false, below = false;
+    if (ui.d.count > ROWS || total > ui.room) {
+        for (int rows = ROWS; rows >= 3; rows--) {
+            if (ui.highlight >= 0 && ui.highlight < ui.first) ui.first = ui.highlight;
+            for (;;) { /* lay out from ui.first; move down until the highlight shows */
+                above = ui.first > 0;
+                int slots = rows - (above ? 1 : 0);
+                below = ui.first + slots < ui.d.count;
+                if (below) slots--;
+                ui.last = ui.first + slots - 1;
+                if (ui.highlight <= ui.last || ui.last >= ui.d.count - 1) break;
+                ui.first++;
+            }
+            while (!below && ui.first > 0 && (ui.last - ui.first + 1) + (ui.first > 1 ? 1 : 0) < rows) {
+                ui.first--; /* at the end: fill the rows upwards */
+                above = ui.first > 0;
+            }
+            float used = (above ? dots_h : 0) + (below ? dots_h : 0);
+            for (int i = ui.first; i <= ui.last; i++) used += ui.rh[i];
+            if (used <= ui.room) break; /* long replies: fewer rows */
+        }
+    } else {
+        ui.first = 0;
+    }
+    ui.nrows = 0;
+    if (above) { ui.row_kind[ui.nrows] = -1; ui.row_h[ui.nrows++] = dots_h; }
+    for (int i = ui.first; i <= ui.last && ui.nrows < ROWS + 1; i++) { ui.row_kind[ui.nrows] = i; ui.row_h[ui.nrows++] = ui.rh[i]; }
+    if (below) { ui.row_kind[ui.nrows] = -1; ui.row_h[ui.nrows++] = dots_h; }
 }
 
 /* Screen height in GUI units (as the picker centres itself). */
@@ -205,7 +283,6 @@ static float screen_h(void) {
 
 static bool build(void) {
     static char json[65536];
-    static char esc[9000];
     float text_w = WIDTH - PORTRAIT_W - 3 * PAD, char_w = big_font ? BIG_CHAR_W : CHAR_W,
           lh = big_font ? BIG_LINE_H : LINE_H;
     wrap(ui.d.line, (int)floorf(text_w / char_w));
@@ -222,7 +299,7 @@ static bool build(void) {
     float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + PAD + SEP_H + ROW_GAP; /* + NUI padding */
     size_t n = 0;
     char name[400];
-    nwpad_json_escape(name, sizeof name, ui.d.speaker_name);
+    game_json(name, sizeof name, ui.d.speaker_name);
     n += (size_t)snprintf(json + n, sizeof json - n,
         /* (no row height: NUI's padding wouldn't fit around a full-height portrait) */
         "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
@@ -242,59 +319,18 @@ static bool build(void) {
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
         scrolls ? scrollbar(body_h - BAR_TRIM) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
-    /* The replies. If they don't all fit, ROWS rows: replies around the highlight,
-     * with "..." in place of the first / last row when there are more that way. */
-    static float rh[NWPAD_DIALOG_REPLIES];
-    char numbered[600];
-    float total = 0, room = screen_h() - h - 2 * PAD - QUICKBAR_H, dots_h = LINE_H + ROW_GAP;
+    ui.room = screen_h() - h - 2 * PAD - QUICKBAR_H;
     for (int i = 0; i < ui.d.count; i++) {
+        char numbered[600];
         snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
-        rh[i] = text_height(numbered, WIDTH - 2 * PAD) + ROW_GAP;
-        total += rh[i];
+        ui.rh[i] = text_height(numbered, WIDTH - 2 * PAD) + ROW_GAP;
     }
-    ui.last = ui.d.count - 1;
-    bool above = false, below = false;
-    if (ui.d.count > ROWS || total > room) {
-        for (int rows = ROWS; rows >= 3; rows--) {
-            if (ui.highlight >= 0 && ui.highlight < ui.first) ui.first = ui.highlight;
-            for (;;) { /* lay out from ui.first; move down until the highlight shows */
-                above = ui.first > 0;
-                int slots = rows - (above ? 1 : 0);
-                below = ui.first + slots < ui.d.count;
-                if (below) slots--;
-                ui.last = ui.first + slots - 1;
-                if (ui.highlight <= ui.last || ui.last >= ui.d.count - 1) break;
-                ui.first++;
-            }
-            while (!below && ui.first > 0 && (ui.last - ui.first + 1) + (ui.first > 1 ? 1 : 0) < rows) {
-                ui.first--; /* at the end: fill the rows upwards */
-                above = ui.first > 0;
-            }
-            float used = (above ? dots_h : 0) + (below ? dots_h : 0);
-            for (int i = ui.first; i <= ui.last; i++) used += rh[i];
-            if (used <= room) break; /* long replies: fewer rows */
-        }
-    } else {
-        ui.first = 0;
-    }
-    static const char dots[] = ",{\"type\":\"text\",\"label\":null,\"value\":\"...\",\"border\":false,"
-                               "\"scrollbars\":0,\"height\":%.1f,"
-                               "\"foreground_color\":{\"r\":150,\"g\":150,\"b\":150,\"a\":255}}";
-    if (above) {
-        h += dots_h;
-        n += (size_t)snprintf(json + n, sizeof json - n, dots, LINE_H);
-    }
-    for (int i = ui.first; i <= ui.last && n < sizeof json; i++) {
-        snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
-        nwpad_json_escape(esc, sizeof esc, numbered);
-        h += rh[i];
+    layout();
+    for (int k = 0; k < ui.nrows && n < sizeof json; k++) {
+        h += ui.row_h[k];
         n += (size_t)snprintf(json + n, sizeof json - n,
-            ",{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":0,\"height\":%.1f,"
-            "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh[i] - ROW_GAP, i);
-    }
-    if (below) {
-        h += dots_h;
-        n += (size_t)snprintf(json + n, sizeof json - n, dots, LINE_H);
+            ",{\"type\":\"text\",\"label\":null,\"value\":{\"bind\":\"t%d\"},\"border\":false,\"scrollbars\":0,"
+            "\"height\":%.1f,\"foreground_color\":{\"bind\":\"c%d\"}}", k, ui.row_h[k] - ROW_GAP, k);
     }
     if (ui.d.panel_h + 4 > h) h = ui.d.panel_h + 4; /* never smaller than the game's window */
     static char window[70000];
@@ -317,7 +353,8 @@ static bool build(void) {
     char geo[96];
     snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h);
     nwpad_nui_bind(TOKEN, "geo", geo);
-    for (int i = ui.first; i <= ui.last; i++) colour(i);
+    for (int k = 0; k < ROWS + 2; k++) ui.bound_kind[k] = ui.bound_colour[k] = -2;
+    for (int k = 0; k < ui.nrows; k++) bind_row(k);
     show_body();
     return true;
 }
@@ -333,10 +370,17 @@ void nwpad_dialogui_scroll(int lines) {
 }
 
 /* Show the window again after the highlight left the visible replies. */
+unsigned nwpad_dialogui_builds; uint64_t nwpad_dialogui_build_ns, nwpad_dialogui_build_max_ns; /* debug */
 static void rebuild(void) {
+    uint64_t t0 = nwpad_now_ns(), g0 = nwpad_nui_take_game_ns();
     nwpad_nui_destroy(TOKEN);
     ui.flip ^= 1;
     ui.open = build();
+    uint64_t game = nwpad_nui_take_game_ns(), own = nwpad_now_ns() - t0 - game;
+    nwpad_game_ns_add(g0 + game); /* put the game time back for the frame's account */
+    nwpad_dialogui_builds++;
+    nwpad_dialogui_build_ns += own;
+    if (own > nwpad_dialogui_build_max_ns) nwpad_dialogui_build_max_ns = own;
 }
 
 static int first_selectable(void) {
@@ -347,19 +391,24 @@ static int first_selectable(void) {
 
 void nwpad_dialogui_move(int step) {
     if (!ui.open || ui.d.count == 0) return;
-    int was = ui.highlight, i = ui.highlight;
+    int i = ui.highlight;
     for (int k = 0; k < ui.d.count; k++) { /* next selectable, wrapping */
         i = ((i < 0 ? 0 : i) + step + ui.d.count) % ui.d.count;
         if (ui.d.replies[i].selectable) break;
     }
     ui.highlight = i;
-    if (i < ui.first || i > ui.last) { /* scrolled: wrap to the top resets the range */
-        if (i < ui.first) ui.first = i;
+    int nrows = ui.nrows, kind[ROWS + 2];
+    float heights[ROWS + 2];
+    memcpy(kind, ui.row_kind, sizeof kind);
+    memcpy(heights, ui.row_h, sizeof heights);
+    layout();
+    bool same = ui.nrows == nrows;
+    for (int k = 0; same && k < nrows; k++) same = heights[k] == ui.row_h[k];
+    if (!same) { /* other row heights (a long reply came into view): build again */
         rebuild();
         return;
     }
-    if (was >= 0) colour(was);
-    colour(i);
+    for (int k = 0; k < ui.nrows; k++) bind_row(k); /* scrolled or not: just the binds */
 }
 
 void nwpad_dialogui_confirm(void) {
@@ -424,7 +473,11 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
         ui.seq = seq;
         if (!nwpad_dialog_read(&ui.d)) return false;
         nwpad_strip_colour_codes(ui.d.line); /* no inline colours in NUI text */
-        for (int i = 0; i < ui.d.count; i++) nwpad_strip_colour_codes(ui.d.replies[i].text);
+        trim(ui.d.line);
+        for (int i = 0; i < ui.d.count; i++) {
+            nwpad_strip_colour_codes(ui.d.replies[i].text);
+            trim(ui.d.replies[i].text);
+        }
         ui.first = 0;
         ui.top = 0;
         if (ui.open) {

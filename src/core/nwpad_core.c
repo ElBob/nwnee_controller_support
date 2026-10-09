@@ -469,14 +469,19 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
     return n > 0 && (size_t)n < cap ? n : -1;
 }
 
-int nwpad_json_escape(char *out, size_t cap, const char *in) {
+static int json_escape(char *out, size_t cap, const char *in, bool utf8);
+
+int nwpad_json_escape(char *out, size_t cap, const char *in) { return json_escape(out, cap, in, false); }
+int nwpad_json_escape_utf8(char *out, size_t cap, const char *in) { return json_escape(out, cap, in, true); }
+
+static int json_escape(char *out, size_t cap, const char *in, bool utf8) {
     size_t n = 0;
     for (const unsigned char *p = (const unsigned char *)in; *p; p++) {
         char esc[8];
         const char *add = esc;
         if (*p == '"') add = "\\\"";
         else if (*p == '\\') add = "\\\\";
-        else if (*p < 0x20 || *p >= 0x80) snprintf(esc, sizeof esc, "\\u%04x", *p);
+        else if (*p < 0x20 || (*p >= 0x80 && !utf8)) snprintf(esc, sizeof esc, "\\u%04x", *p);
         else { esc[0] = (char)*p; esc[1] = '\0'; }
         size_t len = strlen(add);
         if (n + len + 1 > cap) {
@@ -677,6 +682,34 @@ void nwpad_strip_colour_codes(char *text) {
         } else {
             *o++ = *p++;
         }
+    }
+    *o = '\0';
+}
+
+void nwpad_utf8_fold_punctuation(char *text) {
+    static const struct { const char *from, *to; } folds[] = {
+        {"\xe2\x80\x98", "'"}, {"\xe2\x80\x99", "'"}, {"\xe2\x80\x9a", ","}, {"\xe2\x80\x9b", "'"},
+        {"\xe2\x80\x9c", "\""}, {"\xe2\x80\x9d", "\""}, {"\xe2\x80\x9e", "\""}, {"\xe2\x80\x93", "-"},
+        {"\xe2\x80\x94", "-"}, {"\xe2\x80\xa6", "..."}, {"\xe2\x80\xa2", "*"}, {"\xe2\x80\xb9", "<"},
+        {"\xe2\x80\xba", ">"}, {"\xe2\x84\xa2", "TM"}, {"\xcb\x86", "^"}, {"\xcb\x9c", "~"},
+        {"\xe2\x80\xa0", "+"}, {"\xe2\x80\xb0", "%"}, {"\xe2\x82\xac", "EUR"},
+    };
+    char *o = text;
+    for (char *p = text; *p;) {
+        size_t k = 0;
+        for (; k < sizeof folds / sizeof folds[0]; k++) {
+            size_t n = strlen(folds[k].from);
+            if (!strncmp(p, folds[k].from, n)) {
+                size_t m = strlen(folds[k].to);
+                if (m <= n) { /* in place: never longer than the sequence */
+                    memcpy(o, folds[k].to, m);
+                    o += m;
+                    p += n;
+                    break;
+                }
+            }
+        }
+        if (k == sizeof folds / sizeof folds[0]) *o++ = *p++;
     }
     *o = '\0';
 }

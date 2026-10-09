@@ -4,9 +4,11 @@
 #include "../core/nwpad_core.h"
 #include "sigs.h"
 #include "vslot.h"
+#include "nui.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <dlfcn.h>
 
 typedef struct { char *ptr; uint32_t len, cap; } exo_string; /* CExoString, 16 bytes */
 typedef void *(*vcall_fn)(void *self);
@@ -32,6 +34,30 @@ static struct {
     uint32_t seq;
     void *replies_seen;        /* reply array last read: a new one means new replies */
 } dl;
+
+typedef struct { char *ptr; size_t len; union { size_t cap; char buf[16]; } u; } cxx_string;
+
+void nwpad_text_utf8(const char *in, char *out, size_t cap) {
+    void (*to_utf8)(cxx_string *, const char *, int) = (void (*)(cxx_string *, const char *, int))nwpad_sig(NWPAD_SIG_ENCODING_TO_UTF8);
+    int *locale = (int *)nwpad_sig(NWPAD_SIG_ENCODING_DEFAULT_LOCALE);
+    static void (*cxx_delete)(void *);
+    if (!cxx_delete) cxx_delete = (void (*)(void *))dlsym(RTLD_DEFAULT, "_ZdlPv");
+    if (to_utf8 && locale && cxx_delete) {
+        cxx_string s = {0};
+        uint64_t t0 = nwpad_now_ns();
+        to_utf8(&s, in, *locale);
+        nwpad_game_ns_add(nwpad_now_ns() - t0); /* game code: game time */
+        snprintf(out, cap, "%.*s", (int)s.len, s.ptr ? s.ptr : "");
+        if (s.ptr && s.ptr != s.u.buf) cxx_delete(s.ptr);
+        return;
+    }
+    size_t n = 0; /* Latin-1 */
+    for (const unsigned char *p = (const unsigned char *)in; *p && n + 3 < cap; p++) {
+        if (*p < 0x80) out[n++] = (char)*p;
+        else { out[n++] = (char)(0xc0 | (*p >> 6)); out[n++] = (char)(0x80 | (*p & 0x3f)); }
+    }
+    out[cap ? (n < cap ? n : cap - 1) : 0] = '\0';
+}
 
 static void *gui(void) {
     void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
@@ -105,6 +131,7 @@ static void speaker_info(uint32_t oid, nwpad_dialog *out) {
         ((void (*)(char *, void *, int))((void **)*nwc)[0x1d8 / 8])(ref, nwc, 3); /* GetPortrait(size) */
         snprintf(out->portrait, sizeof out->portrait, "%.16s", ref);
     }
+    if (!out->portrait[0]) snprintf(out->portrait, sizeof out->portrait, "%s", "po_hu_m_99_m"); /* the game's default */
 }
 
 bool nwpad_dialog_read(nwpad_dialog *out) {
@@ -116,7 +143,12 @@ bool nwpad_dialog_read(nwpad_dialog *out) {
     }
     out->open = true;
     out->seq = nwpad_dialog_seq();
-    out->speaker = *(uint32_t *)(d + DLG_SPEAKER);
+    /* The line's speaker (an entry can be spoken by another object than the
+     * conversation's owner, which is all the dialog object keeps). */
+    uint32_t (*last)(void *) = (uint32_t (*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_LAST_DIALOG_SPEAKER);
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    uint32_t who = last && app_manager && *app_manager ? last(*(void **)*app_manager) : 0x7f000000;
+    out->speaker = who != 0x7f000000 && who ? who : *(uint32_t *)(d + DLG_SPEAKER);
     out->panel_h = *(float *)(d + DLG_HEIGHT) * 100.0f;
     speaker_info(out->speaker, out);
     out->busy = *(int32_t *)(d + DLG_BUSY) != 0;

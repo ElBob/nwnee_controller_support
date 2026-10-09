@@ -21,6 +21,9 @@ bool nwpad_nui_events_pending(void);
  * nwpad's own, for the frame budget). */
 #include <stdint.h>
 uint64_t nwpad_nui_take_game_ns(void);
+/* Add time spent in other game functions to the same game-time account. */
+void nwpad_game_ns_add(uint64_t ns);
+uint64_t nwpad_now_ns(void);
 /* How many NUI windows the game has (debug). */
 int nwpad_nui_window_count(void);
 

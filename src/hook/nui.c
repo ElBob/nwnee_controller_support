@@ -111,6 +111,9 @@ static uint64_t now_ns(void) {
     return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
 }
 
+void nwpad_game_ns_add(uint64_t ns) { game_ns += ns; }
+uint64_t nwpad_now_ns(void) { return now_ns(); }
+
 uint64_t nwpad_nui_take_game_ns(void) {
     uint64_t ns = game_ns;
     game_ns = 0;

@@ -27,6 +27,10 @@ typedef struct {
     } replies[NWPAD_DIALOG_REPLIES];
 } nwpad_dialog;
 
+/* The game's text (its install language's 8-bit encoding) as UTF-8, as the game
+ * converts it for NUI; Latin-1 if the converter isn't available. */
+void nwpad_text_utf8(const char *in, char *out, size_t cap);
+
 /* Install the text capture (once, when signatures are resolved). False if unavailable. */
 bool nwpad_dialog_init(void);
 /* Cheap per-frame check: the conversation's change counter, or 0 if none is open. */

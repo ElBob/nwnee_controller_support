@@ -376,9 +376,15 @@ static void control_handler(const char *request, char *out, size_t cap) {
         if (!strcmp(action, "cancel")) g.picker.dialog_action = 2;
         int first, last;
         nwpad_dialogui_range(&first, &last);
-        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d,\"text_top\":%d}",
+        extern unsigned nwpad_dialogui_builds;
+        extern uint64_t nwpad_dialogui_build_ns, nwpad_dialogui_build_max_ns;
+        snprintf(out, cap,
+                 "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d,\"text_top\":%d,"
+                 "\"rebuilds\":%u,\"rebuild_avg_us\":%.1f,\"rebuild_max_us\":%.1f}",
                  nwpad_dialogui_open() ? "true" : "false", nwpad_dialogui_highlight(), first, last,
-                 nwpad_dialogui_text_top());
+                 nwpad_dialogui_text_top(), nwpad_dialogui_builds,
+                 nwpad_dialogui_builds ? (double)nwpad_dialogui_build_ns / nwpad_dialogui_builds / 1000.0 : 0.0,
+                 (double)nwpad_dialogui_build_max_ns / 1000.0);
     } else if (strcmp(cmd, "resource_publish") == 0) {
         /* {"cmd":"resource_publish","src":"/tmp/x.dlg","name":"x.dlg"}: serve a file as a game resource */
         char src[512] = "", name[64] = "";

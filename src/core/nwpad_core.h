@@ -207,6 +207,8 @@ bool nwpad_json_get_number(const char *json, const char *key, double *out);
  * strings are Windows-1252; Latin-1 is close enough here). Returns the length
  * written, or -1 if it doesn't fit (out is then empty). */
 int nwpad_json_escape(char *out, size_t cap, const char *in);
+/* The same for UTF-8 text: bytes >= 0x80 are copied as they are. */
+int nwpad_json_escape_utf8(char *out, size_t cap, const char *in);
 
 /* ---- Quickbar picker (quickbar plan Q2) ---- */
 #define NWPAD_PICKER_SLOTS 12
@@ -221,6 +223,11 @@ int nwpad_picker_select(nwpad_vec2 stick, int current);
  * what conversation markup like <StartCheck> becomes, re-notes F36) in place,
  * keeping the text they colour. */
 void nwpad_strip_colour_codes(char *text);
+
+/* NUI's fonts only have Latin-1 glyphs (re-notes F36): replace typographic
+ * punctuation beyond it (curly quotes, dashes, ellipsis, bullet, ...) in UTF-8 text
+ * with ASCII, in place. */
+void nwpad_utf8_fold_punctuation(char *text);
 
 /* ---- UBJSON (the game's NUI wire format, re-notes F32) ---- */
 /* Convert JSON text to UBJSON: integers as the smallest of i/U/I/l/L, other

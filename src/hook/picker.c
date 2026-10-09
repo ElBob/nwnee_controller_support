@@ -6,6 +6,7 @@
 
 #include "nui.h"
 #include "quickbar.h"
+#include "dialog.h"
 #include "sigs.h"
 
 #include <math.h>
@@ -100,8 +101,11 @@ static size_t draw_wheel(char *json, size_t n, size_t cap, int bank, int side) {
             }
         } else { /* active wheel, no icon images: its name, small */
             char shortname[12];
+            char utf8[40];
             snprintf(shortname, sizeof shortname, "%s", s->name);
-            nwpad_json_escape(esc, sizeof esc, shortname);
+            nwpad_text_utf8(shortname, utf8, sizeof utf8);
+            nwpad_utf8_fold_punctuation(utf8);
+            nwpad_json_escape_utf8(esc, sizeof esc, utf8);
             n += (size_t)snprintf(json + n, cap - n,
                 ",{\"type\":4,\"enabled\":true,\"color\":{\"r\":230,\"g\":220,\"b\":190,\"a\":255},\"fill\":null,"
                 "\"line_thickness\":null,\"order\":1,\"render\":0,\"arrayBinds\":false,"
@@ -172,7 +176,10 @@ static void show_selection(int previous, int now) {
     nwpad_nui_bind(TOKEN, "hl", rect);
     nwpad_nui_bind(TOKEN, "hl_on", "true");
     const nwpad_qb_slot *s = ring_slot(now);
-    nwpad_json_escape(esc, sizeof esc, s->type ? s->name : "");
+    char utf8[400];
+    nwpad_text_utf8(s->type ? s->name : "", utf8, sizeof utf8);
+    nwpad_utf8_fold_punctuation(utf8);
+    nwpad_json_escape_utf8(esc, sizeof esc, utf8);
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "name", value);
 }

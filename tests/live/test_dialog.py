@@ -19,7 +19,8 @@ def npc_home(ctl):
     if ctl("dialog")["dialog"]:
         ctl("dialog_select", end=1)
     ctl("script_chunk", code='object n=GetLocalObject(GetModule(), "nwpad_npc"); AssignCommand(n, ClearAllActions(TRUE));'
-                             ' AssignCommand(n, JumpToLocation(GetLocalLocation(GetModule(), "nwpad_npc_home")));')
+                             ' AssignCommand(n, JumpToLocation(GetLocalLocation(GetModule(), "nwpad_npc_home")));'
+                             ' DestroyObject(GetObjectByTag("nwpad_speaker"));')
     time.sleep(1.0)
 
 
@@ -109,7 +110,7 @@ def test_test_conversation(game, ctl, tmp_path):
         ctl("dialog_select", end=1)
         _dialog(ctl, want=lambda d: d is None)
     ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
-    d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 4)
+    d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
     assert d["line"].startswith("<c") and "[Nods]</c> Hello, " in d["line"], d  # tokens filled in, colour codes
     assert ctl("dialog_ui")["open"]
     seq = d["seq"]
@@ -131,7 +132,7 @@ def test_test_conversation(game, ctl, tmp_path):
     # The long line: a stick scrolls the text (the highlight stays put)
     seq = ctl("dialog")["dialog"]["seq"]
     ctl("dialog_ui", action="confirm")  # Option 83 -> back to the start
-    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 4)
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 5)
     seq = d["seq"]
     ctl("dialog_select", index=0)  # "The long line, please."
     _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("This is sentence 1"))
@@ -142,6 +143,28 @@ def test_test_conversation(game, ctl, tmp_path):
     ctl("release")
     ui = ctl("dialog_ui")
     assert ui["text_top"] > 2 and ui["highlight"] == 0, ui
+    ctl("dialog_select", end=1)
+    _dialog(ctl, want=lambda d: d is None)
+    # Another speaker (the campaigns' Speaker tags), cp1252 text, an empty reply and
+    # a line without replies (the game fills in "Continue" / "End Dialog")
+    ctl("script_chunk", code='object pc=GetFirstPC(); vector v=GetPosition(pc);'
+                             ' object c=CreateObject(OBJECT_TYPE_CREATURE, "nw_bandit001",'
+                             ' Location(GetArea(pc), Vector(v.x+2.0, v.y+2.0, v.z), 0.0), FALSE, "nwpad_speaker");'
+                             ' ChangeToStandardFaction(c, STANDARD_FACTION_COMMONER);')
+    time.sleep(1.0)
+    ctl("script_chunk", code='object n=GetLocalObject(GetModule(), "nwpad_npc"); AssignCommand(n, ClearAllActions());'
+                             ' AssignCommand(n, ActionStartConversation(GetFirstPC(), "nwpadtest", FALSE, FALSE));')
+    d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
+    assert d["name"] == "Rules Enforcer D"
+    seq = d["seq"]
+    ctl("dialog_select", index=3)  # "Somebody else, please."
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and "Another speaker" in d["line"])
+    assert d["name"] == "Bandit" and d["portrait"], d
+    assert [r["text"] for r in d["replies"]] == ["Continue", "Back."], d
+    seq = d["seq"]
+    ctl("dialog_select", index=0)
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The end"))
+    assert [r["text"] for r in d["replies"]] == ["End Dialog"], d
     ctl("dialog_select", end=1)
     _dialog(ctl, want=lambda d: d is None)
     log = open(os.path.join(game, "game.log"), errors="replace").read()
