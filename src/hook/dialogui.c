@@ -7,7 +7,8 @@
 #include "sigs.h"
 
 #define SEP_H 8.0f   /* the line under the NPC's text */
-#define MORE_H 16.0f /* the "..." markers when replies scroll */
+#define ROWS 6       /* reply rows when they scroll (4 replies + "..." rows) */
+#define ROW_GAP 4.0f /* NUI's spacing between rows */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
 #include "nui.h"
 
@@ -177,7 +178,7 @@ static bool build(void) {
     if (ui.top < 0) ui.top = 0;
     float body_h = (float)ui.visible * lh + 6;
     float line_h = body_h + LINE_H + 4;
-    float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + 3 * PAD + SEP_H + 8; /* + NUI padding */
+    float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + PAD + SEP_H + ROW_GAP; /* + NUI padding */
     size_t n = 0;
     char name[400];
     nwpad_json_escape(name, sizeof name, ui.d.speaker_name);
@@ -199,36 +200,47 @@ static bool build(void) {
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
         SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
-    /* The replies that fit under the line; if not all, a range around the highlight
-     * with markers for the rest. */
+    /* The replies. If they don't all fit, ROWS rows: replies around the highlight,
+     * with "..." in place of the first / last row when there are more that way. */
     static float rh[NWPAD_DIALOG_REPLIES];
     char numbered[600];
-    float total = 0, room = screen_h() - h - 3 * PAD - QUICKBAR_H;
+    float total = 0, room = screen_h() - h - 2 * PAD - QUICKBAR_H, dots_h = LINE_H + ROW_GAP;
     for (int i = 0; i < ui.d.count; i++) {
         snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
-        rh[i] = text_height(numbered, WIDTH - 2 * PAD) + 8;
+        rh[i] = text_height(numbered, WIDTH - 2 * PAD) + ROW_GAP;
         total += rh[i];
     }
     ui.last = ui.d.count - 1;
-    if (total > room) {
-        room -= 2 * (MORE_H + 8);
-        if (ui.highlight >= 0 && ui.highlight < ui.first) ui.first = ui.highlight;
-        float used = 0;
-        for (ui.last = ui.first; ui.last < ui.d.count && used + rh[ui.last] <= room; ui.last++) used += rh[ui.last];
-        ui.last--;
-        while (ui.highlight > ui.last && ui.first < ui.highlight) { /* scroll down to the highlight */
-            used -= rh[ui.first++];
-            while (ui.last + 1 < ui.d.count && used + rh[ui.last + 1] <= room) used += rh[++ui.last];
+    bool above = false, below = false;
+    if (ui.d.count > ROWS || total > room) {
+        for (int rows = ROWS; rows >= 3; rows--) {
+            if (ui.highlight >= 0 && ui.highlight < ui.first) ui.first = ui.highlight;
+            for (;;) { /* lay out from ui.first; move down until the highlight shows */
+                above = ui.first > 0;
+                int slots = rows - (above ? 1 : 0);
+                below = ui.first + slots < ui.d.count;
+                if (below) slots--;
+                ui.last = ui.first + slots - 1;
+                if (ui.highlight <= ui.last || ui.last >= ui.d.count - 1) break;
+                ui.first++;
+            }
+            while (!below && ui.first > 0 && (ui.last - ui.first + 1) + (ui.first > 1 ? 1 : 0) < rows) {
+                ui.first--; /* at the end: fill the rows upwards */
+                above = ui.first > 0;
+            }
+            float used = (above ? dots_h : 0) + (below ? dots_h : 0);
+            for (int i = ui.first; i <= ui.last; i++) used += rh[i];
+            if (used <= room) break; /* long replies: fewer rows */
         }
-        if (ui.last < ui.first) ui.last = ui.first;
+    } else {
+        ui.first = 0;
     }
-    bool above = ui.first > 0, below = ui.last < ui.d.count - 1;
-    static const char more[] = ",{\"type\":\"label\",\"label\":null,\"value\":\"...\",\"text_halign\":0,"
-                               "\"text_valign\":0,\"height\":%.1f,"
+    static const char dots[] = ",{\"type\":\"text\",\"label\":null,\"value\":\"...\",\"border\":false,"
+                               "\"scrollbars\":0,\"height\":%.1f,"
                                "\"foreground_color\":{\"r\":150,\"g\":150,\"b\":150,\"a\":255}}";
     if (above) {
-        h += MORE_H + 8;
-        n += (size_t)snprintf(json + n, sizeof json - n, more, MORE_H);
+        h += dots_h;
+        n += (size_t)snprintf(json + n, sizeof json - n, dots, LINE_H);
     }
     for (int i = ui.first; i <= ui.last && n < sizeof json; i++) {
         snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
@@ -236,13 +248,13 @@ static bool build(void) {
         h += rh[i];
         n += (size_t)snprintf(json + n, sizeof json - n,
             ",{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":0,\"height\":%.1f,"
-            "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh[i] - 8, i);
+            "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh[i] - ROW_GAP, i);
     }
     if (below) {
-        h += MORE_H + 8;
-        n += (size_t)snprintf(json + n, sizeof json - n, more, MORE_H);
+        h += dots_h;
+        n += (size_t)snprintf(json + n, sizeof json - n, dots, LINE_H);
     }
-    if (ui.d.panel_h + 8 > h) h = ui.d.panel_h + 8; /* never smaller than the game's window */
+    if (ui.d.panel_h + 4 > h) h = ui.d.panel_h + 4; /* never smaller than the game's window */
     static char window[70000];
     int w = snprintf(window, sizeof window,
         "{\"version\":1,\"title\":false,\"resizable\":false,\"collapsed\":false,\"closable\":false,"
@@ -261,7 +273,7 @@ static bool build(void) {
     /* Placed by a bind: a window created right after another one closes was
      * sometimes centred by NUI when the geometry was in the definition. */
     char geo[96];
-    snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h + PAD);
+    snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h);
     nwpad_nui_bind(TOKEN, "geo", geo);
     for (int i = ui.first; i <= ui.last; i++) colour(i);
     show_body();
