@@ -34,7 +34,7 @@ static const char *const palette_names[PALETTES] = {"pal_skin01",  "pal_hair01",
 
 /* Raw resource bytes (malloc'd copy) through the game's resource manager, so haks
  * and override folders apply as in the game. */
-static uint8_t *resource(const char *name, unsigned short type, size_t *size) {
+uint8_t *nwpad_resource_get(const char *name, unsigned short type, size_t *size) {
     res_get_fn get = (res_get_fn)nwpad_sig(NWPAD_SIG_RES_GET);
     void **resman = (void **)nwpad_sig(NWPAD_SIG_RES_MAN);
     release_fn release = (release_fn)nwpad_sig(NWPAD_SIG_SHARED_RELEASE);
@@ -94,7 +94,7 @@ static const uint8_t *palette_px(int pal, int row, int shade) {
     if (!palette[pal].tried) {
         palette[pal].tried = true;
         size_t n = 0;
-        uint8_t *t = resource(palette_names[pal], RES_TGA, &n);
+        uint8_t *t = nwpad_resource_get(palette_names[pal], RES_TGA, &n);
         int w = 0, h = 0;
         palette[pal].rgba = t ? decode_tga(t, n, &w, &h) : NULL;
         free(t);
@@ -109,7 +109,7 @@ static const uint8_t *palette_px(int pal, int row, int shade) {
  * sizes the canvas, later ones must match it. */
 static bool paint_plt(uint8_t **canvas, int *cw, int *ch, const char *name, const uint16_t *colours, int count) {
     size_t n = 0;
-    uint8_t *p = resource(name, RES_PLT, &n);
+    uint8_t *p = nwpad_resource_get(name, RES_PLT, &n);
     if (!p) return false;
     bool ok = false;
     if (n >= 24 && !memcmp(p, "PLT V1  ", 8)) {
@@ -164,6 +164,19 @@ static bool register_dir(void) {
     exo_string table = {(char *)ICON_TABLE, (uint32_t)strlen(ICON_TABLE)}; /* length without the NUL */
     registered = add(*resman, ICON_TABLE_ID, &table, 2 /* directory */, 1, NULL) != 0;
     return registered;
+}
+
+bool nwpad_resource_publish(const char *filename, const void *data, size_t size) {
+    char path[640], tmp[660];
+    snprintf(path, sizeof path, "%s%s", icon_dir(), filename);
+    snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return false;
+    bool ok = fwrite(data, 1, size, f) == size;
+    if (fclose(f) != 0) ok = false;
+    if (ok) ok = rename(tmp, path) == 0;
+    else unlink(tmp);
+    return ok && register_dir();
 }
 
 static bool write_tga(const char *path, const uint8_t *rgba, int w, int h) {
@@ -231,7 +244,7 @@ bool nwpad_icon_render_plt(const char *icon, char kind, char out[17]) {
 #ifdef NWPAD_DEBUG_SURFACES
 size_t nwpad_icon_debug_fetch(const char *name) {
     size_t n = 0;
-    free(resource(name, RES_TGA, &n));
+    free(nwpad_resource_get(name, RES_TGA, &n));
     return n;
 }
 #endif

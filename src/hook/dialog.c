@@ -22,6 +22,7 @@ enum {
     DLG_REPLY_FLAGS = 0x138,   /* unsigned[]; bit 0: not selectable */
     DLG_SPEAKER = 0x140,       /* object id */
     DLG_BUSY = 0xd04,          /* int */
+    DLG_HEIGHT = 0xd00,        /* float, scene units (~100 GUI pixels each; FixDialogSize) */
 };
 
 static struct {
@@ -70,6 +71,42 @@ bool nwpad_dialog_init(void) {
     return ok;
 }
 
+uint32_t nwpad_dialog_seq(void) {
+    char *d = dialog_object();
+    if (!d) {
+        dl.line_owner = NULL;
+        return 0;
+    }
+    if (*(void **)(d + DLG_REPLY_TEXTS) != dl.replies_seen) { /* SetReplies reallocates */
+        dl.replies_seen = *(void **)(d + DLG_REPLY_TEXTS);
+        dl.seq++;
+    }
+    return dl.seq ? dl.seq : (dl.seq = 1);
+}
+
+/* The speaker's name and portrait, as ShowDialogEntry finds them (F36). */
+static void speaker_info(uint32_t oid, nwpad_dialog *out) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
+    int (*name_of)(void *, uint32_t, exo_string *) =
+        (int (*)(void *, uint32_t, exo_string *))nwpad_sig(NWPAD_SIG_CLIENT_GET_OBJECT_NAME);
+    void (*dtor)(exo_string *) = (void (*)(exo_string *))nwpad_sig(NWPAD_SIG_EXO_STRING_DTOR);
+    if (!app_manager || !*app_manager) return;
+    void *app = *(void **)*app_manager;
+    if (name_of && dtor) {
+        exo_string s = {0};
+        if (name_of(app, oid, &s) && s.ptr) snprintf(out->speaker_name, sizeof out->speaker_name, "%s", s.ptr);
+        dtor(&s);
+    }
+    void **obj = object ? object(app, oid) : NULL;
+    void **nwc = obj ? ((void **(*)(void *))((void **)*obj)[0x20 / 8])(obj) : NULL; /* AsNWCObject */
+    if (nwc) {
+        char ref[32] = {0}; /* CResRef */
+        ((void (*)(char *, void *, int))((void **)*nwc)[0x1d8 / 8])(ref, nwc, 3); /* GetPortrait(size) */
+        snprintf(out->portrait, sizeof out->portrait, "%.16s", ref);
+    }
+}
+
 bool nwpad_dialog_read(nwpad_dialog *out) {
     memset(out, 0, sizeof *out);
     char *d = dialog_object();
@@ -78,12 +115,10 @@ bool nwpad_dialog_read(nwpad_dialog *out) {
         return false;
     }
     out->open = true;
-    if (*(void **)(d + DLG_REPLY_TEXTS) != dl.replies_seen) { /* SetReplies reallocates */
-        dl.replies_seen = *(void **)(d + DLG_REPLY_TEXTS);
-        dl.seq++;
-    }
-    out->seq = dl.seq;
+    out->seq = nwpad_dialog_seq();
     out->speaker = *(uint32_t *)(d + DLG_SPEAKER);
+    out->panel_h = *(float *)(d + DLG_HEIGHT) * 100.0f;
+    speaker_info(out->speaker, out);
     out->busy = *(int32_t *)(d + DLG_BUSY) != 0;
     if (dl.line_owner == *(void **)(d + DLG_MESSAGE_TEXT)) snprintf(out->line, sizeof out->line, "%s", dl.line);
     int count = *(int32_t *)(d + DLG_REPLY_COUNT);
@@ -124,8 +159,12 @@ void nwpad_dialog_debug_json(char *out, size_t cap) {
     }
     static char esc[9000];
     nwpad_json_escape(esc, sizeof esc, d.line);
-    size_t n = (size_t)snprintf(out, cap, "{\"seq\":%u,\"speaker\":%u,\"busy\":%s,\"line\":\"%s\",\"replies\":[", d.seq,
-                                d.speaker, d.busy ? "true" : "false", esc);
+    char name[300];
+    nwpad_json_escape(name, sizeof name, d.speaker_name);
+    size_t n = (size_t)snprintf(out, cap,
+                                "{\"seq\":%u,\"speaker\":%u,\"name\":\"%s\",\"portrait\":\"%s\",\"panel_h\":%.0f,"
+                                "\"busy\":%s,\"line\":\"%s\",\"replies\":[",
+                                d.seq, d.speaker, name, d.portrait, d.panel_h, d.busy ? "true" : "false", esc);
     for (int i = 0; i < d.count && n < cap; i++) {
         nwpad_json_escape(esc, sizeof esc, d.replies[i].text);
         n += (size_t)snprintf(out + n, cap - n, "%s{\"id\":%u,\"selectable\":%s,\"text\":\"%s\"}", i ? "," : "",

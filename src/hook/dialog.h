@@ -14,6 +14,9 @@ typedef struct {
     bool open;
     uint32_t seq;   /* changes whenever the NPC's line or the replies change */
     uint32_t speaker; /* object id */
+    char speaker_name[128];
+    char portrait[24];  /* the speaker's portrait resref ("" none) */
+    float panel_h;      /* the game's dialog window height, GUI pixels (F36) */
     bool busy;
     char line[4096]; /* the NPC's line, as the game shows it (markup and all) */
     int count;
@@ -26,6 +29,8 @@ typedef struct {
 
 /* Install the text capture (once, when signatures are resolved). False if unavailable. */
 bool nwpad_dialog_init(void);
+/* Cheap per-frame check: the conversation's change counter, or 0 if none is open. */
+uint32_t nwpad_dialog_seq(void);
 /* The open conversation, if any. */
 bool nwpad_dialog_read(nwpad_dialog *out);
 /* Answer with reply `index` (0-based), exactly as pressing its number key. */

@@ -74,6 +74,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
             else if (!strcmp(key, "hide_cursor")) { cfg->hide_cursor = v != 0; applied++; }
             else if (!strcmp(key, "strafe_exit_ms")) { cfg->strafe_exit_ms = (uint32_t)v; applied++; }
             else if (!strcmp(key, "cursor_rehide_ms")) { cfg->cursor_rehide_ms = (uint32_t)v; applied++; }
+            else if (!strcmp(key, "dialog")) { cfg->dialog = v != 0; applied++; }
         }
         line = end ? end + 1 : NULL;
     }

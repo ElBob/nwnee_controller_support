@@ -9,6 +9,7 @@
 #include <dlfcn.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,7 @@
 #include "picker.h"
 #include "icons.h"
 #include "dialog.h"
+#include "dialogui.h"
 extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
@@ -166,6 +168,9 @@ static struct {
         bool was_held, latched;          /* last frame's key, and open by a press */
         int action;                      /* 1 confirm, 2 cancel: applied on the next frame */
         bool confirm_down, cancel_down;
+        int32_t up_sym, down_sym;        /* the dialog window's highlight keys */
+        bool up_down, down_down;
+        int dialog_step, dialog_action;  /* queued for the next frame: highlight, 1 answer / 2 end */
         uint64_t up_ms;                  /* a key-up waiting out PICKER_KEYUP_MS (0 none) */
         bool prev_down, next_down;       /* swallowed key-downs whose key-ups are ours too */
         int shift;                       /* bank change to apply on the next frame */
@@ -360,6 +365,16 @@ static void control_handler(const char *request, char *out, size_t cap) {
         static char d[12000];
         nwpad_dialog_debug_json(d, sizeof d);
         snprintf(out, cap, "{\"ok\":true,\"dialog\":%s}", d);
+    } else if (strcmp(cmd, "dialog_ui") == 0) {
+        /* {"cmd":"dialog_ui","step":-1|1} / {"action":"confirm"|"cancel"}: as the keys do */
+        double v;
+        char action[16] = "";
+        if (nwpad_json_get_number(request, "step", &v)) g.picker.dialog_step += v < 0 ? -1 : 1;
+        nwpad_json_get_string(request, "action", action, sizeof action);
+        if (!strcmp(action, "confirm")) g.picker.dialog_action = 1;
+        if (!strcmp(action, "cancel")) g.picker.dialog_action = 2;
+        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d}", nwpad_dialogui_open() ? "true" : "false",
+                 nwpad_dialogui_highlight());
     } else if (strcmp(cmd, "dialog_select") == 0) {
         /* {"cmd":"dialog_select","index":n} (0-based), or {"cmd":"dialog_select","end":1} */
         double v;
@@ -586,6 +601,19 @@ static void nwpad_frame(void) {
         g.picker.held = false;
         g.picker.up_ms = 0;
     }
+    /* nwpad's conversation window: the sticks move its highlight (and nothing else). */
+    NWPAD_WHERE("dialog");
+    float nav = fabsf(left.y) > fabsf(right.y) ? left.y : right.y;
+    bool talking = nwpad_dialogui_frame(g.cfg.enabled && g.cfg.dialog, nav, t);
+    if (talking) {
+        for (; g.picker.dialog_step < 0; g.picker.dialog_step++) nwpad_dialogui_move(-1);
+        for (; g.picker.dialog_step > 0; g.picker.dialog_step--) nwpad_dialogui_move(1);
+        if (g.picker.dialog_action == 1) nwpad_dialogui_confirm();
+        else if (g.picker.dialog_action == 2) nwpad_dialogui_cancel();
+        left = right = (nwpad_vec2){0, 0};
+        g.picker.latched = false;
+    }
+    g.picker.dialog_step = g.picker.dialog_action = 0;
     /* Each press of the picker key opens the picker, or closes it without using. */
     bool key = g.cfg.enabled && g.picker.held;
     if (key && !g.picker.was_held) g.picker.latched = !(g.picker.latched && nwpad_picker_open());
@@ -595,7 +623,10 @@ static void nwpad_frame(void) {
         g.picker.action = 0;
         g.picker.latched = false;
     }
-    if (g.frames == 2) nwpad_dialog_init(); /* after the first frame's settings registration */
+    if (g.frames == 2) { /* after the first frame's settings registration */
+        nwpad_dialog_init();
+        if (g.cfg.dialog) nwpad_dialogui_setup_font();
+    }
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
@@ -762,11 +793,11 @@ static int nwpad_PollEvent(SDL_Event *event) {
             if (!g.picker.resolved) { /* the key names, through the game's own SDL */
                 g.picker.resolved = true;
                 RESOLVE_ANY(GetKeyFromName, "SDL_GetKeyFromName");
-                const char *names[5] = {g.cfg.picker_key, g.cfg.picker_prev_key, g.cfg.picker_next_key,
-                                        g.cfg.picker_confirm_key, g.cfg.picker_cancel_key};
-                int32_t *syms[5] = {&g.picker.sym, &g.picker.prev_sym, &g.picker.next_sym, &g.picker.confirm_sym,
-                                    &g.picker.cancel_sym};
-                for (int k = 0; k < 5; k++) {
+                const char *names[7] = {g.cfg.picker_key, g.cfg.picker_prev_key, g.cfg.picker_next_key,
+                                        g.cfg.picker_confirm_key, g.cfg.picker_cancel_key, "Up", "Down"};
+                int32_t *syms[7] = {&g.picker.sym, &g.picker.prev_sym, &g.picker.next_sym, &g.picker.confirm_sym,
+                                    &g.picker.cancel_sym, &g.picker.up_sym, &g.picker.down_sym};
+                for (int k = 0; k < 7; k++) {
                     *syms[k] = names[k][0] && sdl.GetKeyFromName ? sdl.GetKeyFromName(names[k]) : 0;
                     if (names[k][0] && !*syms[k]) nwpad_log("picker key \"%s\" is not a key name; ignored", names[k]);
                 }
@@ -774,6 +805,30 @@ static int nwpad_PollEvent(SDL_Event *event) {
                           g.cfg.picker_next_key, g.cfg.picker_confirm_key, g.cfg.picker_cancel_key);
             }
             int32_t sym = event->key.sym;
+            /* nwpad's conversation window: Up/Down, confirm and cancel are its while it's up. */
+            bool *dk = !sym                         ? NULL
+                       : sym == g.picker.up_sym     ? &g.picker.up_down
+                       : sym == g.picker.down_sym   ? &g.picker.down_down
+                       : sym == g.picker.confirm_sym ? &g.picker.confirm_down
+                       : sym == g.picker.cancel_sym ? &g.picker.cancel_down
+                                                    : NULL;
+            if (dk && type == SDL_KEYDOWN && nwpad_dialogui_open()) {
+                if (dk == &g.picker.up_down) g.picker.dialog_step--;
+                else if (dk == &g.picker.down_down) g.picker.dialog_step++;
+                else if (!event->key.repeat) g.picker.dialog_action = dk == &g.picker.confirm_down ? 1 : 2;
+                *dk = true;
+                g.events.filtered++;
+                continue;
+            }
+            if (dk && type == SDL_KEYUP && *dk && (dk == &g.picker.up_down || dk == &g.picker.down_down)) {
+                *dk = false;
+                g.events.filtered++;
+                continue;
+            }
+            if (g.picker.sym && sym == g.picker.sym && nwpad_dialogui_open()) { /* no picker in a conversation */
+                g.events.filtered++;
+                continue;
+            }
             if (g.picker.sym && sym == g.picker.sym) {
                 /* Held keys autorepeat, which can come as key-up + repeat key-down pairs:
                  * any key-down holds, and a key-up only counts if no key-down follows

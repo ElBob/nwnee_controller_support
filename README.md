@@ -42,6 +42,17 @@ again to close it. The other two banks show as smaller wheels on either side; `[
 and `]` (LB / RB) make the previous or next one the active wheel. Enter, Escape, `[`
 and `]` are only nwpad's while the picker is open.
 
+## Conversations
+
+While you talk to an NPC, nwpad shows the conversation in its own window over the
+game's: the speaker's portrait and name, their line in a larger font, and the
+numbered replies with one highlighted. Move the highlight with the D-pad / arrow keys
+or either stick, answer with Enter (right stick click in the nwpad Xbox layout), or
+end the conversation with Escape (View). The number keys and the mouse still work as
+usual. While the window is up, the arrow keys, Enter and Escape are nwpad's, and the
+sticks don't move or turn anything. `dialog = false` in `[nwpad]` turns it off and
+leaves the game's own window.
+
 ## Settings
 
 In the game: **Options > Game Options > Input**, in the Camera group:
@@ -57,12 +68,13 @@ you change them. Save keeps them, Cancel undoes them.
 nwpad keeps its settings in the game's own `settings.tml`, in an `[nwpad]` section
 (in your profile: `~/.local/share/Neverwinter Nights/settings.tml`, or the
 `-userdirectory` you launch with). The section is added the first time the game
-runs with nwpad; the game keeps it when it saves its own settings. The last nine keys
+runs with nwpad; the game keeps it when it saves its own settings. The last ten keys
 below are only in the file; edit it while the game is closed.
 
 ```toml
 [nwpad]
 	cursor-rehide-ms = 2000
+	dialog = true
 	enabled = true
 	hide-cursor = true
 	mouse-idle-ms = 300
@@ -87,6 +99,7 @@ below are only in the file; edit it while the game is closed.
 | `picker-key` | "ScrollLock" | | Key that opens (and closes) the quickbar picker (an SDL key name, e.g. "F13", "Insert"; "" turns it off). nwpad takes the key; the game never sees it |
 | `picker-confirm-key` / `picker-cancel-key` | "Return" / "Escape" | | While the picker is open: use the highlighted button / close without using |
 | `picker-prev-key` / `picker-next-key` | "[" / "]" | | While the picker is open: make the previous / next quickbar bank the active wheel |
+| `dialog` | true | | nwpad's conversation window (controller-friendly, over the game's) |
 | `cursor-rehide-ms` | 2000 | 0–10000 | Moving the mouse shows the cursor; it hides again once the mouse is still and a stick has been held this long without a break (0: at once) |
 | `mouse-idle-ms` | 300 | 100–1000 | How long the mouse must be still before the stick gets the camera back |
 | `camera.turn-speed` | 180 | 60–360 | Camera turn speed at full deflection, °/s |

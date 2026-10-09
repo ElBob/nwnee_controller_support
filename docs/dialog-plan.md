@@ -1,6 +1,6 @@
 # Dialog plan
 
-Status: **D0 research mostly done** (2026-10-08; re-notes F36): replies and the selection path confirmed at runtime; the NPC's line is captured by wrapping `StringGob::SetText` (one vtable slot), which is also the trigger. Robert's decisions: a **vertical list**; our window **replicates the game's dialog window and covers it**, with the NPC's text in a **larger font**; the highlight moves with the **D-pad, either stick, or the arrow keys**; the whole feature can be **turned on or off in the config** (`nwpad.dialog`, default on). §2 marks what's confirmed and what's still a lead.
+Status: **D1 and D2 done** (2026-10-08; re-notes F36): nwpad reads and answers conversations, and its window covers the game's (portrait, name, larger NPC text, highlighted replies; D-pad/arrows/either stick, Enter, Escape; `nwpad.dialog`). Next: D3, Robert's playtest and markup polish.
 
 ## 1. Goal
 

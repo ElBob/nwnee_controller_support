@@ -223,3 +223,12 @@ signatures:
   gui_dialog_selection:    # CGuiInGame::HandleDialogSelection(int): -3 ends the conversation
     note: F36
     symbol: _ZN10CGuiInGame21HandleDialogSelectionEi
+  client_get_game_object:  # CGameObject* CClientExoApp::GetGameObject(unsigned int oid)
+    note: F36
+    symbol: _ZN13CClientExoApp13GetGameObjectEj
+  client_get_object_name:  # int CClientExoApp::GetObjectName(unsigned int oid, CExoString* out)
+    note: F36
+    symbol: _ZN13CClientExoApp13GetObjectNameEjP10CExoString
+  nui_reload_skin:         # Nui__ReloadSkin(): reloads nui_skin.tml (fonts are rebaked on the next render)
+    note: F36
+    symbol: _Z15Nui__ReloadSkinv
