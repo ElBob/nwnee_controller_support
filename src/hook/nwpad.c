@@ -370,13 +370,15 @@ static void control_handler(const char *request, char *out, size_t cap) {
         double v;
         char action[16] = "";
         if (nwpad_json_get_number(request, "step", &v)) g.picker.dialog_step += v < 0 ? -1 : 1;
+        if (nwpad_json_get_number(request, "scroll", &v)) nwpad_dialogui_scroll((int)v);
         nwpad_json_get_string(request, "action", action, sizeof action);
         if (!strcmp(action, "confirm")) g.picker.dialog_action = 1;
         if (!strcmp(action, "cancel")) g.picker.dialog_action = 2;
         int first, last;
         nwpad_dialogui_range(&first, &last);
-        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d}",
-                 nwpad_dialogui_open() ? "true" : "false", nwpad_dialogui_highlight(), first, last);
+        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d,\"text_top\":%d}",
+                 nwpad_dialogui_open() ? "true" : "false", nwpad_dialogui_highlight(), first, last,
+                 nwpad_dialogui_text_top());
     } else if (strcmp(cmd, "resource_publish") == 0) {
         /* {"cmd":"resource_publish","src":"/tmp/x.dlg","name":"x.dlg"}: serve a file as a game resource */
         char src[512] = "", name[64] = "";
@@ -623,7 +625,7 @@ static void nwpad_frame(void) {
         g.picker.held = false;
         g.picker.up_ms = 0;
     }
-    /* nwpad's conversation window: the sticks move its highlight (and nothing else). */
+    /* nwpad's conversation window: the sticks scroll its text (and move nothing else). */
     NWPAD_WHERE("dialog");
     float nav = fabsf(left.y) > fabsf(right.y) ? left.y : right.y;
     bool talking = nwpad_dialogui_frame(g.cfg.enabled && g.cfg.dialog, nav, t);

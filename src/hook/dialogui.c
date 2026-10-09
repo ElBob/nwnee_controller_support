@@ -6,7 +6,8 @@
 #include "icons.h"
 #include "sigs.h"
 
-#define MORE_H 22.0f /* the "more replies" markers */
+#define SEP_H 8.0f   /* the line under the NPC's text */
+#define MORE_H 16.0f /* the "..." markers when replies scroll */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
 #include "nui.h"
 
@@ -35,6 +36,8 @@ static struct {
     bool preview;         /* debug: a made-up conversation is shown */
     int flip;             /* which of the two tokens is current */
     int first, last;      /* the replies shown (more than fit on screen scroll) */
+    char wrapped[4200];   /* the NPC's line, wrapped by nwpad: lines separated by '\n' */
+    int line_at[512], lines, top, visible; /* line starts in wrapped; the shown range */
     uint32_t seq;
     int highlight;
     nwpad_dialog d;
@@ -44,6 +47,7 @@ static struct {
 
 bool nwpad_dialogui_open(void) { return ui.open; }
 int nwpad_dialogui_highlight(void) { return ui.open ? ui.highlight : -1; }
+int nwpad_dialogui_text_top(void) { return ui.open ? ui.top : -1; }
 void nwpad_dialogui_range(int *first, int *last) {
     *first = ui.open ? ui.first : -1;
     *last = ui.open ? ui.last : -1;
@@ -115,6 +119,43 @@ static void colour(int i) {
     nwpad_nui_bind(TOKEN, name, c);
 }
 
+/* Wrap the NPC's line into ui.wrapped at `cols` characters (word boundaries). */
+static void wrap(const char *text, int cols) {
+    size_t n = 0;
+    ui.lines = 0;
+    const char *p = text;
+    while (*p && ui.lines < (int)(sizeof ui.line_at / sizeof ui.line_at[0])) {
+        ui.line_at[ui.lines++] = (int)n;
+        const char *end = p, *brk = NULL;
+        int len = 0;
+        while (*end && *end != '\n' && len < cols) {
+            if (*end == ' ') brk = end;
+            end++, len++;
+        }
+        if (*end && *end != '\n' && brk) end = brk; /* break at the last space */
+        size_t take = (size_t)(end - p);
+        if (n + take + 2 >= sizeof ui.wrapped) break;
+        memcpy(ui.wrapped + n, p, take);
+        n += take;
+        ui.wrapped[n++] = '\n';
+        p = end;
+        if (*p == ' ' || *p == '\n') p++;
+    }
+    ui.wrapped[n ? n - 1 : 0] = '\0';
+    if (!ui.lines) ui.line_at[ui.lines++] = 0;
+}
+
+/* Show lines [top, top + visible) of the NPC's line. */
+static void show_body(void) {
+    static char text[4200], esc[9000], value[9100];
+    int from = ui.line_at[ui.top], last = ui.top + ui.visible;
+    size_t to = last < ui.lines ? (size_t)ui.line_at[last] - 1 : strlen(ui.wrapped);
+    snprintf(text, sizeof text, "%.*s", (int)(to - (size_t)from), ui.wrapped + from);
+    nwpad_json_escape(esc, sizeof esc, text);
+    snprintf(value, sizeof value, "\"%s\"", esc);
+    nwpad_nui_bind(TOKEN, "body", value);
+}
+
 /* Screen height in GUI units (as the picker centres itself). */
 static float screen_h(void) {
     float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
@@ -127,16 +168,19 @@ static float screen_h(void) {
 static bool build(void) {
     static char json[65536];
     static char esc[9000];
-    float text_w = WIDTH - PORTRAIT_W - 3 * PAD,
-          body_h = big_font ? text_height_at(ui.d.line, text_w, BIG_CHAR_W, BIG_LINE_H) : text_height(ui.d.line, text_w);
-    bool scroll = body_h > LINE_MAX_H;
-    if (scroll) body_h = LINE_MAX_H;
+    float text_w = WIDTH - PORTRAIT_W - 3 * PAD, char_w = big_font ? BIG_CHAR_W : CHAR_W,
+          lh = big_font ? BIG_LINE_H : LINE_H;
+    wrap(ui.d.line, (int)floorf(text_w / char_w));
+    ui.visible = ui.lines;
+    if (ui.visible * lh > LINE_MAX_H) ui.visible = (int)(LINE_MAX_H / lh); /* the sticks scroll the rest */
+    if (ui.top > ui.lines - ui.visible) ui.top = ui.lines - ui.visible;
+    if (ui.top < 0) ui.top = 0;
+    float body_h = (float)ui.visible * lh + 6;
     float line_h = body_h + LINE_H + 4;
-    float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + 3 * PAD; /* + NUI padding */
+    float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + 3 * PAD + SEP_H + 8; /* + NUI padding */
     size_t n = 0;
     char name[400];
     nwpad_json_escape(name, sizeof name, ui.d.speaker_name);
-    nwpad_json_escape(esc, sizeof esc, ui.d.line);
     n += (size_t)snprintf(json + n, sizeof json - n,
         /* (no row height: NUI's padding wouldn't fit around a full-height portrait) */
         "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
@@ -146,9 +190,15 @@ static bool build(void) {
         "{\"type\":\"col\",\"label\":null,\"value\":null,\"children\":["
         "{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":1,\"text_valign\":0,\"height\":%.1f,"
         "\"foreground_color\":{\"r\":125,\"g\":180,\"b\":255,\"a\":255}},"
-        "{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":%d,\"height\":%.1f%s}]}]}",
-        ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, esc, scroll ? 2 : 0, body_h,
-        big_font ? ",\"font\":\"" FONT "\"" : "");
+        "{\"type\":\"text\",\"label\":null,\"value\":{\"bind\":\"body\"},\"border\":false,\"scrollbars\":0,"
+        "\"height\":%.1f%s}]}]},"
+        /* a subtle line between the NPC's text and the replies */
+        "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f,\"draw_list_scissor\":false,"
+        "\"draw_list\":[{\"type\":6,\"enabled\":true,\"color\":{\"r\":173,\"g\":142,\"b\":96,\"a\":110},"
+        "\"fill\":null,\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,"
+        "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
+        ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
+        SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
     /* The replies that fit under the line; if not all, a range around the highlight
      * with markers for the rest. */
     static float rh[NWPAD_DIALOG_REPLIES];
@@ -173,12 +223,12 @@ static bool build(void) {
         if (ui.last < ui.first) ui.last = ui.first;
     }
     bool above = ui.first > 0, below = ui.last < ui.d.count - 1;
-    if (above || below) {
-        h += 2 * (MORE_H + 8);
-        n += (size_t)snprintf(json + n, sizeof json - n,
-            ",{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":0,\"text_valign\":0,"
-            "\"height\":%.1f,\"foreground_color\":{\"r\":160,\"g\":160,\"b\":160,\"a\":255}}",
-            above ? "- more above -" : "", MORE_H);
+    static const char more[] = ",{\"type\":\"label\",\"label\":null,\"value\":\"...\",\"text_halign\":0,"
+                               "\"text_valign\":0,\"height\":%.1f,"
+                               "\"foreground_color\":{\"r\":150,\"g\":150,\"b\":150,\"a\":255}}";
+    if (above) {
+        h += MORE_H + 8;
+        n += (size_t)snprintf(json + n, sizeof json - n, more, MORE_H);
     }
     for (int i = ui.first; i <= ui.last && n < sizeof json; i++) {
         snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
@@ -188,11 +238,10 @@ static bool build(void) {
             ",{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":0,\"height\":%.1f,"
             "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh[i] - 8, i);
     }
-    if (above || below)
-        n += (size_t)snprintf(json + n, sizeof json - n,
-            ",{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":0,\"text_valign\":0,"
-            "\"height\":%.1f,\"foreground_color\":{\"r\":160,\"g\":160,\"b\":160,\"a\":255}}",
-            below ? "- more below -" : "", MORE_H);
+    if (below) {
+        h += MORE_H + 8;
+        n += (size_t)snprintf(json + n, sizeof json - n, more, MORE_H);
+    }
     if (ui.d.panel_h + 8 > h) h = ui.d.panel_h + 8; /* never smaller than the game's window */
     static char window[70000];
     int w = snprintf(window, sizeof window,
@@ -215,7 +264,18 @@ static bool build(void) {
     snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h + PAD);
     nwpad_nui_bind(TOKEN, "geo", geo);
     for (int i = ui.first; i <= ui.last; i++) colour(i);
+    show_body();
     return true;
+}
+
+void nwpad_dialogui_scroll(int lines) {
+    if (!ui.open) return;
+    int top = ui.top + lines, max = ui.lines - ui.visible;
+    if (top > max) top = max;
+    if (top < 0) top = 0;
+    if (top == ui.top) return;
+    ui.top = top;
+    show_body();
 }
 
 /* Show the window again after the highlight left the visible replies. */
@@ -291,6 +351,7 @@ bool nwpad_dialogui_preview(const char *path) {
     ui.d.panel_h = 254;
     ui.flip ^= 1;
     ui.highlight = first_selectable();
+    ui.first = ui.top = 0;
     ui.open = ui.preview = build();
     return ui.open;
 }
@@ -311,6 +372,7 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
         nwpad_strip_colour_codes(ui.d.line); /* no inline colours in NUI text */
         for (int i = 0; i < ui.d.count; i++) nwpad_strip_colour_codes(ui.d.replies[i].text);
         ui.first = 0;
+        ui.top = 0;
         if (ui.open) {
             nwpad_nui_destroy(TOKEN);
             ui.flip ^= 1;
@@ -319,17 +381,17 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
         ui.open = build();
         if (!ui.open) return false;
     }
-    /* A held stick steps once, then repeats. */
-    float dir = nav > 0.5f ? -1.0f : nav < -0.5f ? 1.0f : 0.0f; /* stick up = previous reply */
+    /* The sticks scroll the NPC's text: a held stick steps a line, then repeats. */
+    float dir = nav > 0.5f ? -1.0f : nav < -0.5f ? 1.0f : 0.0f; /* stick up = earlier lines */
     if (dir != ui.nav_dir) {
         ui.nav_dir = dir;
         if (dir != 0) {
-            nwpad_dialogui_move((int)dir);
-            ui.nav_next_ms = now_ms + 400;
+            nwpad_dialogui_scroll((int)dir);
+            ui.nav_next_ms = now_ms + 300;
         }
     } else if (dir != 0 && now_ms >= ui.nav_next_ms) {
-        nwpad_dialogui_move((int)dir);
-        ui.nav_next_ms = now_ms + 150;
+        nwpad_dialogui_scroll((int)dir);
+        ui.nav_next_ms = now_ms + 90;
     }
     return true;
 }

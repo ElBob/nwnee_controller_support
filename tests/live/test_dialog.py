@@ -128,6 +128,20 @@ def test_test_conversation(game, ctl, tmp_path):
     time.sleep(0.5)
     ui = ctl("dialog_ui")
     assert ui["highlight"] == 82 and ui["last"] == 82, ui
+    # The long line: a stick scrolls the text (the highlight stays put)
+    seq = ctl("dialog")["dialog"]["seq"]
+    ctl("dialog_ui", action="confirm")  # Option 83 -> back to the start
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 4)
+    seq = d["seq"]
+    ctl("dialog_select", index=0)  # "The long line, please."
+    _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("This is sentence 1"))
+    time.sleep(0.5)
+    assert ctl("dialog_ui")["text_top"] == 0
+    ctl("stick", ly=-1.0)  # down
+    time.sleep(1.0)
+    ctl("release")
+    ui = ctl("dialog_ui")
+    assert ui["text_top"] > 2 and ui["highlight"] == 0, ui
     ctl("dialog_select", end=1)
     _dialog(ctl, want=lambda d: d is None)
     log = open(os.path.join(game, "game.log"), errors="replace").read()
