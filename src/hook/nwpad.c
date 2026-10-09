@@ -749,6 +749,7 @@ static void nwpad_SwapWindow(SDL_Window *window) {
     uint64_t t0 = now_ns();
     g.cost.game_ns = 0;
     nwpad_frame();
+    g.cost.game_ns += nwpad_nui_take_game_ns(); /* the game's NUI handler: game time */
     uint64_t ns = now_ns() - t0; /* control-socket servicing is debug-only; not counted */
     uint64_t own = ns > g.cost.game_ns ? ns - g.cost.game_ns : 0;
     g.cost.bucket[ns / 10000 < 255 ? ns / 10000 : 255]++;

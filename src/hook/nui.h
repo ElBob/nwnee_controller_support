@@ -17,6 +17,10 @@ bool nwpad_nui_bind(int token, const char *name, const char *json_value);
 bool nwpad_nui_destroy(int token);
 /* Whether the game has NUI events queued for the server (none should be ours). */
 bool nwpad_nui_events_pending(void);
+/* Time spent inside the game's NUI handler since the last call (game time, not
+ * nwpad's own, for the frame budget). */
+#include <stdint.h>
+uint64_t nwpad_nui_take_game_ns(void);
 /* How many NUI windows the game has (debug). */
 int nwpad_nui_window_count(void);
 

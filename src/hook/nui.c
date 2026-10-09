@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 typedef struct { char *ptr; uint32_t len; } exo_string; /* CExoString */
 
@@ -102,6 +103,19 @@ static bool put_json(void *msg, const char *json) {
 }
 
 unsigned nwpad_nui_last_size; /* debug: size of the last message */
+static uint64_t game_ns;
+
+static uint64_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+
+uint64_t nwpad_nui_take_game_ns(void) {
+    uint64_t ns = game_ns;
+    game_ns = 0;
+    return ns;
+}
 
 /* Hand the finished message to the game's handler, as if the server sent it. */
 static bool deliver(void *msg, unsigned char subtype) {
@@ -114,7 +128,10 @@ static bool deliver(void *msg, unsigned char subtype) {
     if (!data || size < 3 ||
         !((set_read_fn)nwpad_sig(NWPAD_SIG_MESSAGE_SET_READ))(msg, data + 3, size - 3, 0xffffffffu, 1))
         return false;
-    return ((handle_fn)nwpad_sig(NWPAD_SIG_NUI_HANDLE_SERVER_MESSAGE))(msg, subtype);
+    uint64_t t0 = now_ns();
+    bool ok = ((handle_fn)nwpad_sig(NWPAD_SIG_NUI_HANDLE_SERVER_MESSAGE))(msg, subtype);
+    game_ns += now_ns() - t0;
+    return ok;
 }
 
 /* Setting a bind no element of the window uses makes the client send it to the
