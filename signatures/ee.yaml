@@ -210,3 +210,16 @@ signatures:
     note: F31
     symbol: _ZN14CPanelQuickBar17ActivateButtonSetEh
     debug: true
+  # NPC conversations (dialog plan)
+  string_gob_vtable:       # vtable for StringGob (the GUI's text object), all its sub-tables
+    note: F36
+    symbol: _ZTV9StringGob
+  string_gob_set_text_thunk:  # non-virtual thunk to StringGob::SetText(const char*): the slot dialog text goes through
+    note: F36
+    symbol: _ZThn1216_N9StringGob7SetTextEPKc
+  gui_dialog_num_key:      # CGuiInGame::HandleDialogNumKey(int n): reply n (1-based), as the number keys
+    note: F36
+    symbol: _ZN10CGuiInGame18HandleDialogNumKeyEi
+  gui_dialog_selection:    # CGuiInGame::HandleDialogSelection(int): -3 ends the conversation
+    note: F36
+    symbol: _ZN10CGuiInGame21HandleDialogSelectionEi

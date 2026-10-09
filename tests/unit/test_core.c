@@ -288,6 +288,7 @@ static void test_picker_key(void) {
     CHECK(nwpad_settings_format(&c, buf, sizeof buf) > 0 && strstr(buf, "picker-key = \"ScrollLock\""));
     CHECK(!strcmp(c.picker_prev_key, "[") && !strcmp(c.picker_next_key, "]"));
     CHECK(!strcmp(c.picker_confirm_key, "Return") && !strcmp(c.picker_cancel_key, "Escape"));
+    CHECK(c.dialog && nwpad_settings_parse(&c, "[nwpad]\ndialog = false\n") == 1 && !c.dialog);
     CHECK(nwpad_settings_parse(&c, "[nwpad]\npicker-next-key = \"PageDown\"\n") == 1 && !strcmp(c.picker_next_key, "PageDown"));
 }
 
@@ -372,7 +373,7 @@ static void test_settings_toml(void) {
     e.camera_yaw_speed = 240; e.enabled = false; e.run_threshold = 0.75f; e.strafe_window_deg = 12;
     CHECK(nwpad_settings_format(&e, buf, sizeof buf) > 0);
     nwpad_config f; nwpad_config_defaults(&f);
-    CHECK(nwpad_settings_parse(&f, buf) == 14);
+    CHECK(nwpad_settings_parse(&f, buf) == 15);
     NEAR(f.camera_yaw_speed, 240, 1e-3); CHECK(!f.enabled); NEAR(f.run_threshold, 0.75f, 1e-6);
     NEAR(f.strafe_window_deg, 12, 1e-6); CHECK(f.strafe_exit_ms == e.strafe_exit_ms);
     CHECK(nwpad_settings_format(&e, buf, 20) == -1); /* too small */

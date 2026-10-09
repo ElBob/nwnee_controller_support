@@ -29,6 +29,7 @@ void nwpad_config_defaults(nwpad_config *cfg) {
     snprintf(cfg->picker_next_key, sizeof cfg->picker_next_key, "%s", "]");
     snprintf(cfg->picker_confirm_key, sizeof cfg->picker_confirm_key, "%s", "Return");
     snprintf(cfg->picker_cancel_key, sizeof cfg->picker_cancel_key, "%s", "Escape");
+    cfg->dialog = true;
 }
 
 static const char *skip_ws(const char *s) {
@@ -378,6 +379,7 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
     bool is_num = end != val;
     if (!strcmp(key, "nwpad.enabled") && is_bool) cfg->enabled = b;
     else if (!strcmp(key, "nwpad.hide-cursor") && is_bool) cfg->hide_cursor = b;
+    else if (!strcmp(key, "nwpad.dialog") && is_bool) cfg->dialog = b;
     else if (!strcmp(key, "nwpad.cursor-rehide-ms") && is_num) cfg->cursor_rehide_ms = (uint32_t)clampf(d, 0, 10000);
     else if (!strcmp(key, "nwpad.mouse-idle-ms") && is_num) cfg->mouse_idle_ms = (uint32_t)clampf(d, 100, 1000);
     else if (!strcmp(key, "nwpad.camera.turn-speed") && is_num) cfg->camera_yaw_speed = clampf(d, 60, 360);
@@ -442,6 +444,7 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "[nwpad]\n"
                      "\tenabled = %s\n"
                      "\tcursor-rehide-ms = %u\n"
+                     "\tdialog = %s\n"
                      "\thide-cursor = %s\n"
                      "\tpicker-cancel-key = \"%s\"\n"
                      "\tpicker-confirm-key = \"%s\"\n"
@@ -456,7 +459,7 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap) {
                      "\t\trun-point = %.4f\n"
                      "\t\tstrafe-exit-ms = %u\n"
                      "\t\tstrafe-window = %.1f\n",
-                     cfg->enabled ? "true" : "false", (unsigned)cfg->cursor_rehide_ms,
+                     cfg->enabled ? "true" : "false", (unsigned)cfg->cursor_rehide_ms, cfg->dialog ? "true" : "false",
                      cfg->hide_cursor ? "true" : "false", cfg->picker_cancel_key, cfg->picker_confirm_key,
                      cfg->picker_key,
                      cfg->picker_next_key, cfg->picker_prev_key,

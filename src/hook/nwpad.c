@@ -356,15 +356,17 @@ static void control_handler(const char *request, char *out, size_t cap) {
         double v;
         bool ok = nwpad_json_get_number(request, "bank", &v) && nwpad_quickbar_debug_show_bank((int)v);
         snprintf(out, cap, "{\"ok\":%s,\"bank\":%d}", ok ? "true" : "false", nwpad_quickbar_bank());
-    } else if (strcmp(cmd, "dialog_find") == 0) {
-        char needle[128] = "", paths[4000];
-        nwpad_json_get_string(request, "text", needle, sizeof needle);
-        nwpad_dialog_debug_find(needle, paths, sizeof paths);
-        snprintf(out, cap, "{\"ok\":true,\"paths\":%s}", paths);
     } else if (strcmp(cmd, "dialog") == 0) {
         static char d[12000];
         nwpad_dialog_debug_json(d, sizeof d);
         snprintf(out, cap, "{\"ok\":true,\"dialog\":%s}", d);
+    } else if (strcmp(cmd, "dialog_select") == 0) {
+        /* {"cmd":"dialog_select","index":n} (0-based), or {"cmd":"dialog_select","end":1} */
+        double v;
+        bool ok = nwpad_json_get_number(request, "end", &v) && v ? nwpad_dialog_end()
+                  : nwpad_json_get_number(request, "index", &v) ? nwpad_dialog_select((int)v)
+                                                                : false;
+        snprintf(out, cap, "{\"ok\":%s}", ok ? "true" : "false");
     } else if (strcmp(cmd, "picker") == 0) {
         /* {"cmd":"picker","action":"open"|"confirm"|"cancel"}: as the picker keys do */
         char action[16] = "";
@@ -593,6 +595,7 @@ static void nwpad_frame(void) {
         g.picker.action = 0;
         g.picker.latched = false;
     }
+    if (g.frames == 2) nwpad_dialog_init(); /* after the first frame's settings registration */
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
