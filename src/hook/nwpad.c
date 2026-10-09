@@ -373,8 +373,30 @@ static void control_handler(const char *request, char *out, size_t cap) {
         nwpad_json_get_string(request, "action", action, sizeof action);
         if (!strcmp(action, "confirm")) g.picker.dialog_action = 1;
         if (!strcmp(action, "cancel")) g.picker.dialog_action = 2;
-        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d}", nwpad_dialogui_open() ? "true" : "false",
-                 nwpad_dialogui_highlight());
+        int first, last;
+        nwpad_dialogui_range(&first, &last);
+        snprintf(out, cap, "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d}",
+                 nwpad_dialogui_open() ? "true" : "false", nwpad_dialogui_highlight(), first, last);
+    } else if (strcmp(cmd, "resource_publish") == 0) {
+        /* {"cmd":"resource_publish","src":"/tmp/x.dlg","name":"x.dlg"}: serve a file as a game resource */
+        char src[512] = "", name[64] = "";
+        nwpad_json_get_string(request, "src", src, sizeof src);
+        nwpad_json_get_string(request, "name", name, sizeof name);
+        bool ok = false;
+        FILE *f = src[0] && name[0] ? fopen(src, "rb") : NULL;
+        if (f) {
+            static char data[1 << 20];
+            size_t n = fread(data, 1, sizeof data, f);
+            fclose(f);
+            ok = nwpad_resource_publish(name, data, n);
+        }
+        snprintf(out, cap, "{\"ok\":%s}", ok ? "true" : "false");
+    } else if (strcmp(cmd, "dialog_preview") == 0) {
+        /* {"cmd":"dialog_preview","path":"/tmp/x.txt"} or {"cmd":"dialog_preview"} to close */
+        char path[512] = "";
+        nwpad_json_get_string(request, "path", path, sizeof path);
+        bool ok = nwpad_dialogui_preview(path[0] ? path : NULL);
+        snprintf(out, cap, "{\"ok\":%s}", ok ? "true" : "false");
     } else if (strcmp(cmd, "dialog_select") == 0) {
         /* {"cmd":"dialog_select","index":n} (0-based), or {"cmd":"dialog_select","end":1} */
         double v;

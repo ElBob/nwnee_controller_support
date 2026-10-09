@@ -666,3 +666,17 @@ int nwpad_picker_select(nwpad_vec2 stick, int current) {
     float sector = 360.0f / NWPAD_PICKER_SLOTS;
     return (int)floorf((deg + sector / 2) / sector) % NWPAD_PICKER_SLOTS;
 }
+
+void nwpad_strip_colour_codes(char *text) {
+    char *o = text;
+    for (char *p = text; *p;) {
+        if (p[0] == '<' && p[1] == 'c' && p[2] && p[3] && p[4] && p[5] == '>') {
+            p += 6;
+        } else if (!strncmp(p, "</c>", 4)) {
+            p += 4;
+        } else {
+            *o++ = *p++;
+        }
+    }
+    *o = '\0';
+}

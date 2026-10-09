@@ -22,5 +22,14 @@ void nwpad_dialogui_move(int step);
 void nwpad_dialogui_confirm(void);
 void nwpad_dialogui_cancel(void);
 int nwpad_dialogui_highlight(void); /* -1 when closed */
+/* The replies shown, first and last (all when they fit). */
+void nwpad_dialogui_range(int *first, int *last);
+
+#ifdef NWPAD_DEBUG_SURFACES
+/* Research: show the window for a made-up conversation read from `path` (first line
+ * the NPC's line, then one reply per line; "\n" in text is a line break), until
+ * called with NULL. */
+bool nwpad_dialogui_preview(const char *path);
+#endif
 
 #endif

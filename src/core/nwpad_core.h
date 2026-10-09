@@ -216,6 +216,12 @@ int nwpad_json_escape(char *out, size_t cap, const char *in);
  * highlight). -1 means nothing picked yet. */
 int nwpad_picker_select(nwpad_vec2 stick, int current);
 
+/* ---- Game text ---- */
+/* Remove the game's inline colour codes ("<c" + 3 colour bytes + ">" ... "</c>",
+ * what conversation markup like <StartCheck> becomes, re-notes F36) in place,
+ * keeping the text they colour. */
+void nwpad_strip_colour_codes(char *text);
+
 /* ---- UBJSON (the game's NUI wire format, re-notes F32) ---- */
 /* Convert JSON text to UBJSON: integers as the smallest of i/U/I/l/L, other
  * numbers as D, strings and keys with the smallest length marker, no optimized

@@ -276,6 +276,15 @@ static void test_style_debounce(void) {
     CHECK(nwpad_config_parse(&(nwpad_config){0}, "strafe_exit_ms = 200\n") == 1);
 }
 
+static void test_strip_colour_codes(void) {
+    char t[128] = "<c\x01\xfe\x01>[Nods]</c> Hello, Aluvian. <c\xfe\x01\x01>[Persuade]</c> and <c>> not one";
+    nwpad_strip_colour_codes(t);
+    CHECK(!strcmp(t, "[Nods] Hello, Aluvian. [Persuade] and <c>> not one"));
+    char u[16] = "<c\x01>";  /* too short to be a code */
+    nwpad_strip_colour_codes(u);
+    CHECK(!strcmp(u, "<c\x01>"));
+}
+
 static void test_picker_key(void) {
     nwpad_config c;
     nwpad_config_defaults(&c);
@@ -402,6 +411,7 @@ int main(void) {
     test_pattern();
     test_move_style();
     test_style_debounce();
+    test_strip_colour_codes();
     test_picker_key();
     test_picker_select();
     test_ubjson();

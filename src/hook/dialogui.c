@@ -5,6 +5,9 @@
 #include "dialog.h"
 #include "icons.h"
 #include "sigs.h"
+
+#define MORE_H 22.0f /* the "more replies" markers */
+#define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
 #include "nui.h"
 
 #include <math.h>
@@ -29,7 +32,9 @@
 
 static struct {
     bool open;
+    bool preview;         /* debug: a made-up conversation is shown */
     int flip;             /* which of the two tokens is current */
+    int first, last;      /* the replies shown (more than fit on screen scroll) */
     uint32_t seq;
     int highlight;
     nwpad_dialog d;
@@ -39,6 +44,10 @@ static struct {
 
 bool nwpad_dialogui_open(void) { return ui.open; }
 int nwpad_dialogui_highlight(void) { return ui.open ? ui.highlight : -1; }
+void nwpad_dialogui_range(int *first, int *last) {
+    *first = ui.open ? ui.first : -1;
+    *last = ui.open ? ui.last : -1;
+}
 
 static bool big_font; /* the skin has FONT */
 
@@ -106,6 +115,15 @@ static void colour(int i) {
     nwpad_nui_bind(TOKEN, name, c);
 }
 
+/* Screen height in GUI units (as the picker centres itself). */
+static float screen_h(void) {
+    float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
+    void **gui = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
+    float s = scale ? scale() : 1.0f;
+    int h = gui && *gui ? *(int *)((char *)*gui + 0xbc) : 720;
+    return (float)h / (s > 0 ? s : 1.0f);
+}
+
 static bool build(void) {
     static char json[65536];
     static char esc[9000];
@@ -131,16 +149,50 @@ static bool build(void) {
         "{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":%d,\"height\":%.1f%s}]}]}",
         ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, esc, scroll ? 2 : 0, body_h,
         big_font ? ",\"font\":\"" FONT "\"" : "");
-    for (int i = 0; i < ui.d.count && n < sizeof json; i++) {
-        char numbered[600];
+    /* The replies that fit under the line; if not all, a range around the highlight
+     * with markers for the rest. */
+    static float rh[NWPAD_DIALOG_REPLIES];
+    char numbered[600];
+    float total = 0, room = screen_h() - h - 3 * PAD - QUICKBAR_H;
+    for (int i = 0; i < ui.d.count; i++) {
+        snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
+        rh[i] = text_height(numbered, WIDTH - 2 * PAD) + 8;
+        total += rh[i];
+    }
+    ui.last = ui.d.count - 1;
+    if (total > room) {
+        room -= 2 * (MORE_H + 8);
+        if (ui.highlight >= 0 && ui.highlight < ui.first) ui.first = ui.highlight;
+        float used = 0;
+        for (ui.last = ui.first; ui.last < ui.d.count && used + rh[ui.last] <= room; ui.last++) used += rh[ui.last];
+        ui.last--;
+        while (ui.highlight > ui.last && ui.first < ui.highlight) { /* scroll down to the highlight */
+            used -= rh[ui.first++];
+            while (ui.last + 1 < ui.d.count && used + rh[ui.last + 1] <= room) used += rh[++ui.last];
+        }
+        if (ui.last < ui.first) ui.last = ui.first;
+    }
+    bool above = ui.first > 0, below = ui.last < ui.d.count - 1;
+    if (above || below) {
+        h += 2 * (MORE_H + 8);
+        n += (size_t)snprintf(json + n, sizeof json - n,
+            ",{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":0,\"text_valign\":0,"
+            "\"height\":%.1f,\"foreground_color\":{\"r\":160,\"g\":160,\"b\":160,\"a\":255}}",
+            above ? "- more above -" : "", MORE_H);
+    }
+    for (int i = ui.first; i <= ui.last && n < sizeof json; i++) {
         snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
         nwpad_json_escape(esc, sizeof esc, numbered);
-        float rh = text_height(numbered, WIDTH - 2 * PAD);
-        h += rh + 8;
+        h += rh[i];
         n += (size_t)snprintf(json + n, sizeof json - n,
             ",{\"type\":\"text\",\"label\":null,\"value\":\"%s\",\"border\":false,\"scrollbars\":0,\"height\":%.1f,"
-            "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh, i);
+            "\"foreground_color\":{\"bind\":\"c%d\"}}", esc, rh[i] - 8, i);
     }
+    if (above || below)
+        n += (size_t)snprintf(json + n, sizeof json - n,
+            ",{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":0,\"text_valign\":0,"
+            "\"height\":%.1f,\"foreground_color\":{\"r\":160,\"g\":160,\"b\":160,\"a\":255}}",
+            below ? "- more below -" : "", MORE_H);
     if (ui.d.panel_h + 8 > h) h = ui.d.panel_h + 8; /* never smaller than the game's window */
     static char window[70000];
     int w = snprintf(window, sizeof window,
@@ -162,8 +214,15 @@ static bool build(void) {
     char geo[96];
     snprintf(geo, sizeof geo, "{\"x\":2.0,\"y\":2.0,\"w\":%.1f,\"h\":%.1f}", WIDTH, h + PAD);
     nwpad_nui_bind(TOKEN, "geo", geo);
-    for (int i = 0; i < ui.d.count; i++) colour(i);
+    for (int i = ui.first; i <= ui.last; i++) colour(i);
     return true;
+}
+
+/* Show the window again after the highlight left the visible replies. */
+static void rebuild(void) {
+    nwpad_nui_destroy(TOKEN);
+    ui.flip ^= 1;
+    ui.open = build();
 }
 
 static int first_selectable(void) {
@@ -180,19 +239,65 @@ void nwpad_dialogui_move(int step) {
         if (ui.d.replies[i].selectable) break;
     }
     ui.highlight = i;
+    if (i < ui.first || i > ui.last) { /* scrolled: wrap to the top resets the range */
+        if (i < ui.first) ui.first = i;
+        rebuild();
+        return;
+    }
     if (was >= 0) colour(was);
     colour(i);
 }
 
 void nwpad_dialogui_confirm(void) {
-    if (ui.open && ui.highlight >= 0) nwpad_dialog_select(ui.highlight);
+    if (ui.open && ui.highlight >= 0 && !ui.preview) nwpad_dialog_select(ui.highlight);
 }
 
 void nwpad_dialogui_cancel(void) {
-    if (ui.open) nwpad_dialog_end();
+    if (ui.open && !ui.preview) nwpad_dialog_end();
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
+static void unescape(char *s) { /* "\n" -> newline, in place */
+    char *o = s;
+    for (char *p = s; *p; p++) {
+        if (p[0] == '\\' && p[1] == 'n') { *o++ = '\n'; p++; }
+        else *o++ = *p;
+    }
+    *o = '\0';
+}
+
+bool nwpad_dialogui_preview(const char *path) {
+    if (ui.open) nwpad_nui_destroy(TOKEN);
+    ui.open = ui.preview = false;
+    if (!path) return true;
+    FILE *f = fopen(path, "r");
+    if (!f) return false;
+    memset(&ui.d, 0, sizeof ui.d);
+    static char buf[8192];
+    int n = 0;
+    while (fgets(buf, sizeof buf, f)) {
+        buf[strcspn(buf, "\n")] = '\0';
+        unescape(buf);
+        if (n == 0) snprintf(ui.d.line, sizeof ui.d.line, "%.4000s", buf);
+        else if (ui.d.count < NWPAD_DIALOG_REPLIES) {
+            snprintf(ui.d.replies[ui.d.count].text, sizeof ui.d.replies[0].text, "%.500s", buf);
+            ui.d.replies[ui.d.count++].selectable = true;
+        }
+        n++;
+    }
+    fclose(f);
+    snprintf(ui.d.speaker_name, sizeof ui.d.speaker_name, "%s", "Preview");
+    snprintf(ui.d.portrait, sizeof ui.d.portrait, "%s", "po_dw_m_01_M");
+    ui.d.panel_h = 254;
+    ui.flip ^= 1;
+    ui.highlight = first_selectable();
+    ui.open = ui.preview = build();
+    return ui.open;
+}
+#endif
+
 bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
+    if (ui.preview) return true;
     uint32_t seq = enabled ? nwpad_dialog_seq() : 0;
     if (!seq) {
         if (ui.open) nwpad_nui_destroy(TOKEN);
@@ -203,6 +308,9 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
     if (!ui.open || seq != ui.seq) { /* a new line or new replies */
         ui.seq = seq;
         if (!nwpad_dialog_read(&ui.d)) return false;
+        nwpad_strip_colour_codes(ui.d.line); /* no inline colours in NUI text */
+        for (int i = 0; i < ui.d.count; i++) nwpad_strip_colour_codes(ui.d.replies[i].text);
+        ui.first = 0;
         if (ui.open) {
             nwpad_nui_destroy(TOKEN);
             ui.flip ^= 1;

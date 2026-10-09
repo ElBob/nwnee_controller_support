@@ -92,3 +92,43 @@ def test_window_keys(game, ctl):
     assert not ctl("dialog_ui")["open"]
     log = open(__import__("os").path.join(game, "game.log"), errors="replace").read()
     assert "window does not exist: 18532" not in log  # nwpad's NUI tokens never reach the server
+
+
+def test_test_conversation(game, ctl, tmp_path):
+    """nwpad's own test conversation (tools/make_test_dlg.py), shaped like the
+    official campaigns' extremes: markup (the client turns <StartCheck> etc. into
+    colour codes; nwpad's window strips them), an 83-reply list that scrolls with
+    the highlight, a ~1000-character line and a long reply."""
+    import os
+    import subprocess
+    from conftest import ROOT
+    dlg = str(tmp_path / "nwpadtest.dlg")
+    subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
+    assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
+    if ctl("dialog")["dialog"]:
+        ctl("dialog_select", end=1)
+        _dialog(ctl, want=lambda d: d is None)
+    ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
+    d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 4)
+    assert d["line"].startswith("<c") and "[Nods]</c> Hello, " in d["line"], d  # tokens filled in, colour codes
+    assert ctl("dialog_ui")["open"]
+    seq = d["seq"]
+    ctl("dialog_select", index=1)  # "Many replies."
+    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 83)
+    time.sleep(0.5)
+    ui = ctl("dialog_ui")
+    assert ui["first"] == 0 and 0 < ui["last"] < 82, ui  # not all fit
+    for _ in range(40):
+        ctl("dialog_ui", step=1)
+    time.sleep(0.5)
+    ui = ctl("dialog_ui")
+    assert ui["highlight"] == 40 and ui["first"] <= 40 <= ui["last"] and ui["first"] > 0, ui
+    for _ in range(41):  # 40 -> 0, then wrap past the top to the last
+        ctl("dialog_ui", step=-1)
+    time.sleep(0.5)
+    ui = ctl("dialog_ui")
+    assert ui["highlight"] == 82 and ui["last"] == 82, ui
+    ctl("dialog_select", end=1)
+    _dialog(ctl, want=lambda d: d is None)
+    log = open(os.path.join(game, "game.log"), errors="replace").read()
+    assert "window does not exist: 18532" not in log

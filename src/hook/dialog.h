@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define NWPAD_DIALOG_REPLIES 32
+#define NWPAD_DIALOG_REPLIES 128 /* the official campaigns have up to 83 (dialog plan) */
 
 typedef struct {
     bool open;
