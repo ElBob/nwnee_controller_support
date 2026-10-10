@@ -24,14 +24,15 @@ pull() {
 }
 
 cmd="${1:-}"; shift || true
+args=$(printf '%q ' "$@")   # the arguments as typed, quoted for the remote bash
 case "$cmd" in
   sync) sync ;;
   build) sync; build ;;
-  run) sync; build; remote "$*" ;;
+  run) sync; build; remote "$args" ;;
   test)
     sync; build
     remote "python3 tools/sigcheck"
-    rc=0; remote ". tools/common.sh && session_env; NWPAD_LIVE=1 python3 -m pytest tests/live -v $*" || rc=$?
+    rc=0; remote ". tools/common.sh && session_env; NWPAD_LIVE=1 python3 -m pytest tests/live -v $args" || rc=$?
     pull; exit $rc ;;
   pull) pull ;;
   *) die "usage: $0 sync|build|run|test|pull" ;;

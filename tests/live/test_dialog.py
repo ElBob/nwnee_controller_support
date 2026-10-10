@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from conftest import ROOT, mouse, server_heard_nwpad, xkey
+from conftest import ROOT, mouse, server_heard, server_heard_nwpad, xkey
 
 # The nearest NPC to the test character, Rules Enforcer D, has a conversation.
 START = ('object pc=GetFirstPC(); object n=GetNearestCreature(CREATURE_TYPE_PLAYER_CHAR, PLAYER_CHAR_NOT_PC, pc, 1);'
@@ -17,9 +17,9 @@ START = ('object pc=GetFirstPC(); object n=GetNearestCreature(CREATURE_TYPE_PLAY
 def npc_home(ctl):
     """Starting a conversation walks the NPC over to the player, into the movement
     tests' way: put it back where it started afterwards."""
+    _end(ctl)  # (before recording where it is)
     ctl("script_chunk", code='object n=GetNearestCreature(CREATURE_TYPE_PLAYER_CHAR, PLAYER_CHAR_NOT_PC, GetFirstPC(), 1);'
                              ' SetLocalObject(GetModule(), "nwpad_npc", n); SetLocalLocation(GetModule(), "nwpad_npc_home", GetLocation(n));')
-    _end(ctl)
     yield
     if ctl("dialog")["dialog"]:
         ctl("dialog_select", end=1)
@@ -192,6 +192,7 @@ def test_mouse(game, ctl, test_dlg):
         finally:
             ctl("dialog_ui", dry=0)
 
+    heard = len(server_heard(game))
     ctl("script_chunk", code=START % test_dlg)
     d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
     time.sleep(0.5)
@@ -215,4 +216,6 @@ def test_mouse(game, ctl, test_dlg):
     assert ctl("dialog_ui")["highlight"] == 3
     assert ctl("state").get("client") == where  # no click reached the world
     _end(ctl)
-    assert not server_heard_nwpad(game)  # nothing of nwpad's reached the server
+    # Nothing reached the server for any window: neither nwpad's nor (through a
+    # click that fell through to it) the game's own.
+    assert len(server_heard(game)) == heard, server_heard(game)

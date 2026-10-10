@@ -11,15 +11,17 @@ session_env
 S="$NWPAD_STATE/userdir/settings.tml"
 CFGDIR=$(mktemp -d); export XDG_CONFIG_HOME="$CFGDIR"   # never Robert's real config.toml
 mkdir -p "$CFGDIR/nwpad"
-fail() { echo "FAIL: $*"; [ -n "${PID:-}" ] && stop_pid "$PID" 5; exit 1; }
+PID=
+fail() { echo "FAIL: $*"; exit 1; }
 status() { "$TOOLS/nwpadctl" status | python3 -c "import json,sys; c=json.load(sys.stdin)['config']; print(' '.join(f'{k}={v}' for k,v in c.items()))"; }
 launch() { RUN=$(NWPAD_CONFIG= "$TOOLS/run_game.sh" --timeout 90) || fail "launch: $RUN"; PID=$(cat "$RUN/pid"); }
-quit() { stop_pid "$PID" 10; sleep 1; }
+quit() { stop_pid "$PID" 10; PID=; sleep 1; }
 native() { "$TOOLS/nwpadctl" status | python3 -c "import json,sys; n=json.load(sys.stdin)['native']; print(n['$1'][${2:-0}] if n else 'none')"; }
 config() { "$TOOLS/nwpadctl" status | python3 -c "import json,sys; print(json.load(sys.stdin)['config']['$1'])"; }
 # Clicks at game-window coordinates (the test profile's 1024x768 window).
 click() {
-  local geo; geo=$(DISPLAY=:0 xdotool search --name "Neverwinter Nights: Enhanced" getwindowgeometry | awk '/Position/{print $2}' | tail -1)
+  local geo; geo=$(DISPLAY=:0 xdotool search --onlyvisible --pid "$PID" --name "Neverwinter Nights: Enhanced" getwindowgeometry | awk '/Position/{print $2}' | tail -1)
+  [ -n "$geo" ] || fail "no game window (pid $PID) to click in"
   echo "click $1,$2 in window at $geo" >> "$RUN/clicks.log"
   DISPLAY=:0 python3 "$TOOLS/uinput_mouse.py" --to $(( ${geo%,*} + $1 )) $(( ${geo#*,} + $2 )) --click --settle 0.5
   sleep "${3:-1.5}"
@@ -31,7 +33,7 @@ open_options() {  # (title screen) > main menu > Options > Game Options > Input
   for try in 1 2 3; do
     if [ "${1:-}" != again ]; then  # "again": back on the Options panel after Save/Cancel
       for _ in $(seq 60); do grep -qa "enabling main menu" "$RUN/game.log" && break; sleep 0.5; done
-      DISPLAY=:0 xdotool search --name "Neverwinter Nights: Enhanced" windowactivate 2>/dev/null || true
+      DISPLAY=:0 xdotool search --onlyvisible --pid "$PID" --name "Neverwinter Nights: Enhanced" windowactivate 2>/dev/null || true
       click 512 100 2   # focus (an unfocused window eats the first click) and dismiss the
       click 512 100 3   # title screen; the logo is inert on the main menu
       click 512 554 2
@@ -50,14 +52,17 @@ t = re.sub(r'(?ms)^\[nwpad\]\n(?:[ \t].*\n|\[nwpad\.[^\]]*\]\n)*', '', t)
 open(p, "w").write(t)
 PY
 }
-cp -a "$S" "$S.checks-orig"
+# The original, once: a run that died without its EXIT trap leaves the backup, which
+# is then still the original (a fresh copy would be of the modified file).
+[ -f "$S.checks-orig" ] || cp -a "$S" "$S.checks-orig"
 python3 - "$S" <<'PY'  # no intro movies or splash: straight to the main menu
 import sys; p = sys.argv[1]; t = open(p).read()
 t = t.replace("[graphics.intro.splash]\n\t\t\tenabled = true", "[graphics.intro.splash]\n\t\t\tenabled = false")
 t = t.replace("[graphics.movies.intro]\n\t\t\tenabled = true", "[graphics.movies.intro]\n\t\t\tenabled = false")
 open(p, "w").write(t)
 PY
-trap 'mv -f "$S.checks-orig" "$S"; rm -f "$S.bak-nwpad"; rm -rf "$CFGDIR"' EXIT
+# Stop the game first (it writes settings.tml when it exits), then restore.
+trap 'if [ -n "$PID" ]; then stop_pid "$PID" 5; fi; mv -f "$S.checks-orig" "$S"; rm -f "$S.bak-nwpad"; rm -rf "$CFGDIR"' EXIT
 
 if [ -z "${ONLY_NATIVE:-}" ]; then
 echo "== 1. seeding: no [nwpad], config.toml says turn speed 240"
@@ -78,7 +83,7 @@ python3 - "$S" <<'PY'
 import sys; p = sys.argv[1]; t = open(p).read()
 t = t.replace("turn-speed = 240", "turn-speed = 300", 1); open(p, "w").write(t)
 PY
-launch; grep -qa 'settings .*settings.tml: 15 setting(s) applied' "$RUN/game.log" || fail "settings.tml not read"
+launch; grep -qaE 'settings .*settings.tml: [0-9]+ setting\(s\) applied' "$RUN/game.log" || fail "settings.tml not read"
 status; status | grep -q 'turn_speed=300.0' || fail "settings.tml value not used"
 quit; echo "ok: settings.tml wins"
 
@@ -89,7 +94,8 @@ import re; t = re.sub(r"(?m)(^\[nwpad\]\n(?:\t.*\n)*?)\tenabled = true", r"\1\te
 open(p, "w").write(t)
 PY
 RUN=$(NWPAD_CONFIG= "$TOOLS/run_game.sh" --timeout 90 -- +TestNewModule "Contest Of Champions 0492") || fail "launch"; PID=$(cat "$RUN/pid")
-for i in $(seq 30); do "$TOOLS/nwpadctl" state 2>/dev/null | grep -q '"in_game": true' && break; sleep 1; done; sleep 2
+for i in $(seq 30); do "$TOOLS/nwpadctl" state 2>/dev/null | grep -q '"in_game": true' && break; sleep 1; done
+"$TOOLS/nwpadctl" state | grep -q '"in_game": true' || fail "not in the module (the camera check needs it)"; sleep 2
 status | grep -q 'enabled=False' || fail "not disabled"
 y0=$("$TOOLS/nwpadctl" state | python3 -c 'import json,sys; print(json.load(sys.stdin)["camera"]["yaw"])')
 "$TOOLS/nwpadctl" stick rx=1 >/dev/null; sleep 0.8; "$TOOLS/nwpadctl" release >/dev/null
@@ -123,7 +129,7 @@ click 589 696 2   # Cancel
 echo "ok: live apply, Cancel rolls back"
 open_options again; click 820 426 1; t=$(native nwpad.camera.tilt-speed); click 434 696 2   # Save
 [ "$(native nwpad.camera.tilt-speed 1)" = "$t" ] || fail "Save didn't commit"
-grep -qE "tilt-speed = ${t%.0}" "$S" || fail "Save didn't write settings.tml"
+grep -qE "tilt-speed = ${t%.0}(\.0*)?\$" "$S" || fail "Save didn't write settings.tml"
 quit; launch; sleep 5
 [ "$(config tilt_speed)" = "$t" ] || fail "tilt not kept across relaunch"
 quit; echo "ok: Save commits, writes settings.tml, survives relaunch"

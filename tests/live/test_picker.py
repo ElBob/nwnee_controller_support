@@ -4,6 +4,8 @@ uses it; the right stick doesn't move the camera meanwhile, and nothing reaches 
 server."""
 import time
 
+import pytest
+
 from conftest import server_heard_nwpad, xkey
 
 STEALTH = 3  # the test character's slot 3 (test_quickbar.py); ring slot 3 is due right
@@ -31,6 +33,17 @@ def _pick(ctl, rx, ry):
     ctl("picker", action="confirm")
     time.sleep(0.6)
     return s["picker"], ctl("state")["picker"]
+
+
+@pytest.fixture(autouse=True)
+def picker_closed(ctl):
+    """Each test starts and ends with the picker closed and the character out of
+    stealth (a failed test would otherwise leave them for the next one)."""
+    _stealth_off(ctl)
+    yield
+    ctl("picker", action="cancel")
+    time.sleep(0.3)
+    _stealth_off(ctl)
 
 
 def test_pick_and_use(game, ctl):

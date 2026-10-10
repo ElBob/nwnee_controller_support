@@ -11,7 +11,8 @@ TOOLS="$ROOT/tools"
 session_env
 MODULE=(+TestNewModule "Contest Of Champions 0492")
 PID=
-fail() { echo "FAIL: $*"; [ -n "$PID" ] && stop_pid "$PID"; exit 1; }
+fail() { echo "FAIL: $*"; exit 1; }
+trap 'if [ -n "$PID" ]; then stop_pid "$PID"; fi' EXIT   # the game this script started, however it ends
 # Signature counts from signatures/ee.yaml: all entries, and those a release build has.
 read -r ALL RELEASE < <(python3 - "$ROOT/signatures/ee.yaml" <<'PY'
 import yaml, sys
@@ -56,14 +57,15 @@ total=$ALL
 grep -qa "\[nwpad\] signatures: 0/$total resolved" "$LOG" || fail "expected 0/$total resolved"
 [ "$(grep -ca '\[nwpad\] signature .*not found' "$LOG")" = "$total" ] || fail "not every miss was logged"
 grep -qa 'camera backend: unavailable, movement backend: unavailable' "$LOG" || fail "features should be off"
-"$TOOLS/nwpadctl" stick lx=1 ly=1 rx=1 ry=1 >/dev/null
-f0=$("$TOOLS/nwpadctl" ping | python3 -c 'import json,sys; print(json.load(sys.stdin)["frame"])')
+"$TOOLS/nwpadctl" --wait-ready 30 ping >/dev/null || fail "broken build: control socket never answered"
+"$TOOLS/nwpadctl" stick lx=1 ly=1 rx=1 ry=1 >/dev/null || fail "broken build: stick command"
+f0=$("$TOOLS/nwpadctl" ping | python3 -c 'import json,sys; print(json.load(sys.stdin)["frame"])') || fail "broken build: ping"
 sleep 5
-"$TOOLS/nwpadctl" release >/dev/null
-f1=$("$TOOLS/nwpadctl" ping | python3 -c 'import json,sys; print(json.load(sys.stdin)["frame"])')
+"$TOOLS/nwpadctl" release >/dev/null || fail "broken build: release command"
+f1=$("$TOOLS/nwpadctl" ping | python3 -c 'import json,sys; print(json.load(sys.stdin)["frame"])') || fail "broken build: ping"
 kill -0 "$PID" || fail "game exited with broken signatures"
 [ "$f1" -gt "$f0" ] || fail "frames stopped advancing"
 echo "  frames advanced $f0 -> $f1 with full stick input and no signatures"
-grep -a '\[nwpad\]' "$LOG" | head -4 | sed 's/^/  /'
+grep -a -m4 '\[nwpad\]' "$LOG" | sed 's/^/  /'
 stop_pid "$PID"; PID=
 echo "ok: game runs normally with every signature broken"

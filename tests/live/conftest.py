@@ -81,6 +81,8 @@ def game():
         pytest.fail(f"run_game.sh failed ({proc.returncode}): {proc.stdout}{proc.stderr}")
     run_dir = proc.stdout.strip().splitlines()[-1]
     pid = int(open(os.path.join(run_dir, "pid")).read().strip())
+    global GAME_PID
+    GAME_PID = pid
     try:
         ctl = Ctl()
         deadline = time.monotonic() + 60
@@ -103,11 +105,17 @@ def ctl(game):
 
 
 X_ENV = {**os.environ, "DISPLAY": os.environ.get("NWPAD_DISPLAY", ":0")}
+GAME_PID = None  # the game the session started (game fixture)
 
 
 def _game_window_id():
-    return subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=X_ENV,
-                          capture_output=True, text=True, check=True).stdout.split()[0]
+    """The visible window of the game this session started: never another window
+    with a similar title (the virtual mouse and keys go where this says)."""
+    assert GAME_PID, "no game started"
+    ids = subprocess.run(["xdotool", "search", "--onlyvisible", "--pid", str(GAME_PID), "--name",
+                          "Neverwinter Nights: Enhanced"], env=X_ENV, capture_output=True, text=True).stdout.split()
+    assert ids, f"no visible window for the game (pid {GAME_PID})"
+    return ids[0]
 
 
 def game_window():
@@ -127,7 +135,8 @@ def game_window_center():
 def xkey(key, action="key"):
     """Tap (action "key"), press ("keydown") or release ("keyup") a key through X
     (XTEST keyboard events reach the game), with the game window focused."""
-    subprocess.run(["xdotool", "windowactivate", "--sync", _game_window_id()], env=X_ENV, capture_output=True)
+    subprocess.run(["xdotool", "windowactivate", "--sync", _game_window_id()], env=X_ENV, check=True,
+                   capture_output=True)
     subprocess.run(["xdotool", action, key], env=X_ENV, check=True)
 
 
