@@ -553,6 +553,14 @@ static float axis(int a) {
 
 /* ---- Per-frame work ---- */
 
+/* Stop the character if nwpad left it moving (the game can't take a move now). */
+static void stop_moving(void) {
+    if (!g.send_state.was_moving) return;
+    g.send_state.was_moving = false; /* the next move starts afresh */
+    g.sends.stops++;
+    nwpad_backend_send_stop();
+}
+
 static void nwpad_frame(void) {
     uint64_t t = now_ms();
     if (!g.frames++) {
@@ -595,7 +603,7 @@ static void nwpad_frame(void) {
     /* nwpad's conversation window: the sticks scroll its text (and move nothing else). */
     NWPAD_WHERE("dialog");
     float nav = fabsf(left.y) > fabsf(right.y) ? left.y : right.y;
-    bool talking = nwpad_dialogui_frame(g.cfg.enabled && g.cfg.dialog, nav, t);
+    bool talking = nwpad_dialogui_frame(g.cfg.enabled && g.cfg.dialog && nwpad_dialog_available(), nav, t);
     if (talking) {
         for (; g.picker.dialog_step < 0; g.picker.dialog_step++) nwpad_dialogui_move(-1);
         for (; g.picker.dialog_step > 0; g.picker.dialog_step--) nwpad_dialogui_move(1);
@@ -649,6 +657,7 @@ static void nwpad_frame(void) {
     nwpad_backend_tick(t);
     NWPAD_WHERE("in_game check");
     if (!nwpad_backend_in_game()) {
+        stop_moving(); /* an area transition while moving: don't leave a drag or a key held */
         NWPAD_WHERE("");
         return;
     }
@@ -670,6 +679,7 @@ static void nwpad_frame(void) {
     float facing;
     NWPAD_WHERE("player facing");
     if (!have_cam || !nwpad_backend_player_facing(&facing)) {
+        stop_moving();
         NWPAD_WHERE("");
         return;
     }
@@ -803,20 +813,28 @@ static int nwpad_PollEvent(SDL_Event *event) {
                        : sym == g.picker.confirm_sym ? &g.picker.confirm_down
                        : sym == g.picker.cancel_sym ? &g.picker.cancel_down
                                                     : NULL;
-            if (dk && type == SDL_KEYDOWN && nwpad_dialogui_open()) {
-                if (dk == &g.picker.up_down) g.picker.dialog_step--;
-                else if (dk == &g.picker.down_down) g.picker.dialog_step++;
-                else if (!event->key.repeat) g.picker.dialog_action = dk == &g.picker.confirm_down ? 1 : 2;
+            /* A key is nwpad's or the game's from its first key-down to its key-up:
+             * autorepeats follow the first key-down, so a key held while a window
+             * opens or closes never reaches the game half pressed. */
+            if (dk && type == SDL_KEYDOWN && (event->key.repeat ? *dk : nwpad_dialogui_open())) {
+                if (nwpad_dialogui_open()) {
+                    if (dk == &g.picker.up_down) g.picker.dialog_step--;
+                    else if (dk == &g.picker.down_down) g.picker.dialog_step++;
+                    else if (!event->key.repeat) g.picker.dialog_action = dk == &g.picker.confirm_down ? 1 : 2;
+                }
                 *dk = true;
                 g.events.filtered++;
                 continue;
             }
-            if (dk && type == SDL_KEYUP && *dk && (dk == &g.picker.up_down || dk == &g.picker.down_down)) {
+            if (dk && type == SDL_KEYUP && *dk) {
                 *dk = false;
                 g.events.filtered++;
                 continue;
             }
-            if (g.picker.sym && sym == g.picker.sym && nwpad_dialogui_open()) { /* no picker in a conversation */
+            if (g.picker.sym && sym == g.picker.sym && nwpad_dialogui_open()) {
+                /* No picker in a conversation; a release still counts (the key may
+                 * have been down when the conversation started). */
+                if (type == SDL_KEYUP) g.picker.up_ms = now_ms();
                 g.events.filtered++;
                 continue;
             }
@@ -840,8 +858,8 @@ static int nwpad_PollEvent(SDL_Event *event) {
                          : sym && sym == g.picker.confirm_sym ? &g.picker.confirm_down
                          : sym && sym == g.picker.cancel_sym  ? &g.picker.cancel_down
                                                               : NULL;
-            if (down && type == SDL_KEYDOWN && nwpad_picker_open()) {
-                if (!event->key.repeat) {
+            if (down && type == SDL_KEYDOWN && (event->key.repeat ? *down : nwpad_picker_open())) {
+                if (!event->key.repeat && nwpad_picker_open()) {
                     if (down == &g.picker.prev_down || down == &g.picker.next_down)
                         g.picker.shift += down == &g.picker.prev_down ? -1 : 1;
                     else

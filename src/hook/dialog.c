@@ -85,9 +85,12 @@ static void on_set_text(void *self, const char *text) {
     }
 }
 
+static int init_state; /* 0 untried, 1 ok, -1 unavailable */
+
+bool nwpad_dialog_available(void) { return init_state > 0; }
+
 bool nwpad_dialog_init(void) {
-    static int state; /* 0 untried, 1 ok, -1 unavailable */
-    if (state) return state > 0;
+    if (init_state) return init_state > 0;
     static const int ids[] = {NWPAD_SIG_STRING_GOB_VTABLE, NWPAD_SIG_STRING_GOB_SET_TEXT_THUNK,
                               NWPAD_SIG_GUI_DIALOG_NUM_KEY, NWPAD_SIG_GUI_DIALOG_SELECTION,
                               NWPAD_SIG_CLIENT_GET_IN_GAME_GUI, NWPAD_SIG_APP_MANAGER};
@@ -97,7 +100,7 @@ bool nwpad_dialog_init(void) {
               nwpad_vslot_swap(nwpad_sig(NWPAD_SIG_STRING_GOB_VTABLE), 512, nwpad_sig(NWPAD_SIG_STRING_GOB_SET_TEXT_THUNK),
                                (void *)on_set_text, &orig);
     if (ok) dl.set_text = (set_text_fn)orig;
-    state = ok ? 1 : -1;
+    init_state = ok ? 1 : -1;
     return ok;
 }
 
@@ -173,15 +176,17 @@ bool nwpad_dialog_read(nwpad_dialog *out) {
 bool nwpad_dialog_select(int index) {
     void *g = gui();
     char *d = dialog_object();
-    if (!g || !d || index < 0 || index >= *(int32_t *)(d + DLG_REPLY_COUNT)) return false;
-    ((gui_int_fn)nwpad_sig(NWPAD_SIG_GUI_DIALOG_NUM_KEY))(g, index + 1);
+    gui_int_fn num_key = (gui_int_fn)nwpad_sig(NWPAD_SIG_GUI_DIALOG_NUM_KEY);
+    if (!num_key || !g || !d || index < 0 || index >= *(int32_t *)(d + DLG_REPLY_COUNT)) return false;
+    num_key(g, index + 1);
     return true;
 }
 
 bool nwpad_dialog_end(void) {
     void *g = gui();
-    if (!g || !dialog_object()) return false;
-    ((gui_int_fn)nwpad_sig(NWPAD_SIG_GUI_DIALOG_SELECTION))(g, -3);
+    gui_int_fn selection = (gui_int_fn)nwpad_sig(NWPAD_SIG_GUI_DIALOG_SELECTION);
+    if (!selection || !g || !dialog_object()) return false;
+    selection(g, -3);
     return true;
 }
 

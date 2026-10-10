@@ -412,6 +412,14 @@ static void test_settings_toml(void) {
         CHECK(nwpad_settings_set_number(&c, "nwpad.movement.run-point", 0.6) == 1);
         CHECK(fabsf(c.run_threshold - 0.6f) < 1e-6f && c.run_hysteresis == NWPAD_RUN_BAND);
         CHECK(nwpad_settings_set_number(&c, "nwpad.nope", 1) == 0);
+        /* The top of the run-point range still runs at full stick. */
+        CHECK(nwpad_settings_set_number(&c, "nwpad.movement.run-point", 0.95) == 1);
+        NEAR(c.run_threshold, NWPAD_RUN_POINT_MAX, 1e-6);
+        CHECK(nwpad_move_mode_update(NWPAD_MOVE_WALK, 1.0f, false, &c) == NWPAD_MOVE_RUN);
+        /* nan and inf are no numbers (they'd pass the clamp). */
+        float yaw = c.camera_yaw_speed;
+        CHECK(nwpad_settings_parse(&c, "[nwpad.camera]\nturn-speed = nan\n") == 0 && c.camera_yaw_speed == yaw);
+        CHECK(nwpad_settings_parse(&c, "[nwpad]\ncursor-rehide-ms = inf\n") == 0);
     }
 }
 

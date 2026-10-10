@@ -501,7 +501,10 @@ void nwpad_dialogui_move(int step) {
     layout();
     bool same = ui.nrows == nrows;
     for (int k = 0; same && k < nrows; k++) same = heights[k] == ui.row_h[k];
-    if (!same) ui.dirty = true; /* other row heights (a long reply came into view): build again */
+    if (!same) { /* other row heights (a long reply came into view): build again */
+        ui.dirty = true;
+        ui.press = -1;
+    }
     if (ui.dirty) return;
     for (int k = 0; k < ui.nrows; k++) bind_row(k); /* scrolled or not: just the binds */
 }
@@ -530,7 +533,7 @@ static void mouse_input(void) {
     dry = dbg.dry;
 #endif
     while (nwpad_nui_next_input(&in)) {
-        if (in.token != TOKEN || !ui.open || nwpad_dialog_seq() != ui.seq) continue;
+        if (in.token != TOKEN || !ui.open || (!ui.preview && nwpad_dialog_seq() != ui.seq)) continue;
 #ifdef NWPAD_DEBUG_SURFACES
         dbg.last = in;
         dbg.inputs++;
@@ -538,6 +541,10 @@ static void mouse_input(void) {
         if (in.kind == NWPAD_NUI_SCROLL && in.y != 0) {
             if (in.tag == TAG_TEXT) nwpad_dialogui_scroll(in.y > 0 ? -3 : 3); /* wheel up: earlier lines */
             else nwpad_dialogui_move(in.y > 0 ? -1 : 1);
+        } else if (ui.dirty) {
+            /* The rows already have the new layout, the window on screen the old
+             * one: a click can't be matched to a reply until the new one is up. */
+            ui.press = -1;
         } else if (in.button == 0 && in.kind == NWPAD_NUI_DOWN) {
             ui.press = in.tag;
         } else if (in.button == 0 && in.kind == NWPAD_NUI_UP) {

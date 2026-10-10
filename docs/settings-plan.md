@@ -83,7 +83,7 @@ Stick tuning stays in Steam Input (plan §2). Only settings a player would reaso
 | (new) | `nwpad.enabled` | "Controller support" | bool | on |
 | `camera_yaw_speed` | `nwpad.camera.turn-speed` | "Camera turn speed (stick)" | float, 60–360 °/s | 180 |
 | `camera_pitch_speed` | `nwpad.camera.tilt-speed` | "Camera tilt speed (stick)" | float, 30–180 °/s | 90 |
-| `run_threshold` + `run_hysteresis` | `nwpad.movement.run-point` | "Run point" | float, 0.5–0.95 | 0.7875 |
+| `run_threshold` + `run_hysteresis` | `nwpad.movement.run-point` | "Run point" | float, 0.5–0.925 (higher, a full stick couldn't run) | 0.7875 |
 | `hide_cursor` | `nwpad.hide-cursor` | "Hide cursor while using sticks" | bool | on |
 | `strafe_window` | `nwpad.movement.strafe-window` | D3 | float, 0–30 ° | 10 |
 | `mouse_idle_ms` | `nwpad.mouse-idle-ms` | D3 | int, 100–1000 ms | 300 |

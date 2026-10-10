@@ -106,7 +106,7 @@ below are only in the file; edit it while the game is closed.
 | `mouse-idle-ms` | 300 | 100–1000 | How long the mouse must be still before the stick gets the camera back |
 | `camera.turn-speed` | 180 | 60–360 | Camera turn speed at full deflection, °/s |
 | `camera.tilt-speed` | 90 | 30–180 | Camera tilt speed at full deflection, °/s |
-| `movement.run-point` | 0.7875 | 0.5–0.95 | Centre of the walk/run band; the band is 0.125 wide (run above 0.85, walk below 0.725 at the default) |
+| `movement.run-point` | 0.7875 | 0.5–0.925 | Centre of the walk/run band; the band is 0.125 wide (run above 0.85, walk below 0.725 at the default) |
 | `movement.strafe-window` | 10 | 0–30 | Half-width of the strafe/backpedal windows, ° |
 | `movement.strafe-exit-ms` | 150 | 0–1000 | How long the stick must leave a strafe window before it becomes a drag |
 

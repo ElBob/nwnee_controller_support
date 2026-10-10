@@ -184,7 +184,7 @@ static const struct {
     [E_HIDE_CURSOR] = {"nwpad.hide-cursor", "Controller Hides Cursor", true, 0, 0, 0},
     [E_TURN] = {"nwpad.camera.turn-speed", "Controller Camera Turn Speed", false, 60, 360, 10},
     [E_TILT] = {"nwpad.camera.tilt-speed", "Controller Camera Tilt Speed", false, 30, 180, 5},
-    [E_RUN_POINT] = {"nwpad.movement.run-point", "Controller Run Point", false, 0.5, 0.95, 0.0125},
+    [E_RUN_POINT] = {"nwpad.movement.run-point", "Controller Run Point", false, 0.5, NWPAD_RUN_POINT_MAX, 0.0125},
 };
 
 static struct {

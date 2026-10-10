@@ -45,6 +45,10 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text);
  * the walk/run band; the band width stays NWPAD_RUN_BAND. Values are clamped to the
  * plan's ranges. */
 #define NWPAD_RUN_BAND 0.125f
+/* The highest run-point (on the Options slider's 0.0125 steps) from which a full
+ * stick still runs: running needs a magnitude above run-point + half the band, and
+ * a stick's magnitude is at most 1. */
+#define NWPAD_RUN_POINT_MAX 0.925f
 /* Apply the [nwpad] tables of a settings.tml text. Returns the number of keys applied,
  * or -1 if the text has no [nwpad] table. Other tables and unknown keys are ignored. */
 int nwpad_settings_parse(nwpad_config *cfg, const char *toml);

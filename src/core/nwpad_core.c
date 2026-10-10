@@ -391,7 +391,7 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
     bool b = is_word(val, "true"), is_bool = b || is_word(val, "false");
     char *end;
     double d = strtod(val, &end);
-    bool is_num = end != val;
+    bool is_num = end != val && isfinite(d); /* no nan or inf: they'd pass any clamp */
     if (!strcmp(key, "nwpad.enabled") && is_bool) cfg->enabled = b;
     else if (!strcmp(key, "nwpad.hide-cursor") && is_bool) cfg->hide_cursor = b;
     else if (!strcmp(key, "nwpad.dialog") && is_bool) cfg->dialog = b;
@@ -400,7 +400,7 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
     else if (!strcmp(key, "nwpad.camera.turn-speed") && is_num) cfg->camera_yaw_speed = clampf(d, 60, 360);
     else if (!strcmp(key, "nwpad.camera.tilt-speed") && is_num) cfg->camera_pitch_speed = clampf(d, 30, 180);
     else if (!strcmp(key, "nwpad.movement.run-point") && is_num) {
-        cfg->run_threshold = clampf(d, 0.5f, 0.95f);
+        cfg->run_threshold = clampf(d, 0.5f, NWPAD_RUN_POINT_MAX);
         cfg->run_hysteresis = NWPAD_RUN_BAND;
     } else if (!strcmp(key, "nwpad.movement.strafe-window") && is_num) cfg->strafe_window_deg = clampf(d, 0, 30);
     else if (!strcmp(key, "nwpad.movement.strafe-exit-ms") && is_num) cfg->strafe_exit_ms = (uint32_t)clampf(d, 0, 1000);

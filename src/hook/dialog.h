@@ -36,6 +36,8 @@ void nwpad_game_json(char *out, size_t cap, const char *text);
 
 /* Install the text capture (once, when signatures are resolved). False if unavailable. */
 bool nwpad_dialog_init(void);
+/* Whether nwpad_dialog_init succeeded: reading and answering conversations work. */
+bool nwpad_dialog_available(void);
 /* Cheap per-frame check: the conversation's change counter, or 0 if none is open. */
 uint32_t nwpad_dialog_seq(void);
 /* The open conversation, if any. */
