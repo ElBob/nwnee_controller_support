@@ -22,23 +22,19 @@ void nwpad_dialogui_setup_font(void);
 void nwpad_dialogui_move(int step);
 /* While open: scroll the NPC's text by `lines` (negative: back). */
 void nwpad_dialogui_scroll(int lines);
-int nwpad_dialogui_text_top(void); /* first shown line of the NPC's text */
-
-/* Answer with the reply in that row ("...": scroll that way). The mouse's clicks
- * come here (NUI's own hit testing, F37). */
-void nwpad_dialogui_click(int row);
-bool nwpad_dialogui_mouse(void); /* the window takes the mouse (debug) */
 void nwpad_dialogui_confirm(void);
 void nwpad_dialogui_cancel(void);
-int nwpad_dialogui_highlight(void); /* -1 when closed */
-/* The replies shown, first and last (all when they fit). */
-void nwpad_dialogui_range(int *first, int *last);
+/* The mouse is NUI's own input on the window (F37), handled in dialogui_frame. */
 
 #ifdef NWPAD_DEBUG_SURFACES
 /* Research: show the window for a made-up conversation read from `path` (first line
  * the NPC's line, then one reply per line; "\n" in text is a line break), until
  * called with NULL. */
 bool nwpad_dialogui_preview(const char *path);
+/* Mouse clicks are recorded but don't answer (tests find the rows this way). */
+void nwpad_dialogui_debug_dry(bool dry);
+/* The window's state and counters, as JSON members (no braces). */
+void nwpad_dialogui_debug_json(char *out, size_t cap);
 #endif
 
 #endif

@@ -305,6 +305,17 @@ static void test_picker_key(void) {
     CHECK(!strcmp(c.picker_confirm_key, "Return") && !strcmp(c.picker_cancel_key, "Escape"));
     CHECK(c.dialog && nwpad_settings_parse(&c, "[nwpad]\ndialog = false\n") == 1 && !c.dialog);
     CHECK(nwpad_settings_parse(&c, "[nwpad]\npicker-next-key = \"PageDown\"\n") == 1 && !strcmp(c.picker_next_key, "PageDown"));
+    /* A '#' inside quotes is the key's name (SDL's for the # key), not a comment;
+     * one after the value is. And the round trip keeps it. */
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\npicker-prev-key = \"#\" # the hash key\n") == 1 &&
+          !strcmp(c.picker_prev_key, "#"));
+    CHECK(nwpad_settings_format(&c, buf, sizeof buf) > 0);
+    nwpad_config r;
+    nwpad_config_defaults(&r);
+    CHECK(nwpad_settings_parse(&r, buf) > 0 && !strcmp(r.picker_prev_key, "#"));
+    /* Booleans are whole words. */
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\ndialog = trueish\n") == 0);
+    CHECK(nwpad_settings_parse(&c, "[nwpad]\ndialog = true # on\n") == 1 && c.dialog);
 }
 
 static void test_picker_select(void) {

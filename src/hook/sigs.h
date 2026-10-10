@@ -23,7 +23,9 @@ void nwpad_sigs_resolve(void);
 void *nwpad_sig(int id);
 /* True if every listed id resolved. */
 bool nwpad_sigs_all(const int *ids, size_t n);
+#ifdef NWPAD_DEBUG_SURFACES
 /* JSON object: {"resolved":N,"total":M,"missing":["key",...]} */
 void nwpad_sigs_json(char *out, size_t cap);
+#endif
 
 #endif

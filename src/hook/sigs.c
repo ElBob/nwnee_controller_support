@@ -112,6 +112,7 @@ bool nwpad_sigs_all(const int *ids, size_t n) {
     return true;
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
 void nwpad_sigs_json(char *out, size_t cap) {
     int n = snprintf(out, cap, "{\"resolved\":%d,\"total\":%d,\"missing\":[", resolved_count,
                      NWPAD_SIG_COUNT);
@@ -124,3 +125,4 @@ void nwpad_sigs_json(char *out, size_t cap) {
     }
     if (n > 0 && (size_t)n < cap) snprintf(out + n, cap - (size_t)n, "]}");
 }
+#endif

@@ -4,6 +4,7 @@
 
 #include "dialog.h"
 #include "icons.h"
+#include "game.h"
 #include "sigs.h"
 
 #define SEP_H 8.0f   /* the line under the NPC's text */
@@ -54,6 +55,7 @@ static struct {
     bool mouse;           /* the rows and the text take NUI's mouse input (F37) */
     int press;            /* the row a left button went down on (-1 none) */
     int mouse_tries;      /* frames spent waiting for the elements */
+    bool dirty;           /* build the window again on the next frame */
     char wrapped[4200];   /* the NPC's line, wrapped by nwpad: lines separated by '\n' */
     int line_at[512], lines, top, visible; /* line starts in wrapped; the shown range */
     uint32_t seq;
@@ -66,13 +68,16 @@ static struct {
 #define TAG_TEXT 100 /* input tags: a row's index, or the NPC's text */
 
 bool nwpad_dialogui_open(void) { return ui.open; }
-int nwpad_dialogui_highlight(void) { return ui.open ? ui.highlight : -1; }
-bool nwpad_dialogui_mouse(void) { return ui.open && ui.mouse; }
-int nwpad_dialogui_text_top(void) { return ui.open ? ui.top : -1; }
-void nwpad_dialogui_range(int *first, int *last) {
-    *first = ui.open ? ui.first : -1;
-    *last = ui.open ? ui.last : -1;
-}
+
+#ifdef NWPAD_DEBUG_SURFACES
+static struct {
+    bool dry;                 /* clicks are recorded, not answered */
+    nwpad_nui_input last;     /* the last mouse input */
+    unsigned inputs, builds;  /* mouse inputs; windows built again (not for a new line) */
+    unsigned place_frames, place_frames_max; /* frames from creation to placement */
+    uint64_t build_ns, build_max_ns;         /* nwpad's own time in those builds */
+} dbg;
+#endif
 
 static bool big_font; /* the skin has FONT */
 
@@ -137,14 +142,6 @@ static void trim(char *s) { /* leading and trailing blanks (the campaigns have m
     while (n > a && strchr(" \t\r\n", s[n - 1])) n--;
     memmove(s, s + a, n - a);
     s[n - a] = '\0';
-}
-
-/* Game text -> JSON string body, through the game's UTF-8 conversion. */
-static void game_json(char *out, size_t cap, const char *text) {
-    static char utf8[12000];
-    nwpad_text_utf8(text, utf8, sizeof utf8);
-    nwpad_utf8_fold_punctuation(utf8);
-    nwpad_json_escape_utf8(out, cap, utf8);
 }
 
 /* Wrap the NPC's line into ui.wrapped at `cols` characters (word boundaries). */
@@ -213,7 +210,7 @@ static void show_body(void) {
     int from = ui.line_at[ui.top], last = ui.top + ui.visible;
     size_t to = last < ui.lines ? (size_t)ui.line_at[last] - 1 : strlen(ui.wrapped);
     snprintf(text, sizeof text, "%.*s", (int)(to - (size_t)from), ui.wrapped + from);
-    game_json(esc, sizeof esc, text);
+    nwpad_game_json(esc, sizeof esc, text);
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "body", value);
     show_thumb();
@@ -222,7 +219,7 @@ static void show_body(void) {
 static void reply_text(int i, char *out, size_t cap) {
     char numbered[600];
     snprintf(numbered, sizeof numbered, "%d. %s", i + 1, ui.d.replies[i].text);
-    game_json(out, cap, numbered);
+    nwpad_game_json(out, cap, numbered);
 }
 
 /* Row k's text and colour (the rows are binds, so scrolling needn't rebuild). */
@@ -285,13 +282,11 @@ static void layout(void) {
     if (below) { ui.row_kind[ui.nrows] = -1; ui.row_h[ui.nrows++] = dots_h; }
 }
 
-/* Screen height in GUI units (as the picker centres itself). */
+/* Screen height in GUI units. */
 static float screen_h(void) {
-    float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
-    void **gui = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
-    float s = scale ? scale() : 1.0f;
-    int h = gui && *gui ? *(int *)((char *)*gui + 0xbc) : 720;
-    return (float)h / (s > 0 ? s : 1.0f);
+    float w, h;
+    nwpad_gui_size(&w, &h);
+    return h;
 }
 
 /* The mouse (F37). NUI only takes a window's input if the definition says so, and an
@@ -301,10 +296,8 @@ static float screen_h(void) {
  * and only then is it placed. If they can't be taken, the window is made again the
  * old way (no input, no ids) for the rest of the session. */
 #define MOUSE_TRIES 30
-static void rebuild(void);
 static bool mouse_broken;
 static void place(void);
-unsigned nwpad_dialogui_place_tries, nwpad_dialogui_place_tries_max; /* debug: frames until placed */
 static char placed[96]; /* the geometry bind for the window's place */
 
 static void take_mouse(void) {
@@ -319,11 +312,13 @@ static void take_mouse(void) {
     if (all) {
         ui.mouse = true;
         place();
-        nwpad_dialogui_place_tries = (unsigned)ui.mouse_tries; /* debug */
-        if (nwpad_dialogui_place_tries > nwpad_dialogui_place_tries_max) nwpad_dialogui_place_tries_max = nwpad_dialogui_place_tries;
+#ifdef NWPAD_DEBUG_SURFACES
+        dbg.place_frames = (unsigned)ui.mouse_tries;
+        if (dbg.place_frames > dbg.place_frames_max) dbg.place_frames_max = dbg.place_frames;
+#endif
     } else if (ui.mouse_tries >= MOUSE_TRIES) {
         mouse_broken = true;
-        rebuild();
+        ui.dirty = true; /* again, without input */
     }
 }
 
@@ -345,7 +340,7 @@ static bool build(void) {
     float top = line_h > PORTRAIT_H ? line_h : PORTRAIT_H, h = top + PAD + SEP_H + ROW_GAP; /* + NUI padding */
     size_t n = 0;
     char name[400];
-    game_json(name, sizeof name, ui.d.speaker_name);
+    nwpad_game_json(name, sizeof name, ui.d.speaker_name);
     n += (size_t)snprintf(json + n, sizeof json - n,
         /* (no row height: NUI's padding wouldn't fit around a full-height portrait) */
         "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
@@ -395,11 +390,7 @@ static bool build(void) {
         "\"children\":[%s]}}",
         mouse_broken ? "false" : "true", WIDTH, h, json);
     if (w <= 0 || (size_t)w >= sizeof window || n >= sizeof json) return false;
-#ifdef NWPAD_DEBUG_SURFACES
-    FILE *f = fopen("/tmp/nwpad_dialog.json", "w"); /* research: the last definition */
-    if (f) { fputs(window, f); fclose(f); }
-#endif
-    /* The id alternates with the token: a new window whose id is still taken by the
+    /* An id per slot, as the token: a new window whose id is still taken by the
      * closing one is placed elsewhere (centred) by NUI. */
     char wid[24];
     snprintf(wid, sizeof wid, "nwpad_dialog_%d", ui.slot);
@@ -465,6 +456,7 @@ static void replace(void) {
     }
     if (next < 0) next = (ui.slot + 1) % SLOTS == ui.shown ? (ui.slot + 2) % SLOTS : (ui.slot + 1) % SLOTS; /* never expected */
     ui.slot = next;
+    ui.dirty = false;
     ui.open = build();
     if (!ui.open && ui.shown >= 0) {
         drop(ui.shown);
@@ -472,16 +464,20 @@ static void replace(void) {
     }
 }
 
-/* Show the window again after the highlight left the visible replies. */
-unsigned nwpad_dialogui_builds; uint64_t nwpad_dialogui_build_ns, nwpad_dialogui_build_max_ns; /* debug */
+/* The same line and replies in a new window (other row heights, or no mouse): once
+ * per frame at most, however many steps asked for it. */
 static void rebuild(void) {
+#ifdef NWPAD_DEBUG_SURFACES
     uint64_t t0 = nwpad_now_ns(), g0 = nwpad_nui_take_game_ns();
     replace();
     uint64_t game = nwpad_nui_take_game_ns(), own = nwpad_now_ns() - t0 - game;
     nwpad_game_ns_add(g0 + game); /* put the game time back for the frame's account */
-    nwpad_dialogui_builds++;
-    nwpad_dialogui_build_ns += own;
-    if (own > nwpad_dialogui_build_max_ns) nwpad_dialogui_build_max_ns = own;
+    dbg.builds++;
+    dbg.build_ns += own;
+    if (own > dbg.build_max_ns) dbg.build_max_ns = own;
+#else
+    replace();
+#endif
 }
 
 static int first_selectable(void) {
@@ -505,14 +501,13 @@ void nwpad_dialogui_move(int step) {
     layout();
     bool same = ui.nrows == nrows;
     for (int k = 0; same && k < nrows; k++) same = heights[k] == ui.row_h[k];
-    if (!same) { /* other row heights (a long reply came into view): build again */
-        rebuild();
-        return;
-    }
+    if (!same) ui.dirty = true; /* other row heights (a long reply came into view): build again */
+    if (ui.dirty) return;
     for (int k = 0; k < ui.nrows; k++) bind_row(k); /* scrolled or not: just the binds */
 }
 
-void nwpad_dialogui_click(int row) {
+/* Answer with the reply in that row ("...": the next reply that way). */
+static void click(int row) {
     if (!ui.open || row < 0 || row >= ui.nrows) return;
     int i = ui.row_kind[row];
     if (i < 0) { /* "...": the next reply that way */
@@ -526,16 +521,20 @@ void nwpad_dialogui_click(int row) {
 
 /* NUI's mouse input on the window (taken in the game's NUI pass, F37): a press and
  * release on the same row answers with it; the wheel scrolls the text over the
- * text, else moves the highlight. */
-bool nwpad_dialogui_dry;                  /* debug: clicks are recorded, not answered */
-nwpad_nui_input nwpad_dialogui_last_input; /* debug */
-unsigned nwpad_dialogui_inputs;           /* debug */
+ * text, else moves the highlight. Input on a window being replaced (for the few
+ * frames its successor waits off screen) is dropped: its rows may differ. */
 static void mouse_input(void) {
     nwpad_nui_input in;
+    bool dry = false;
+#ifdef NWPAD_DEBUG_SURFACES
+    dry = dbg.dry;
+#endif
     while (nwpad_nui_next_input(&in)) {
-        if (in.token != TOKEN || !ui.open || nwpad_dialog_seq() != ui.seq) continue; /* a window already gone */
-        nwpad_dialogui_last_input = in;
-        nwpad_dialogui_inputs++;
+        if (in.token != TOKEN || !ui.open || nwpad_dialog_seq() != ui.seq) continue;
+#ifdef NWPAD_DEBUG_SURFACES
+        dbg.last = in;
+        dbg.inputs++;
+#endif
         if (in.kind == NWPAD_NUI_SCROLL && in.y != 0) {
             if (in.tag == TAG_TEXT) nwpad_dialogui_scroll(in.y > 0 ? -3 : 3); /* wheel up: earlier lines */
             else nwpad_dialogui_move(in.y > 0 ? -1 : 1);
@@ -544,7 +543,7 @@ static void mouse_input(void) {
         } else if (in.button == 0 && in.kind == NWPAD_NUI_UP) {
             int row = ui.press;
             ui.press = -1;
-            if (row == in.tag && row != TAG_TEXT && !nwpad_dialogui_dry) nwpad_dialogui_click(row);
+            if (row == in.tag && row != TAG_TEXT && !dry) click(row);
         }
     }
 }
@@ -600,11 +599,12 @@ bool nwpad_dialogui_preview(const char *path) {
 
 bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
     ui.frame++;
+    mouse_input(); /* last frame's, on the window as it was shown */
     if (ui.preview) {
+        if (ui.dirty) rebuild();
         take_mouse();
         return true;
     }
-    mouse_input(); /* last frame's, on the window as it was shown */
     uint32_t seq = enabled ? nwpad_dialog_seq() : 0;
     if (!seq) {
         close_windows();
@@ -626,6 +626,7 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
         replace();
         if (!ui.open) return false;
     }
+    if (ui.dirty) rebuild();
     take_mouse();
     /* The sticks scroll the NPC's text: a held stick steps a line, then repeats. */
     float dir = nav > 0.5f ? -1.0f : nav < -0.5f ? 1.0f : 0.0f; /* stick up = earlier lines */
@@ -641,3 +642,19 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
     }
     return true;
 }
+
+#ifdef NWPAD_DEBUG_SURFACES
+void nwpad_dialogui_debug_dry(bool dry) { dbg.dry = dry; }
+
+void nwpad_dialogui_debug_json(char *out, size_t cap) {
+    snprintf(out, cap,
+             "\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d,\"text_top\":%d,\"rebuilds\":%u,"
+             "\"rebuild_avg_us\":%.1f,\"rebuild_max_us\":%.1f,\"mouse\":%s,\"inputs\":%u,"
+             "\"last_input\":{\"tag\":%d,\"kind\":%d,\"button\":%d,\"x\":%.1f,\"y\":%.1f},"
+             "\"place_frames\":%u,\"place_frames_max\":%u",
+             ui.open ? "true" : "false", ui.open ? ui.highlight : -1, ui.open ? ui.first : -1, ui.open ? ui.last : -1,
+             ui.open ? ui.top : -1, dbg.builds, dbg.builds ? (double)dbg.build_ns / dbg.builds / 1000.0 : 0.0,
+             (double)dbg.build_max_ns / 1000.0, ui.open && ui.mouse ? "true" : "false", dbg.inputs, dbg.last.tag,
+             dbg.last.kind, dbg.last.button, dbg.last.x, dbg.last.y, dbg.place_frames, dbg.place_frames_max);
+}
+#endif

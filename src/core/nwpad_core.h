@@ -37,16 +37,17 @@ void nwpad_config_defaults(nwpad_config *cfg);
 int nwpad_config_parse(nwpad_config *cfg, const char *text);
 
 /* ---- settings.tml [nwpad] section (docs/settings-plan.md §5) ----
- * Keys: nwpad.enabled, nwpad.hide-cursor, nwpad.mouse-idle-ms, nwpad.camera.turn-speed,
- * nwpad.camera.tilt-speed, nwpad.movement.run-point, nwpad.movement.strafe-window,
- * nwpad.movement.strafe-exit-ms. run-point is the centre of the walk/run band; the
- * band width stays NWPAD_RUN_BAND. Values are clamped to the plan's ranges. */
+ * Keys: nwpad.enabled, nwpad.hide-cursor, nwpad.cursor-rehide-ms, nwpad.dialog,
+ * nwpad.mouse-idle-ms, nwpad.camera.turn-speed, nwpad.camera.tilt-speed,
+ * nwpad.movement.run-point, nwpad.movement.strafe-window, nwpad.movement.strafe-exit-ms
+ * (booleans and numbers), and the picker's key names nwpad.picker-key, -prev-key,
+ * -next-key, -confirm-key, -cancel-key (quoted strings). run-point is the centre of
+ * the walk/run band; the band width stays NWPAD_RUN_BAND. Values are clamped to the
+ * plan's ranges. */
 #define NWPAD_RUN_BAND 0.125f
 /* Apply the [nwpad] tables of a settings.tml text. Returns the number of keys applied,
  * or -1 if the text has no [nwpad] table. Other tables and unknown keys are ignored. */
 int nwpad_settings_parse(nwpad_config *cfg, const char *toml);
-/* Write cfg as a [nwpad] section in the game's style (tabs, one table per group).
- * Returns the length, or -1 if cap is too small. */
 /* Apply one numeric key (full path, e.g. "nwpad.camera.turn-speed"), clamped as when
  * parsed. Returns 1 if the key is known. */
 int nwpad_settings_set_number(nwpad_config *cfg, const char *key, double value);
@@ -58,6 +59,8 @@ int nwpad_settings_set_number(nwpad_config *cfg, const char *key, double value);
 bool nwpad_cursor_should_hide(uint64_t now_ms, uint64_t sticks_since_ms, uint64_t last_mouse_ms,
                               const nwpad_config *cfg);
 
+/* Write cfg as a [nwpad] section in the game's style (tabs, one table per group).
+ * Returns the length, or -1 if cap is too small. */
 int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap);
 
 /* ---- Stick processing ---- */
@@ -65,6 +68,9 @@ int nwpad_settings_format(const nwpad_config *cfg, char *out, size_t cap);
  * shaping belongs to Steam Input). Magnitude is clamped to 1. */
 nwpad_vec2 nwpad_apply_deadzone(nwpad_vec2 raw);
 float nwpad_magnitude(nwpad_vec2 v);
+
+#define NWPAD_DEG_PER_RAD 57.29577951308232f
+#define NWPAD_RAD_PER_DEG 0.017453292519943295f
 
 /* ---- Movement (plan §3, §5) ----
  * Angles are in degrees, counter-clockwise from world +X, in [0, 360).

@@ -7,9 +7,9 @@
 #include "nui.h"
 
 #include <dlfcn.h>
-#include <stdio.h>
 
 #include "../core/nwpad_core.h"
+#include "game.h"
 #include "sigs.h"
 #include "vslot.h"
 
@@ -18,7 +18,7 @@
 #include <string.h>
 #include <time.h>
 
-typedef struct { char *ptr; uint32_t len; } exo_string; /* CExoString */
+typedef nwpad_exo_string exo_string;
 
 typedef void (*ctor_fn)(void *msg);
 typedef void (*create_write_fn)(void *msg, unsigned size, unsigned player, int unknown);
@@ -67,10 +67,7 @@ static void on_closed(void *window) {
 /* The game's NUI windows: CGuiInGame+0x890, unordered_map<int token,
  * shared_ptr<JsonWindow>> (F32); nodes are {next, int token, JsonWindow*, control}. */
 static char *window_map(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    void *(*get_gui)(void *) = (void *(*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_GET_IN_GAME_GUI);
-    if (!app_manager || !*app_manager || !get_gui) return NULL;
-    char *gui = get_gui(*(void **)*app_manager);
+    char *gui = nwpad_in_game_gui();
     return gui ? gui + 0x890 : NULL;
 }
 
@@ -143,7 +140,9 @@ static void on_scroll(const void *f, const float *a, const float *b) {
     (void)a;
     queue_input(f, CB_SCROLL, NWPAD_NUI_SCROLL, 0, b[0], b[1]);
 }
-static void on_nothing(void) {} /* the rest: nothing to do, and nothing queued */
+/* The rest: nothing to do, and nothing queued. */
+static void on_nothing(const void *f) { (void)f; }
+static void on_nothing_ints(const void *f, const int *a, const int *b) { (void)f, (void)a, (void)b; }
 
 static void forget_taken(int token) {
     for (int i = 0; i < MAX_TAKEN; i++)
@@ -178,7 +177,10 @@ bool nwpad_nui_take_input(int token, const char *id, int tag) {
     if (!e) return false;
     int free_slot = -1;
     for (int i = 0; i < MAX_TAKEN; i++) {
-        if (taken[i].element == e && taken[i].token) return CB_INVOKER(e, CB_DOWN) == (void *)on_down; /* already ours */
+        if (taken[i].token && taken[i].element == e) {
+            if (CB_INVOKER(e, CB_DOWN) == (void *)on_down) return true; /* already ours */
+            taken[i].token = 0; /* a freed window's element, its memory reused: take the new one */
+        }
         if (!taken[i].token && free_slot < 0) free_slot = i;
     }
     if (free_slot < 0 || !callbacks_as_expected(e)) return false;
@@ -187,7 +189,7 @@ bool nwpad_nui_take_input(int token, const char *id, int tag) {
     CB_INVOKER(e, CB_UP) = (void *)on_up;
     CB_INVOKER(e, CB_SCROLL) = (void *)on_scroll;
     CB_INVOKER(e, CB_VOID1) = CB_INVOKER(e, CB_VOID2) = CB_INVOKER(e, CB_VOID3) = (void *)on_nothing;
-    CB_INVOKER(e, CB_INTS) = (void *)on_nothing;
+    CB_INVOKER(e, CB_INTS) = (void *)on_nothing_ints;
     return true;
 }
 
@@ -197,49 +199,6 @@ bool nwpad_nui_next_input(nwpad_nui_input *out) {
     return true;
 }
 
-#ifdef NWPAD_DEBUG_SURFACES
-/* Research: Nuklear's windows (flags, bounds) and whether the game would keep a
- * click from the world now (nk_item_is_any_active). */
-void nwpad_nui_debug_nuklear(char *out, size_t cap) {
-    char **ctx = (char **)nwpad_sig(NWPAD_SIG_NUKLEAR_CONTEXT);
-    int (*any_active)(void *) = (int (*)(void *))nwpad_sig(NWPAD_SIG_NUKLEAR_ITEM_IS_ANY_ACTIVE);
-    if (!ctx || !*ctx || !any_active) {
-        snprintf(out, cap, "null");
-        return;
-    }
-    size_t n = (size_t)snprintf(out, cap, "{\"any_active\":%d,\"windows\":[", any_active(*ctx));
-    int i = 0;
-    for (char *w = *(char **)(*ctx + 0x6720); w && i < 32 && n < cap; w = *(char **)(w + 0x1c0), i++) {
-        float *b = (float *)(w + 0x4c);
-        n += (size_t)snprintf(out + n, cap - n, "%s{\"flags\":%u,\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", i ? "," : "",
-                              *(uint32_t *)(w + 0x48), b[0], b[1], b[2], b[3]);
-    }
-    if (n < cap) snprintf(out + n, cap - n, "]}");
-}
-
-/* Research: window `token`'s element `id`, and every std::function-shaped slot in
- * its first 0x400 bytes (manager and invoker both in the game's code). */
-void nwpad_nui_debug_element(int token, const char *id, char *out, size_t cap) {
-    Dl_info info;
-    char *e = element(token, id);
-    void *window = window_of(token);
-    if (!e || !dladdr(nwpad_sig(NWPAD_SIG_NUI_WINDOW_ON_OPENED), &info)) {
-        snprintf(out, cap, "{\"window\":%s,\"element\":null}", window ? "true" : "false");
-        return;
-    }
-    uintptr_t base = (uintptr_t)info.dli_fbase, end = base + 0x1700000;
-    size_t n = (size_t)snprintf(out, cap, "{\"window\":true,\"element\":true,\"slots\":[");
-    bool first = true;
-    for (size_t off = 0; off + 0x20 <= 0x400 && n < cap; off += 8) {
-        uintptr_t mgr = *(uintptr_t *)(e + off + 0x10), inv = *(uintptr_t *)(e + off + 0x18);
-        if (mgr < base || mgr >= end || inv < base || inv >= end) continue;
-        n += (size_t)snprintf(out + n, cap - n, "%s{\"off\":%zu,\"manager\":%lu,\"invoker\":%lu}", first ? "" : ",",
-                              off, (unsigned long)(mgr - base), (unsigned long)(inv - base));
-        first = false;
-    }
-    if (n < cap) snprintf(out + n, cap - n, "]}");
-}
-#endif
 
 static bool hook_events(void) {
     static int state; /* 0 untried, 1 hooked, -1 failed */
@@ -269,7 +228,7 @@ static void begin(void *msg) { ((create_write_fn)nwpad_sig(NWPAD_SIG_MESSAGE_CRE
 static void put_int(void *msg, int v) { ((write_int_fn)nwpad_sig(NWPAD_SIG_MESSAGE_WRITE_INT))(msg, v, 32); }
 
 static void put_string(void *msg, const char *s) {
-    exo_string copy = {(char *)s, (uint32_t)strlen(s) + 1};
+    exo_string copy = {(char *)s, (uint32_t)strlen(s) + 1, 0};
     ((write_string_fn)nwpad_sig(NWPAD_SIG_MESSAGE_WRITE_STRING))(msg, &copy, 32);
 }
 
@@ -283,7 +242,9 @@ static bool put_json(void *msg, const char *json) {
     return true;
 }
 
-unsigned nwpad_nui_last_size; /* debug: size of the last message */
+#ifdef NWPAD_DEBUG_SURFACES
+unsigned nwpad_nui_last_size; /* the last message's size */
+#endif
 static uint64_t game_ns;
 
 static uint64_t now_ns(void) {
@@ -306,7 +267,9 @@ static bool deliver(void *msg, unsigned char subtype) {
     uint8_t *data = NULL;
     unsigned size = 0;
     ((get_write_fn)nwpad_sig(NWPAD_SIG_MESSAGE_GET_WRITE))(msg, &data, &size);
+#ifdef NWPAD_DEBUG_SURFACES
     nwpad_nui_last_size = size;
+#endif
     /* The write buffer starts with room for the 3-byte packet header (type, major,
      * minor), which the network layer skips before SetReadMessage (F32). */
     if (!data || size < 3 ||
@@ -321,7 +284,7 @@ static bool deliver(void *msg, unsigned char subtype) {
 /* Setting a bind no element of the window uses makes the client send it to the
  * server (DynamicBinding::NotifyParent, F32). So each window's bind names are
  * taken from its definition, and only those may be set. */
-#define MAX_WINDOWS 4
+#define MAX_WINDOWS 8
 #define MAX_BINDS 64
 static struct {
     int token;
@@ -330,9 +293,12 @@ static struct {
 } binds[MAX_WINDOWS];
 
 static void record_binds(int token, const char *json) {
-    int w = 0;
-    for (int i = 0; i < MAX_WINDOWS; i++)
-        if (binds[i].token == token || binds[i].token == 0) { w = i; break; }
+    int w = -1;
+    for (int i = 0; i < MAX_WINDOWS && w < 0; i++) /* the window's own entry, else a free one */
+        if (binds[i].token == token) w = i;
+    for (int i = 0; i < MAX_WINDOWS && w < 0; i++)
+        if (binds[i].token == 0) w = i;
+    if (w < 0) w = 0; /* more windows than entries: never expected */
     binds[w].token = token;
     binds[w].count = 0;
     for (const char *p = json; (p = strstr(p, "\"bind\"")) != NULL; p += 6) {
@@ -393,6 +359,7 @@ bool nwpad_nui_destroy(int token) {
     return deliver(msg, NUI_DESTROY);
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
 bool nwpad_nui_events_pending(void) {
     /* std::deque: _M_start._M_cur at +0x10, _M_finish._M_cur at +0x30 */
     char *q = (char *)nwpad_sig(NWPAD_SIG_NUI_EVENT_QUEUE);
@@ -403,3 +370,4 @@ int nwpad_nui_window_count(void) {
     char *map = window_map(); /* size at +0x18 */
     return map ? (int)*(size_t *)(map + 0x18) : -1;
 }
+#endif

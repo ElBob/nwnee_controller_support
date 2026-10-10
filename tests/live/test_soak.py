@@ -93,7 +93,7 @@ def test_overhead(ctl):
     if cost["frames"] <= 1000:
         # Run on its own: the histogram holds only the game's first frames (one-off
         # setup: hooks, fonts, resources). Start it again and let it fill.
-        assert ctl("cost_reset")["ok"]
+        assert ctl("reset_cost")["ok"]
         deadline = time.monotonic() + 120
         while (cost := ctl("state")["frame_cost_us"])["frames"] <= 1000:
             assert time.monotonic() < deadline, cost

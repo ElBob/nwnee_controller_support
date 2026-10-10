@@ -7,6 +7,7 @@
 #include "nui.h"
 #include "quickbar.h"
 #include "dialog.h"
+#include "game.h"
 #include "sigs.h"
 
 #include <math.h>
@@ -39,7 +40,7 @@ int nwpad_picker_last_used(void) { return pk.last_used; }
 static float wheel_x(int side) { return WIDTH / 2 + (float)side * (SIZE / 2 + GAP + SIZE * SMALL / 2); }
 
 static void slot_centre_at(int i, float wx, float scale, float *x, float *y) {
-    float a = ((float)i * 360.0f / NWPAD_PICKER_SLOTS - 90.0f) * (float)M_PI / 180.0f;
+    float a = ((float)i * 360.0f / NWPAD_PICKER_SLOTS - 90.0f) * NWPAD_RAD_PER_DEG;
     *x = wx + RING * scale * cosf(a);
     *y = SIZE / 2 + RING * scale * sinf(a);
 }
@@ -54,15 +55,11 @@ static const nwpad_qb_slot *bank_slot(int bank, int i) { return &pk.slots[bank *
 static const nwpad_qb_slot *ring_slot(int i) { return bank_slot(pk.bank, i); }
 static bool has_icon(const nwpad_qb_slot *s) { return s->type != 0 && (s->icon[0] || s->parts[0][0]); }
 
-/* Window centre in GUI units: the screen is g_pGuiMan's size over the GUI scale. */
+/* The screen's centre in GUI units. */
 static void screen_centre(float *x, float *y) {
-    float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
-    void **gui = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
-    float s = scale ? scale() : 1.0f;
-    int w = gui && *gui ? *(int *)((char *)*gui + 0xb8) : 1280, h = gui && *gui ? *(int *)((char *)*gui + 0xbc) : 720;
-    if (s <= 0) s = 1.0f;
-    *x = (float)w / s / 2;
-    *y = (float)h / s / 2;
+    nwpad_gui_size(x, y);
+    *x /= 2;
+    *y /= 2;
 }
 
 /* One wheel's draw-list items: disc, then each button. The active wheel (side 0)
@@ -71,6 +68,7 @@ static void screen_centre(float *x, float *y) {
 static size_t draw_wheel(char *json, size_t n, size_t cap, int bank, int side) {
     char esc[300], rect[96];
     float wx = wheel_x(side), scale = side ? SMALL : 1.0f, disc = (2 * RING + 100) * scale;
+    if (n >= cap) return n;
     n += (size_t)snprintf(json + n, cap - n,
         "%s{\"type\":2,\"enabled\":true,\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":150},\"fill\":true,"
         "\"line_thickness\":1.0,\"order\":-1,\"render\":0,\"arrayBinds\":false,"
@@ -101,11 +99,8 @@ static size_t draw_wheel(char *json, size_t n, size_t cap, int bank, int side) {
             }
         } else { /* active wheel, no icon images: its name, small */
             char shortname[12];
-            char utf8[40];
             snprintf(shortname, sizeof shortname, "%s", s->name);
-            nwpad_text_utf8(shortname, utf8, sizeof utf8);
-            nwpad_utf8_fold_punctuation(utf8);
-            nwpad_json_escape_utf8(esc, sizeof esc, utf8);
+            nwpad_game_json(esc, sizeof esc, shortname);
             n += (size_t)snprintf(json + n, cap - n,
                 ",{\"type\":4,\"enabled\":true,\"color\":{\"r\":230,\"g\":220,\"b\":190,\"a\":255},\"fill\":null,"
                 "\"line_thickness\":null,\"order\":1,\"render\":0,\"arrayBinds\":false,"
@@ -176,10 +171,7 @@ static void show_selection(int previous, int now) {
     nwpad_nui_bind(TOKEN, "hl", rect);
     nwpad_nui_bind(TOKEN, "hl_on", "true");
     const nwpad_qb_slot *s = ring_slot(now);
-    char utf8[400];
-    nwpad_text_utf8(s->type ? s->name : "", utf8, sizeof utf8);
-    nwpad_utf8_fold_punctuation(utf8);
-    nwpad_json_escape_utf8(esc, sizeof esc, utf8);
+    nwpad_game_json(esc, sizeof esc, s->type ? s->name : "");
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "name", value);
 }

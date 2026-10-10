@@ -31,8 +31,7 @@ bool nwpad_nui_take_input(int token, const char *id, int tag);
 /* The next input taken since the last call, oldest first; false when none. */
 bool nwpad_nui_next_input(nwpad_nui_input *out);
 
-/* Whether the game has NUI events queued for the server (none should be ours). */
-bool nwpad_nui_events_pending(void);
+
 /* Time spent inside the game's NUI handler since the last call (game time, not
  * nwpad's own, for the frame budget). */
 #include <stdint.h>
@@ -40,13 +39,14 @@ uint64_t nwpad_nui_take_game_ns(void);
 /* Add time spent in other game functions to the same game-time account. */
 void nwpad_game_ns_add(uint64_t ns);
 uint64_t nwpad_now_ns(void);
-/* How many NUI windows the game has (debug). */
-int nwpad_nui_window_count(void);
+
 
 #ifdef NWPAD_DEBUG_SURFACES
-#include <stddef.h>
-void nwpad_nui_debug_element(int token, const char *id, char *out, size_t cap);
-void nwpad_nui_debug_nuklear(char *out, size_t cap);
+/* Whether the game has NUI events queued for the server (none should be ours). */
+bool nwpad_nui_events_pending(void);
+/* How many NUI windows the game has. */
+int nwpad_nui_window_count(void);
+extern unsigned nwpad_nui_last_size; /* the last message's size */
 #endif
 
 #endif

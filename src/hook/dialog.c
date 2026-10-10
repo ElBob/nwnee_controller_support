@@ -2,6 +2,7 @@
 #include "dialog.h"
 
 #include "../core/nwpad_core.h"
+#include "game.h"
 #include "sigs.h"
 #include "vslot.h"
 #include "nui.h"
@@ -10,7 +11,7 @@
 #include <string.h>
 #include <dlfcn.h>
 
-typedef struct { char *ptr; uint32_t len, cap; } exo_string; /* CExoString, 16 bytes */
+typedef nwpad_exo_string exo_string;
 typedef void *(*vcall_fn)(void *self);
 typedef void (*set_text_fn)(void *self, const char *text);
 typedef void (*gui_int_fn)(void *gui, int n);
@@ -59,11 +60,14 @@ void nwpad_text_utf8(const char *in, char *out, size_t cap) {
     out[cap ? (n < cap ? n : cap - 1) : 0] = '\0';
 }
 
-static void *gui(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    vcall_fn get_gui = (vcall_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_IN_GAME_GUI);
-    return app_manager && *app_manager && get_gui ? get_gui(*(void **)*app_manager) : NULL;
+void nwpad_game_json(char *out, size_t cap, const char *text) {
+    static char utf8[12000];
+    nwpad_text_utf8(text, utf8, sizeof utf8);
+    nwpad_utf8_fold_punctuation(utf8);
+    nwpad_json_escape_utf8(out, cap, utf8);
 }
+
+static void *gui(void) { return nwpad_in_game_gui(); }
 
 static char *dialog_object(void) {
     char *g = gui();
@@ -112,13 +116,12 @@ uint32_t nwpad_dialog_seq(void) {
 
 /* The speaker's name and portrait, as ShowDialogEntry finds them (F36). */
 static void speaker_info(uint32_t oid, nwpad_dialog *out) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
     void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
     int (*name_of)(void *, uint32_t, exo_string *) =
         (int (*)(void *, uint32_t, exo_string *))nwpad_sig(NWPAD_SIG_CLIENT_GET_OBJECT_NAME);
     void (*dtor)(exo_string *) = (void (*)(exo_string *))nwpad_sig(NWPAD_SIG_EXO_STRING_DTOR);
-    if (!app_manager || !*app_manager) return;
-    void *app = *(void **)*app_manager;
+    void *app = nwpad_client_app();
+    if (!app) return;
     if (name_of && dtor) {
         exo_string s = {0};
         if (name_of(app, oid, &s) && s.ptr) snprintf(out->speaker_name, sizeof out->speaker_name, "%s", s.ptr);
@@ -146,8 +149,8 @@ bool nwpad_dialog_read(nwpad_dialog *out) {
     /* The line's speaker (an entry can be spoken by another object than the
      * conversation's owner, which is all the dialog object keeps). */
     uint32_t (*last)(void *) = (uint32_t (*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_LAST_DIALOG_SPEAKER);
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    uint32_t who = last && app_manager && *app_manager ? last(*(void **)*app_manager) : 0x7f000000;
+    void *app = last ? nwpad_client_app() : NULL;
+    uint32_t who = app ? last(app) : 0x7f000000;
     out->speaker = who != 0x7f000000 && who ? who : *(uint32_t *)(d + DLG_SPEAKER);
     out->panel_h = *(float *)(d + DLG_HEIGHT) * 100.0f;
     speaker_info(out->speaker, out);

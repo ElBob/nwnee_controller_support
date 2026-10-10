@@ -1,4 +1,4 @@
-/* Game backend: the only code that touches game functions or memory.
+/* Game backend: the camera and movement, and the client objects they reach.
  * Camera (M1) uses the game's own mouse-look path (re-notes F14, F15, F18).
  * Movement (M3) walks like a mouse drag and strafes/backpedals through the
  * keyboard handler (F20, F21). Every entry point checks its signatures. */
@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "game.h"
 #include "sigs.h"
 
 /* Struct offsets on nwmain-linux 6d19c39b (re-notes F15). */
@@ -71,9 +72,7 @@ static void *vcall_slot(void *obj, size_t offset) {
 
 /* The client module, or NULL outside a module (main menu, loading). */
 static void *module(void) {
-    if (!b.camera) return NULL;
-    void *mgr = *b.app_manager;
-    void *app = mgr ? *(void **)mgr : NULL;
+    void *app = b.camera ? nwpad_client_app() : NULL;
     return app ? b.get_module(app) : NULL;
 }
 
@@ -96,17 +95,12 @@ bool nwpad_backend_in_game(void) {
     return mod && camera_object(mod);
 }
 
-/* Gating (dialog, cutscene, text focus) is M4. The keyboard handler already
- * applies its own checks to strafe/backpedal. */
-bool nwpad_backend_movement_gated(void) { return false; }
 typedef void *(*client_options_fn)(void *client_app);
-typedef void (*set_always_run_fn)(void *client_options, int on);
 #define OPTIONS_ALWAYS_RUN 0x4 /* int (re-notes F23) */
 
 static void *client_options(void) {
     client_options_fn get = (client_options_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_CLIENT_OPTIONS);
-    if (!get || !b.app_manager || !*b.app_manager) return NULL;
-    void *app = *(void **)*b.app_manager;
+    void *app = get ? nwpad_client_app() : NULL;
     return app ? get(app) : NULL;
 }
 
@@ -118,6 +112,8 @@ bool nwpad_backend_always_run(void) {
 }
 
 #ifdef NWPAD_DEBUG_SURFACES
+typedef void (*set_always_run_fn)(void *client_options, int on);
+
 bool nwpad_backend_debug_set_always_run(bool on) {
     void *opt = client_options();
     set_always_run_fn set = (set_always_run_fn)nwpad_sig(NWPAD_SIG_CLIENT_SET_ALWAYS_RUN);
@@ -153,24 +149,16 @@ bool nwpad_backend_camera_set(const nwpad_camera *next) {
 }
 
 #ifdef NWPAD_DEBUG_SURFACES
-/* CExoString as the game lays it out (re-notes F17). */
-typedef struct {
-    const char *str;
-    uint32_t len;
-} exo_string;
-
-typedef void (*run_script_chunk_fn)(void *nwc_message, const exo_string *code, uint32_t oid, int wrap);
+typedef void (*run_script_chunk_fn)(void *nwc_message, const nwpad_exo_string *code, uint32_t oid, int wrap);
 
 
 bool nwpad_backend_run_script_chunk(const char *code) {
     get_nwc_message_fn get_msg = (get_nwc_message_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_NWC_MESSAGE);
     run_script_chunk_fn send = (run_script_chunk_fn)nwpad_sig(NWPAD_SIG_CHEAT_RUN_SCRIPT_CHUNK);
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    if (!get_msg || !send || !app_manager || !*app_manager) return false;
-    void *app = *(void **)*app_manager;
+    void *app = get_msg && send ? nwpad_client_app() : NULL;
     void *msg = app ? get_msg(app) : NULL;
     if (!msg) return false;
-    exo_string s = {code, (uint32_t)strlen(code)};
+    nwpad_exo_string s = {(char *)code, (uint32_t)strlen(code), 0}; /* re-notes F17 */
     send(msg, &s, OBJECT_INVALID, 1); /* the sender copies the string */
     return true;
 }
@@ -184,12 +172,12 @@ typedef int (*walk_to_point_fn)(void *client_internal, float x, float y, float z
 #define CLIENT_CREATURE_POS_Z 0x40
 
 static void *client_internal(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    void *app = app_manager && *app_manager ? *(void **)*app_manager : NULL;
-    return app ? *(void **)((char *)app + 0x8) : NULL;
+    void *app = nwpad_client_app();
+    return app ? *(void **)((char *)app + 0x8) : NULL; /* CClientExoApp -> internal (F14) */
 }
 
 static void *player_creature(void);
+static void walk_to(void *in, void *pc, float x, float y, int mode);
 
 #ifdef NWPAD_DEBUG_SURFACES
 typedef uint32_t (*first_pc_fn)(void *server_app);
@@ -199,9 +187,9 @@ typedef void *(*creature_by_id_fn)(void *server_app, uint32_t oid);
 static void *server_pc(void) {
     first_pc_fn first = (first_pc_fn)nwpad_sig(NWPAD_SIG_SERVER_FIRST_PC);
     creature_by_id_fn by_id = (creature_by_id_fn)nwpad_sig(NWPAD_SIG_SERVER_CREATURE_BY_ID);
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    if (!first || !by_id || !app_manager || !*app_manager) return NULL;
-    void *server = ((void **)*app_manager)[1]; /* CAppManager: client app, then server app */
+    void **mgr = b.app_manager ? (void **)*b.app_manager : NULL;
+    if (!first || !by_id || !mgr) return NULL;
+    void *server = mgr[1]; /* CAppManager: client app, then server app */
     if (!server) return NULL;
     uint32_t oid = first(server);
     return oid == OBJECT_INVALID ? NULL : by_id(server, oid);
@@ -219,38 +207,14 @@ bool nwpad_backend_creature(float *x, float *y, float *facing_deg) {
     *x = read_float(c, CREATURE_POS_X);
     *y = read_float(c, CREATURE_POS_Y);
     *facing_deg = nwpad_wrap_deg(atan2f(read_float(c, CREATURE_FACING_Y),
-                                        read_float(c, CREATURE_FACING_X)) * 57.29577951f);
+                                        read_float(c, CREATURE_FACING_X)) * NWPAD_DEG_PER_RAD);
     return true;
 }
 
 bool nwpad_backend_debug_walk_to(float x, float y, int mode) {
-    player_creature_fn get_pc = (player_creature_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_PLAYER_CREATURE);
-    walk_to_point_fn walk = (walk_to_point_fn)nwpad_sig(NWPAD_SIG_CLIENT_WALK_PLAYER_TO_POINT);
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    if (!get_pc || !walk || !app_manager || !*app_manager) return false;
-    void *app = *(void **)*app_manager;
-    void *pc = app ? get_pc(app) : NULL;
-    if (!pc) return false;
-    void *internal = *(void **)((char *)app + 0x8); /* CClientExoApp -> internal (F14) */
-    walk(internal, x, y, read_float(pc, CLIENT_CREATURE_POS_Z), mode, OBJECT_INVALID, 0);
-    return true;
-}
-
-/* CClientExoAppInternal drive key state (re-notes F20): one int per key. */
-#define DRIVE_KEY_W 0x1b8
-#define DRIVE_KEY_S 0x1bc
-#define DRIVE_KEY_Q 0x1c8
-#define DRIVE_KEY_E 0x1cc
-
-static void write_int(void *base, size_t offset, int32_t v) { memcpy((char *)base + offset, &v, sizeof v); }
-
-bool nwpad_backend_debug_drive_keys(bool w, bool s, bool q, bool e) {
-    void *in = client_internal();
-    if (!in) return false;
-    write_int(in, DRIVE_KEY_W, w);
-    write_int(in, DRIVE_KEY_S, s);
-    write_int(in, DRIVE_KEY_Q, q);
-    write_int(in, DRIVE_KEY_E, e);
+    void *pc = player_creature(), *in = client_internal();
+    if (!pc || !in) return false;
+    walk_to(in, pc, x, y, mode);
     return true;
 }
 
@@ -268,7 +232,7 @@ void *nwpad_backend_debug_object(const char *name) {
 /* ---- Edge nudge (re-notes F26) ---- */
 
 #define INTERNAL_POINTER_X 0x120 /* int: the game's recorded pointer position (y at +0x124) */
-#define GUI_WIDTH 0xb8           /* int, on CGuiMan (height at +0xbc) */
+#define GUI_WIDTH 0xb8           /* int, on CGuiMan */
 
 static int32_t read_int(void *base, size_t offset) {
     int32_t v;
@@ -330,8 +294,7 @@ static nwpad_move_mode active_mode;   /* walk or run, for choosing how to stop *
 static uint64_t now_cache_ms, stop_tap_release_ms; /* 0: no tap pending */
 
 static void *player_creature(void) {
-    if (!b.movement) return NULL;
-    void *app = *b.app_manager ? *(void **)*b.app_manager : NULL;
+    void *app = b.movement ? nwpad_client_app() : NULL;
     return app ? ((player_creature_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_PLAYER_CREATURE))(app) : NULL;
 }
 
@@ -339,10 +302,11 @@ bool nwpad_backend_player_facing(float *facing_deg) {
     void *pc = player_creature();
     if (!pc) return false;
     *facing_deg = nwpad_wrap_deg(atan2f(read_float(pc, CLIENT_CREATURE_FACING_Y),
-                                        read_float(pc, CLIENT_CREATURE_FACING_X)) * 57.29577951f);
+                                        read_float(pc, CLIENT_CREATURE_FACING_X)) * NWPAD_DEG_PER_RAD);
     return true;
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
 bool nwpad_backend_player_pos(float *x, float *y) {
     void *pc = player_creature();
     if (!pc) return false;
@@ -350,6 +314,7 @@ bool nwpad_backend_player_pos(float *x, float *y) {
     *y = read_float(pc, CLIENT_CREATURE_POS_Y);
     return true;
 }
+#endif
 
 static int style_action(nwpad_move_style style) {
     switch (style) {
@@ -371,8 +336,8 @@ static void walk_to(void *in, void *pc, float x, float y, int mode) {
 }
 
 static void end_drag(void *in) {
-    void *app = *(void **)*b.app_manager;
-    void *msg = ((get_nwc_message_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_NWC_MESSAGE))(app);
+    void *app = nwpad_client_app();
+    void *msg = app ? ((get_nwc_message_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_NWC_MESSAGE))(app) : NULL;
     if (msg) ((stop_drag_fn)nwpad_sig(NWPAD_SIG_CLIENT_STOP_DRAG_MODE))(msg);
     *((uint8_t *)in + INPUT_MODE) = INPUT_MODE_NONE;
 }
@@ -402,7 +367,7 @@ bool nwpad_backend_send_move(const nwpad_move_intent *intent) {
     }
     if (intent->style == NWPAD_STYLE_DRAG) {
         *((uint8_t *)in + INPUT_MODE) = INPUT_MODE_DRAG; /* as a held mouse button */
-        float r = intent->bearing_deg * 0.017453292f;
+        float r = intent->bearing_deg * NWPAD_RAD_PER_DEG;
         walk_to(in, pc, read_float(pc, CLIENT_CREATURE_POS_X) + DRAG_LOOKAHEAD * cosf(r),
                 read_float(pc, CLIENT_CREATURE_POS_Y) + DRAG_LOOKAHEAD * sinf(r),
                 intent->mode == NWPAD_MOVE_RUN ? WALK_MODE_RUN : WALK_MODE_WALK);

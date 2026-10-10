@@ -390,7 +390,6 @@ void nwpad_settings_frame(nwpad_config *cfg) {
     }
 }
 
-bool nwpad_settings_native(void) { return nat.state > 0; }
 
 #ifdef NWPAD_DEBUG_SURFACES
 /* Debug status: each native double key as working/committed. */

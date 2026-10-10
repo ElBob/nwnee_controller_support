@@ -162,6 +162,7 @@ signatures:
     symbol: _ZN10CNWMessage14SetReadMessageEPhjji
   nui_event_queue:         # Nui::JSON::JsonWindow::s_event_queue: std::queue (deque) sent to the server by FlushQueues
     note: F32
+    debug: true                 # test surfaces only; left out of release builds
     symbol: _ZN3Nui4JSON10JsonWindow13s_event_queueE
   message_write_type:      # CNWMessage::WriteType(MessageType): tag ReadJSON expects (0x10) before a JSON blob
     note: F32
@@ -175,14 +176,6 @@ signatures:
   nui_window_on_closed:    # Nui::JSON::JsonWindow::OnClosed(): queues the "close" event
     note: F32
     symbol: _ZN3Nui4JSON10JsonWindow8OnClosedEv
-  nuklear_context:         # g_pNuklear: nk_context* (windows list at +0x6720; F37)
-    note: F37
-    debug: true                 # test surfaces only; left out of release builds
-    symbol: g_pNuklear
-  nuklear_item_is_any_active: # nk_item_is_any_active(nk_context*): the game skips world clicks while true (F37)
-    note: F37
-    debug: true                 # test surfaces only; left out of release builds
-    symbol: nk_item_is_any_active
   nui_window_element_by_id: # Nui::JSON::JsonWindow::GetElementById(std::string const&) -> shared_ptr<Layoutable> (hidden return)
     note: F37
     symbol: _ZN3Nui4JSON10JsonWindow14GetElementByIdERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE

@@ -1,6 +1,7 @@
 /* See quickbar.h. Layouts from re-notes F31. */
 #include "quickbar.h"
 
+#include "game.h"
 #include "sigs.h"
 #include "icons.h"
 #include "../core/nwpad_core.h"
@@ -8,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct { char *ptr; uint32_t len; } exo_string; /* CExoString */
+typedef nwpad_exo_string exo_string;
 
 typedef void *(*vcall_fn)(void *self);
 typedef void *(*get_spell_fn)(void *spell_array, int id);
@@ -36,11 +37,7 @@ enum {
 enum { QB_EMPTY = 0, QB_ITEM = 1, QB_SPELL = 2, QB_COMMAND = 0x12, QB_SPELL_LIKE = 0x2c };
 
 static void *panel(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    vcall_fn get_gui = (vcall_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_IN_GAME_GUI);
-    if (!app_manager || !*app_manager || !get_gui) return NULL;
-    void *app = *(void **)*app_manager;
-    void *gui = app ? get_gui(app) : NULL;
+    void *gui = nwpad_in_game_gui();
     return gui ? *(void **)((char *)gui + GUI_QUICKBAR) : NULL;
 }
 
@@ -85,9 +82,16 @@ static void spell_name(uint64_t data, char *out, size_t cap) {
 }
 
 static void *item_of(uint32_t oid) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
     item_by_id_fn by_id = (item_by_id_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_ITEM_BY_ID);
-    return app_manager && *app_manager && by_id ? by_id(*(void **)*app_manager, oid) : NULL;
+    void *app = by_id ? nwpad_client_app() : NULL;
+    return app ? by_id(app, oid) : NULL;
+}
+
+/* Whether a C++ object's vtable pointer is that class's (the vtable symbol plus the
+ * offset-to-top and typeinfo slots). */
+static bool is_a(void *vptr, int vtable_sig) {
+    char *vtable = nwpad_sig(vtable_sig);
+    return vtable && vptr == vtable + 0x10;
 }
 
 /* An item's icon images, as its quickbar icon (CNWCItem+0x258, built by
@@ -98,15 +102,14 @@ static void item_icon_parts(uint32_t oid, char parts[3][17]) {
     char *icon = item ? *(char **)(item + 0x258) : NULL;
     if (!icon) return;
     void *vptr = *(void **)icon;
-    char *composite = nwpad_sig(NWPAD_SIG_COMPOSITE_ICON_VTABLE), *single = nwpad_sig(NWPAD_SIG_GUI_ICON_VTABLE);
     static const size_t at[] = {0x08, 0x48, 0x59};
-    char *layered = nwpad_sig(NWPAD_SIG_LAYERED_ICON_VTABLE), *armor = nwpad_sig(NWPAD_SIG_ARMOR_ICON_VTABLE);
-    if ((layered && vptr == layered + 0x10) || (armor && vptr == armor + 0x10)) {
+    bool layered = is_a(vptr, NWPAD_SIG_LAYERED_ICON_VTABLE);
+    if (layered || is_a(vptr, NWPAD_SIG_ARMOR_ICON_VTABLE)) {
         /* Palette textures NUI can't draw: render them to an image (F35). */
-        if (!nwpad_icon_render_plt(icon, vptr == layered + 0x10 ? 'L' : 'A', parts[0])) parts[0][0] = '\0';
+        if (!nwpad_icon_render_plt(icon, layered ? 'L' : 'A', parts[0])) parts[0][0] = '\0';
         return;
     }
-    int count = composite && vptr == composite + 0x10 ? 3 : single && vptr == single + 0x10 ? 1 : 0;
+    int count = is_a(vptr, NWPAD_SIG_COMPOSITE_ICON_VTABLE) ? 3 : is_a(vptr, NWPAD_SIG_GUI_ICON_VTABLE) ? 1 : 0;
     for (int k = 0; k < count; k++) {
         memcpy(parts[k], icon + at[k], 16);
         parts[k][16] = '\0';
@@ -114,12 +117,9 @@ static void item_icon_parts(uint32_t oid, char parts[3][17]) {
 }
 
 static void item_name(uint32_t oid, char *out, size_t cap) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    item_by_id_fn by_id = (item_by_id_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_ITEM_BY_ID);
     item_name_fn name_of = (item_name_fn)nwpad_sig(NWPAD_SIG_ITEM_GET_NAME);
+    void *item = name_of ? item_of(oid) : NULL;
     out[0] = '\0';
-    if (!app_manager || !*app_manager || !by_id || !name_of) return;
-    void *item = by_id(*(void **)*app_manager, oid);
     if (!item) return;
     exo_string s = {0};
     name_of(&s, item, 1);
@@ -160,6 +160,7 @@ int nwpad_quickbar_bank(void) {
     void *p = panel();
     if (!p) return -1;
     char *visible = *(char **)((char *)p + PANEL_VISIBLE);
+    if (!visible) return -1;
     long index = (visible - button(p, 0)) / BUTTON_SIZE;
     return index >= 0 && index < NWPAD_QB_SLOTS && index % 12 == 0 ? (int)(index / 12) : -1;
 }
@@ -188,10 +189,10 @@ typedef uint32_t (*equipped_fn)(void *creature, unsigned slot_bit);
 /* Debug: describe the icon object of the player's item in `slot_bit`: class,
  * resrefs and colour count (F34). */
 void nwpad_quickbar_debug_equipped_icon(unsigned slot_bit, char *out, size_t cap) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
     player_fn pc_of = (player_fn)nwpad_sig(NWPAD_SIG_CLIENT_GET_PLAYER_CREATURE);
     equipped_fn equipped = (equipped_fn)nwpad_sig(NWPAD_SIG_CREATURE_EQUIPPED_ITEM);
-    void *pc = app_manager && *app_manager && pc_of ? pc_of(*(void **)*app_manager) : NULL;
+    void *app = pc_of ? nwpad_client_app() : NULL;
+    void *pc = app ? pc_of(app) : NULL;
     uint32_t oid = pc && equipped ? equipped(pc, slot_bit) : 0x7f000000;
     char *item = item_of(oid);
     char *icon = item ? *(char **)(item + 0x258) : NULL;
@@ -200,10 +201,10 @@ void nwpad_quickbar_debug_equipped_icon(unsigned slot_bit, char *out, size_t cap
         return;
     }
     char *vptr = *(char **)icon;
-    const char *cls = vptr == (char *)nwpad_sig(NWPAD_SIG_LAYERED_ICON_VTABLE) + 0x10   ? "layered"
-                      : vptr == (char *)nwpad_sig(NWPAD_SIG_ARMOR_ICON_VTABLE) + 0x10   ? "armor"
-                      : vptr == (char *)nwpad_sig(NWPAD_SIG_COMPOSITE_ICON_VTABLE) + 0x10 ? "composite"
-                      : vptr == (char *)nwpad_sig(NWPAD_SIG_GUI_ICON_VTABLE) + 0x10     ? "single"
+    const char *cls = is_a(vptr, NWPAD_SIG_LAYERED_ICON_VTABLE)     ? "layered"
+                      : is_a(vptr, NWPAD_SIG_ARMOR_ICON_VTABLE)     ? "armor"
+                      : is_a(vptr, NWPAD_SIG_COMPOSITE_ICON_VTABLE) ? "composite"
+                      : is_a(vptr, NWPAD_SIG_GUI_ICON_VTABLE)       ? "single"
                                                                                         : "?";
     char name[128];
     item_name(oid, name, sizeof name);

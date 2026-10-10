@@ -27,9 +27,6 @@ void nwpad_settings_load(nwpad_config *cfg);
  * settings.tml and every F30 signature resolved. */
 void nwpad_settings_frame(nwpad_config *cfg);
 
-/* Whether the native entries are registered (for status). */
-bool nwpad_settings_native(void);
-
 #ifdef NWPAD_DEBUG_SURFACES
 /* {"key":[working, committed], ...} or null. */
 void nwpad_settings_debug_json(char *out, size_t cap);

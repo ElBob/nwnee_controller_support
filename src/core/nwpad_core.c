@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEG_PER_RAD 57.29577951308232f
-
 /* ---- Configuration ---- */
 
 void nwpad_config_defaults(nwpad_config *cfg) {
@@ -37,6 +35,24 @@ static const char *skip_ws(const char *s) {
     return s;
 }
 
+/* Cut a line at its comment: the first '#' outside a quoted string. */
+static void strip_comment(char *line) {
+    bool quoted = false;
+    for (char *p = line; *p; p++) {
+        if (*p == '"') quoted = !quoted;
+        else if (*p == '#' && !quoted) {
+            *p = '\0';
+            return;
+        }
+    }
+}
+
+/* Whether `val` is the bare word `word` (followed by nothing that could continue it). */
+static bool is_word(const char *val, const char *word) {
+    size_t n = strlen(word);
+    return !strncmp(val, word, n) && !isalnum((unsigned char)val[n]) && val[n] != '_' && val[n] != '-';
+}
+
 int nwpad_config_parse(nwpad_config *cfg, const char *text) {
     int applied = 0;
     const char *line = text;
@@ -47,8 +63,7 @@ int nwpad_config_parse(nwpad_config *cfg, const char *text) {
         if (len >= sizeof buf) return -1;
         memcpy(buf, line, len);
         buf[len] = '\0';
-        char *hash = strchr(buf, '#');
-        if (hash) *hash = '\0';
+        strip_comment(buf);
 
         const char *p = skip_ws(buf);
         if (*p) {
@@ -109,7 +124,7 @@ float nwpad_angle_diff(float a_deg, float b_deg) {
 float nwpad_world_bearing(nwpad_vec2 stick, float camera_yaw_deg) {
     /* Stick angle relative to "forward" (+y), counter-clockwise positive:
      * forward=0, left=+90, right=-90, back=180. */
-    float rel = atan2f(-stick.x, stick.y) * DEG_PER_RAD;
+    float rel = atan2f(-stick.x, stick.y) * NWPAD_DEG_PER_RAD;
     return nwpad_wrap_deg(camera_yaw_deg + rel);
 }
 
@@ -138,7 +153,7 @@ nwpad_move_intent nwpad_move_intent_compute(nwpad_vec2 stick, float camera_forwa
     }
     in.bearing_deg = nwpad_world_bearing(stick, camera_forward_deg);
     /* The same stick, re-expressed relative to the character's facing. */
-    float cw = nwpad_wrap_deg(facing_deg - in.bearing_deg) * 0.017453292f;
+    float cw = nwpad_wrap_deg(facing_deg - in.bearing_deg) * NWPAD_RAD_PER_DEG;
     nwpad_vec2 rel = {sinf(cw) * m, cosf(cw) * m};
     in.style = nwpad_move_style_step(style, rel, now_ms, cfg);
     return in;
@@ -306,7 +321,7 @@ const uint8_t *nwpad_pattern_find(const uint8_t *hay, size_t n, const nwpad_patt
 }
 
 float nwpad_stick_angle_cw(nwpad_vec2 stick) {
-    return nwpad_wrap_deg(atan2f(stick.x, stick.y) * 57.29577951f);
+    return nwpad_wrap_deg(atan2f(stick.x, stick.y) * NWPAD_DEG_PER_RAD);
 }
 
 static bool in_window(float angle, float center, float half) {
@@ -373,8 +388,7 @@ static int settings_apply(nwpad_config *cfg, const char *key, const char *val) {
         text[q - val - 1] = '\0';
         return 1;
     }
-    bool is_bool = !strncmp(val, "true", 4) || !strncmp(val, "false", 5);
-    bool b = !strncmp(val, "true", 4);
+    bool b = is_word(val, "true"), is_bool = b || is_word(val, "false");
     char *end;
     double d = strtod(val, &end);
     bool is_num = end != val;
@@ -412,8 +426,7 @@ int nwpad_settings_parse(nwpad_config *cfg, const char *toml) {
             memcpy(buf, line, len);
             buf[len] = '\0';
             char *p = (char *)skip_ws(buf);
-            char *hash = strchr(p, '#');
-            if (hash) *hash = '\0';
+            strip_comment(p);
             if (*p == '[') {
                 /* table header: [name] (arrays of tables and quoted names are other tables) */
                 char *close = strchr(p, ']');
@@ -530,10 +543,6 @@ static void ubj_ws(ubj *u) {
     while (*u->p == ' ' || *u->p == '\t' || *u->p == '\n' || *u->p == '\r') u->p++;
 }
 
-static int hexval(char c) {
-    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
-}
-
 /* A JSON string at u->p ('"'), as UTF-8 bytes into buf. Returns its length or -1. */
 static int ubj_string_text(ubj *u, char *buf, size_t cap) {
     size_t n = 0;
@@ -553,7 +562,7 @@ static int ubj_string_text(ubj *u, char *buf, size_t cap) {
             case 'u': {
                 c = 0;
                 for (int i = 0; i < 4; i++) {
-                    int h = hexval(*u->p++);
+                    int h = hex_nibble(*u->p++);
                     if (h < 0) return -1;
                     c = c * 16 + (uint32_t)h;
                 }
@@ -666,9 +675,7 @@ int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap) {
 int nwpad_picker_select(nwpad_vec2 stick, int current) {
     if (nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return current;
     /* Bearing clockwise from up (+y), in sectors centred on each slot. */
-    float deg = atan2f(stick.x, stick.y) * 180.0f / (float)M_PI;
-    if (deg < 0) deg += 360.0f;
-    float sector = 360.0f / NWPAD_PICKER_SLOTS;
+    float deg = nwpad_stick_angle_cw(stick), sector = 360.0f / NWPAD_PICKER_SLOTS;
     return (int)floorf((deg + sector / 2) / sector) % NWPAD_PICKER_SLOTS;
 }
 

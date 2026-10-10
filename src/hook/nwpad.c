@@ -26,7 +26,6 @@
 #include "icons.h"
 #include "dialog.h"
 #include "dialogui.h"
-extern unsigned nwpad_nui_last_size;
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -162,7 +161,9 @@ static struct {
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
-    struct {        /* the picker key (cfg.picker_key): Steam Input maps a grip or button to it */
+    struct {        /* nwpad's keys: the picker's (Steam Input maps a grip or button to the
+                     * picker key, cfg.picker_key), and the conversation window's, which
+                     * share confirm / cancel with it */
         int32_t sym, prev_sym, next_sym, confirm_sym, cancel_sym; /* SDL_Keycodes; 0 none */
         bool resolved, held;             /* held: the picker key is down (debounced) */
         bool was_held, latched;          /* last frame's key, and open by a press */
@@ -280,17 +281,6 @@ static void control_handler(const char *request, char *out, size_t cap) {
             snprintf(out, cap, "{\"ok\":false,\"error\":\"walk unavailable\"}");
         else
             snprintf(out, cap, "{\"ok\":true}");
-    } else if (strcmp(cmd, "drive_keys") == 0) {
-        /* {"cmd":"drive_keys","w":0,"s":1,"q":0,"e":0} (M3 RE) */
-        double w = 0, sk = 0, q = 0, e = 0;
-        nwpad_json_get_number(request, "w", &w);
-        nwpad_json_get_number(request, "s", &sk);
-        nwpad_json_get_number(request, "q", &q);
-        nwpad_json_get_number(request, "e", &e);
-        if (!nwpad_backend_debug_drive_keys(w != 0, sk != 0, q != 0, e != 0))
-            snprintf(out, cap, "{\"ok\":false,\"error\":\"drive unavailable\"}");
-        else
-            snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "quickbar") == 0) {
         /* {"cmd":"quickbar"}: all 36 buttons (bank * 12 + slot) with name and icon. */
         static nwpad_qb_slot slots[NWPAD_QB_SLOTS];
@@ -328,56 +318,12 @@ static void control_handler(const char *request, char *out, size_t cap) {
             ok = nwpad_nui_destroy((int)token);
         snprintf(out, cap, "{\"ok\":%s,\"events_pending\":%s,\"windows\":%d,\"size\":%u}", ok ? "true" : "false",
                  nwpad_nui_events_pending() ? "true" : "false", nwpad_nui_window_count(), nwpad_nui_last_size);
-    } else if (strcmp(cmd, "cost_reset") == 0) {
-        /* {"cmd":"cost_reset"}: start the frame-cost histogram again (the overhead
-         * test on its own: leave out the game's first frames) */
-        memset(g.cost.bucket, 0, sizeof g.cost.bucket);
-        memset(g.cost.own_bucket, 0, sizeof g.cost.own_bucket);
-        g.cost.frames = g.cost.max_ns = g.cost.own_max_ns = 0;
-        snprintf(out, cap, "{\"ok\":true}");
-    } else if (strcmp(cmd, "nuklear") == 0) {
-        /* {"cmd":"nuklear"}: Nuklear's windows and whether a click would stay off the world (research, F37) */
-        static char desc[4096];
-        nwpad_nui_debug_nuklear(desc, sizeof desc);
-        snprintf(out, cap, "{\"ok\":true,\"result\":%s}", desc);
-    } else if (strcmp(cmd, "nui_element") == 0) {
-        /* {"cmd":"nui_element","token":n,"id":".."}: an element's callback slots (research, F37) */
-        double token = 0;
-        char id[32] = "";
-        nwpad_json_get_number(request, "token", &token);
-        nwpad_json_get_string(request, "id", id, sizeof id);
-        static char desc[8192];
-        nwpad_nui_debug_element((int)token, id, desc, sizeof desc);
-        snprintf(out, cap, "{\"ok\":true,\"result\":%s}", desc);
     } else if (strcmp(cmd, "equipped_icon") == 0) {
         /* {"cmd":"equipped_icon","slot_bit":1}: the player's equipped item's icon (debug, F34) */
         double v;
         char desc[1024];
         nwpad_quickbar_debug_equipped_icon(nwpad_json_get_number(request, "slot_bit", &v) ? (unsigned)v : 2, desc, sizeof desc);
         snprintf(out, cap, "{\"ok\":true,\"icon\":%s}", desc);
-    } else if (strcmp(cmd, "nui_bench") == 0) {
-        /* {"cmd":"nui_bench","token":n,"name":"geo","count":n,"x0":..,"dx":..,"y":..,"w":..,"h":..}:
-         * time `count` geometry binds (quickbar plan: animation spike) */
-        double token = 0, count = 1, x0 = 0, dx = 1, y = 0, w = 100, h = 100;
-        char name[64] = "geo", value[160];
-        nwpad_json_get_number(request, "token", &token);
-        nwpad_json_get_number(request, "count", &count);
-        nwpad_json_get_number(request, "x0", &x0);
-        nwpad_json_get_number(request, "dx", &dx);
-        nwpad_json_get_number(request, "y", &y);
-        nwpad_json_get_number(request, "w", &w);
-        nwpad_json_get_number(request, "h", &h);
-        nwpad_json_get_string(request, "name", name, sizeof name);
-        uint64_t t0 = now_ns(), worst = 0;
-        int ok = 0;
-        for (int i = 0; i < (int)count; i++) {
-            snprintf(value, sizeof value, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", x0 + dx * i, y, w, h);
-            uint64_t a = now_ns();
-            ok += nwpad_nui_bind((int)token, name, value);
-            if (now_ns() - a > worst) worst = now_ns() - a;
-        }
-        snprintf(out, cap, "{\"ok\":true,\"binds_ok\":%d,\"avg_us\":%.1f,\"worst_us\":%.1f}", ok,
-                 (double)(now_ns() - t0) / 1000.0 / (count > 0 ? count : 1), (double)worst / 1000.0);
     } else if (strcmp(cmd, "quickbar_bank") == 0) {
         double v;
         bool ok = nwpad_json_get_number(request, "bank", &v) && nwpad_quickbar_debug_show_bank((int)v);
@@ -395,26 +341,10 @@ static void control_handler(const char *request, char *out, size_t cap) {
         nwpad_json_get_string(request, "action", action, sizeof action);
         if (!strcmp(action, "confirm")) g.picker.dialog_action = 1;
         if (!strcmp(action, "cancel")) g.picker.dialog_action = 2;
-        extern bool nwpad_dialogui_dry;
-        extern nwpad_nui_input nwpad_dialogui_last_input;
-        extern unsigned nwpad_dialogui_inputs, nwpad_dialogui_place_tries, nwpad_dialogui_place_tries_max;
-        if (nwpad_json_get_number(request, "dry", &v)) nwpad_dialogui_dry = v != 0;
-        int first, last;
-        nwpad_dialogui_range(&first, &last);
-        extern unsigned nwpad_dialogui_builds;
-        extern uint64_t nwpad_dialogui_build_ns, nwpad_dialogui_build_max_ns;
-        snprintf(out, cap,
-                 "{\"ok\":true,\"open\":%s,\"highlight\":%d,\"first\":%d,\"last\":%d,\"text_top\":%d,"
-                 "\"rebuilds\":%u,\"rebuild_avg_us\":%.1f,\"rebuild_max_us\":%.1f,\"mouse\":%s,\"inputs\":%u,"
-                 "\"last_input\":{\"tag\":%d,\"kind\":%d,\"button\":%d,\"x\":%.1f,\"y\":%.1f},\"events_pending\":%s,"
-                 "\"place_tries\":%u,\"place_tries_max\":%u}",
-                 nwpad_dialogui_open() ? "true" : "false", nwpad_dialogui_highlight(), first, last,
-                 nwpad_dialogui_text_top(), nwpad_dialogui_builds,
-                 nwpad_dialogui_builds ? (double)nwpad_dialogui_build_ns / nwpad_dialogui_builds / 1000.0 : 0.0,
-                 (double)nwpad_dialogui_build_max_ns / 1000.0, nwpad_dialogui_mouse() ? "true" : "false",
-                 nwpad_dialogui_inputs, nwpad_dialogui_last_input.tag, nwpad_dialogui_last_input.kind,
-                 nwpad_dialogui_last_input.button, nwpad_dialogui_last_input.x, nwpad_dialogui_last_input.y,
-                 nwpad_nui_events_pending() ? "true" : "false", nwpad_dialogui_place_tries, nwpad_dialogui_place_tries_max);
+        if (nwpad_json_get_number(request, "dry", &v)) nwpad_dialogui_debug_dry(v != 0);
+        static char ui[1024];
+        nwpad_dialogui_debug_json(ui, sizeof ui);
+        snprintf(out, cap, "{\"ok\":true,%s}", ui);
     } else if (strcmp(cmd, "resource_publish") == 0) {
         /* {"cmd":"resource_publish","src":"/tmp/x.dlg","name":"x.dlg"}: serve a file as a game resource */
         char src[512] = "", name[64] = "";
@@ -469,6 +399,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else
             snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "reset_cost") == 0) {
+        /* {"cmd":"reset_cost"}: start the frame-cost histogram again */
         memset(&g.cost, 0, sizeof g.cost);
         snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "release") == 0) {
@@ -708,9 +639,9 @@ static void nwpad_frame(void) {
         sdl.ShowCursor(SDL_DISABLE);
     }
     /* With edge turning on, a pointer left on the outermost pixel spins the camera
-     * once the stick is released; move the game's recorded pointer one pixel in. */
-    /* The pin (right_edge_pinned) stays: like the left edge, the next mouse motion,
-     * even purely vertical, reports the edge again and edge turning resumes. */
+     * once the stick is released; move the game's recorded pointer one pixel in.
+     * (The XWayland pin, right_edge_pinned, stays: the next mouse motion reports
+     * the edge again and edge turning resumes, as at the left edge.) */
     NWPAD_WHERE("edge nudge");
     if (sticks_active && nwpad_backend_nudge_pointer_off_edge()) g.cursor.nudges++;
     nwpad_arbiter_update(&g.arbiter, right, t, &g.cfg);
@@ -742,9 +673,8 @@ static void nwpad_frame(void) {
         NWPAD_WHERE("");
         return;
     }
-    nwpad_vec2 move = nwpad_backend_movement_gated() ? (nwpad_vec2){0, 0} : left;
     nwpad_move_intent intent = nwpad_move_intent_compute(
-        move, nwpad_backend_camera_forward(&cam), facing, nwpad_backend_always_run(), g.move_mode,
+        left, nwpad_backend_camera_forward(&cam), facing, nwpad_backend_always_run(), g.move_mode,
         &g.style_state, t, &g.cfg);
     g.move_mode = intent.mode;
     g.move_style = intent.style;

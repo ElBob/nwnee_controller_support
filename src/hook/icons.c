@@ -7,6 +7,7 @@
 
 #include "../core/nwpad_core.h"
 #include "settings.h"
+#include "game.h"
 #include "sigs.h"
 
 #include <errno.h>
@@ -17,7 +18,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-typedef struct { char *ptr; uint32_t len; } exo_string;
+typedef nwpad_exo_string exo_string;
 typedef struct { void *ptr; void *ctrl; } shared_ptr; /* std::shared_ptr */
 typedef void (*res_get_fn)(shared_ptr *out, void *resman, const void *resref, unsigned short type);
 typedef int (*add_key_table_fn)(void *resman, unsigned id, const exo_string *name, unsigned type, int dynamic,
@@ -161,7 +162,7 @@ static bool register_dir(void) {
     add_key_table_fn add = (add_key_table_fn)nwpad_sig(NWPAD_SIG_RES_ADD_KEY_TABLE);
     void **resman = (void **)nwpad_sig(NWPAD_SIG_RES_MAN);
     if (!add || !resman || !*resman) return false;
-    exo_string table = {(char *)ICON_TABLE, (uint32_t)strlen(ICON_TABLE)}; /* length without the NUL */
+    exo_string table = {(char *)ICON_TABLE, (uint32_t)strlen(ICON_TABLE), 0}; /* length without the NUL */
     registered = add(*resman, ICON_TABLE_ID, &table, 2 /* directory */, 1, NULL) != 0;
     return registered;
 }
