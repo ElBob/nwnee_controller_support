@@ -1,6 +1,6 @@
 # Dialog plan
 
-Status: **D1 and D2 done** (2026-10-08; re-notes F36): nwpad reads and answers conversations, and its window covers the game's (portrait, name, larger NPC text, highlighted replies; D-pad/arrows/either stick, Enter, Escape; `nwpad.dialog`). Markup and the campaigns' extremes handled (scrolling replies, long lines; F36). Next: D3, Robert's playtest.
+Status: **D1 and D2 done** (2026-10-08; re-notes F36): nwpad reads and answers conversations, and its window covers the game's (portrait, name, larger NPC text, highlighted replies; D-pad/arrows/either stick, Enter, Escape; `nwpad.dialog`). Markup and the campaigns' extremes handled (scrolling replies, long lines; F36). The mouse: NUI's own input, taken from the window's elements so nothing reaches a server (F37). Next: D3, Robert's playtest.
 
 ## 1. Goal
 

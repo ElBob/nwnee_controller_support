@@ -3,7 +3,11 @@
  *   2 destroy: INT token
  *   4 binds:   INT count, then per bind: INT token, CExoString name, JSON value
  * where JSON is a type tag (0x10), a DWORD length and that many bytes of UBJSON. */
+#define _GNU_SOURCE /* dladdr */
 #include "nui.h"
+
+#include <dlfcn.h>
+#include <stdio.h>
 
 #include "../core/nwpad_core.h"
 #include "sigs.h"
@@ -59,6 +63,183 @@ static void on_opened(void *window) {
 static void on_closed(void *window) {
     if (!ours(window)) window_on_closed(window);
 }
+
+/* The game's NUI windows: CGuiInGame+0x890, unordered_map<int token,
+ * shared_ptr<JsonWindow>> (F32); nodes are {next, int token, JsonWindow*, control}. */
+static char *window_map(void) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    void *(*get_gui)(void *) = (void *(*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_GET_IN_GAME_GUI);
+    if (!app_manager || !*app_manager || !get_gui) return NULL;
+    char *gui = get_gui(*(void **)*app_manager);
+    return gui ? gui + 0x890 : NULL;
+}
+
+/* Window `token` as the game has it now (NULL if none): looked up each time, never
+ * kept, so a window the game freed is never touched. */
+static void *window_of(int token) {
+    char *map = window_map();
+    if (!map) return NULL;
+    for (char *node = *(char **)(map + 0x10); node; node = *(char **)node)
+        if (*(int32_t *)(node + 8) == token) return *(void **)(node + 0x10);
+    return NULL;
+}
+
+/* libstdc++ std::string and std::shared_ptr, as GetElementById takes and returns them. */
+typedef struct { const char *ptr; size_t len; union { char buf[16]; size_t cap; } u; } cxx_string;
+typedef struct { void *ptr; int32_t *ctrl; } cxx_shared; /* ctrl: vtable, use count (+8), weak count (+12) */
+typedef void (*element_by_id_fn)(cxx_shared *ret, void *window, const cxx_string *id); /* returned in memory */
+
+/* Window `token`'s element `id` (a Nui::Layout::Layoutable), or NULL. The window
+ * keeps it alive; the reference GetElementById adds is given back at once. */
+static void *element(int token, const char *id) {
+    void *window = window_of(token);
+    element_by_id_fn by_id = (element_by_id_fn)nwpad_sig(NWPAD_SIG_NUI_WINDOW_ELEMENT_BY_ID);
+    size_t len = strlen(id);
+    if (!window || !by_id || len >= 16) return NULL;
+    cxx_string s = {.len = len};
+    memcpy(s.u.buf, id, len + 1);
+    s.ptr = s.u.buf;
+    cxx_shared got = {0};
+    by_id(&got, window, &s);
+    if (got.ctrl) {
+        /* Not the last reference (the window's tree holds the element): a plain decrement. */
+        if (__atomic_load_n(&got.ctrl[2], __ATOMIC_ACQUIRE) > 1) __atomic_fetch_sub(&got.ctrl[2], 1, __ATOMIC_ACQ_REL);
+        else got.ptr = NULL; /* never expected; keep the reference rather than free under the game */
+    }
+    return got.ptr;
+}
+
+/* An element's event callbacks (F37): seven std::function members, each _Any_data
+ * (16 bytes), _M_manager, _M_invoker. All seven end in the game's event queue:
+ * mousedown +0xd0 and mouseup +0xf0 (nk_vec2 pos, nk_buttons), mousescroll +0x110
+ * (nk_vec2, nk_vec2), click / blur and one more at +0x130 / +0x150 / +0x170 (no
+ * arguments), +0x190 (int, int). Four invoker functions serve them. */
+enum { CB_DOWN = 0xd0, CB_UP = 0xf0, CB_SCROLL = 0x110, CB_VOID1 = 0x130, CB_VOID2 = 0x150, CB_VOID3 = 0x170, CB_INTS = 0x190 };
+static const int cb_slots[] = {CB_DOWN, CB_UP, CB_SCROLL, CB_VOID1, CB_VOID2, CB_VOID3, CB_INTS};
+#define CB_MANAGER(e, off) (*(void **)((char *)(e) + (off) + 0x10))
+#define CB_INVOKER(e, off) (*(void **)((char *)(e) + (off) + 0x18))
+
+#define MAX_TAKEN 24
+static struct { char *element; int token, tag; } taken[MAX_TAKEN];
+static nwpad_nui_input inputs[32];
+static unsigned inputs_head, inputs_tail;
+
+static void queue_input(const void *functor, int slot, int kind, int button, float x, float y) {
+    char *e = (char *)functor - slot;
+    for (int i = 0; i < MAX_TAKEN; i++)
+        if (taken[i].element == e && taken[i].token) {
+            if (inputs_tail - inputs_head < sizeof inputs / sizeof inputs[0])
+                inputs[inputs_tail++ % (sizeof inputs / sizeof inputs[0])] =
+                    (nwpad_nui_input){taken[i].token, taken[i].tag, kind, button, x, y};
+            return;
+        }
+}
+
+/* nwpad's invokers (libstdc++: the functor's storage, then each argument by reference).
+ * They run inside the game's NUI input pass, so they only record. */
+static void on_down(const void *f, const float *pos, const int *button) { queue_input(f, CB_DOWN, NWPAD_NUI_DOWN, *button, pos[0], pos[1]); }
+static void on_up(const void *f, const float *pos, const int *button) { queue_input(f, CB_UP, NWPAD_NUI_UP, *button, pos[0], pos[1]); }
+static void on_scroll(const void *f, const float *a, const float *b) {
+    (void)a;
+    queue_input(f, CB_SCROLL, NWPAD_NUI_SCROLL, 0, b[0], b[1]);
+}
+static void on_nothing(void) {} /* the rest: nothing to do, and nothing queued */
+
+static void forget_taken(int token) {
+    for (int i = 0; i < MAX_TAKEN; i++)
+        if (taken[i].token == token) taken[i].token = 0, taken[i].element = NULL;
+}
+
+/* The game's four invokers, from the first element checked (all elements share them). */
+static void *game_invokers[4];
+
+static bool callbacks_as_expected(char *e) {
+    void *inv[7];
+    for (int i = 0; i < 7; i++) {
+        if (!CB_MANAGER(e, cb_slots[i]) || !(inv[i] = CB_INVOKER(e, cb_slots[i]))) return false;
+    }
+    if (inv[0] != inv[1] || inv[3] != inv[4] || inv[3] != inv[5]) return false;
+    void *four[4] = {inv[0], inv[2], inv[3], inv[6]};
+    if (!game_invokers[0]) {
+        Dl_info game, info;
+        if (!dladdr(nwpad_sig(NWPAD_SIG_NUI_WINDOW_ON_OPENED), &game)) return false;
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < i; j++)
+                if (four[i] == four[j]) return false;
+            if (!dladdr(four[i], &info) || info.dli_fbase != game.dli_fbase) return false; /* the game's code */
+        }
+        memcpy(game_invokers, four, sizeof four);
+    }
+    return !memcmp(game_invokers, four, sizeof four);
+}
+
+bool nwpad_nui_take_input(int token, const char *id, int tag) {
+    char *e = element(token, id);
+    if (!e) return false;
+    int free_slot = -1;
+    for (int i = 0; i < MAX_TAKEN; i++) {
+        if (taken[i].element == e && taken[i].token) return CB_INVOKER(e, CB_DOWN) == (void *)on_down; /* already ours */
+        if (!taken[i].token && free_slot < 0) free_slot = i;
+    }
+    if (free_slot < 0 || !callbacks_as_expected(e)) return false;
+    taken[free_slot].element = e, taken[free_slot].token = token, taken[free_slot].tag = tag;
+    CB_INVOKER(e, CB_DOWN) = (void *)on_down;
+    CB_INVOKER(e, CB_UP) = (void *)on_up;
+    CB_INVOKER(e, CB_SCROLL) = (void *)on_scroll;
+    CB_INVOKER(e, CB_VOID1) = CB_INVOKER(e, CB_VOID2) = CB_INVOKER(e, CB_VOID3) = (void *)on_nothing;
+    CB_INVOKER(e, CB_INTS) = (void *)on_nothing;
+    return true;
+}
+
+bool nwpad_nui_next_input(nwpad_nui_input *out) {
+    if (inputs_head == inputs_tail) return false;
+    *out = inputs[inputs_head++ % (sizeof inputs / sizeof inputs[0])];
+    return true;
+}
+
+#ifdef NWPAD_DEBUG_SURFACES
+/* Research: Nuklear's windows (flags, bounds) and whether the game would keep a
+ * click from the world now (nk_item_is_any_active). */
+void nwpad_nui_debug_nuklear(char *out, size_t cap) {
+    char **ctx = (char **)nwpad_sig(NWPAD_SIG_NUKLEAR_CONTEXT);
+    int (*any_active)(void *) = (int (*)(void *))nwpad_sig(NWPAD_SIG_NUKLEAR_ITEM_IS_ANY_ACTIVE);
+    if (!ctx || !*ctx || !any_active) {
+        snprintf(out, cap, "null");
+        return;
+    }
+    size_t n = (size_t)snprintf(out, cap, "{\"any_active\":%d,\"windows\":[", any_active(*ctx));
+    int i = 0;
+    for (char *w = *(char **)(*ctx + 0x6720); w && i < 32 && n < cap; w = *(char **)(w + 0x1c0), i++) {
+        float *b = (float *)(w + 0x4c);
+        n += (size_t)snprintf(out + n, cap - n, "%s{\"flags\":%u,\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", i ? "," : "",
+                              *(uint32_t *)(w + 0x48), b[0], b[1], b[2], b[3]);
+    }
+    if (n < cap) snprintf(out + n, cap - n, "]}");
+}
+
+/* Research: window `token`'s element `id`, and every std::function-shaped slot in
+ * its first 0x400 bytes (manager and invoker both in the game's code). */
+void nwpad_nui_debug_element(int token, const char *id, char *out, size_t cap) {
+    Dl_info info;
+    char *e = element(token, id);
+    void *window = window_of(token);
+    if (!e || !dladdr(nwpad_sig(NWPAD_SIG_NUI_WINDOW_ON_OPENED), &info)) {
+        snprintf(out, cap, "{\"window\":%s,\"element\":null}", window ? "true" : "false");
+        return;
+    }
+    uintptr_t base = (uintptr_t)info.dli_fbase, end = base + 0x1700000;
+    size_t n = (size_t)snprintf(out, cap, "{\"window\":true,\"element\":true,\"slots\":[");
+    bool first = true;
+    for (size_t off = 0; off + 0x20 <= 0x400 && n < cap; off += 8) {
+        uintptr_t mgr = *(uintptr_t *)(e + off + 0x10), inv = *(uintptr_t *)(e + off + 0x18);
+        if (mgr < base || mgr >= end || inv < base || inv >= end) continue;
+        n += (size_t)snprintf(out + n, cap - n, "%s{\"off\":%zu,\"manager\":%lu,\"invoker\":%lu}", first ? "" : ",",
+                              off, (unsigned long)(mgr - base), (unsigned long)(inv - base));
+        first = false;
+    }
+    if (n < cap) snprintf(out + n, cap - n, "]}");
+}
+#endif
 
 static bool hook_events(void) {
     static int state; /* 0 untried, 1 hooked, -1 failed */
@@ -203,6 +384,7 @@ bool nwpad_nui_bind(int token, const char *name, const char *json_value) {
 
 bool nwpad_nui_destroy(int token) {
     if (!ready()) return false;
+    forget_taken(token);
     for (int w = 0; w < MAX_WINDOWS; w++)
         if (binds[w].token == token) binds[w].token = 0;
     void *msg = message();
@@ -218,10 +400,6 @@ bool nwpad_nui_events_pending(void) {
 }
 
 int nwpad_nui_window_count(void) {
-    /* CGuiInGame+0x890: unordered_map<int token, shared_ptr<JsonWindow>>; size at +0x18 */
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    void *(*get_gui)(void *) = (void *(*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_GET_IN_GAME_GUI);
-    if (!app_manager || !*app_manager || !get_gui) return -1;
-    char *gui = get_gui(*(void **)*app_manager);
-    return gui ? (int)*(size_t *)(gui + 0x890 + 0x18) : -1;
+    char *map = window_map(); /* size at +0x18 */
+    return map ? (int)*(size_t *)(map + 0x18) : -1;
 }

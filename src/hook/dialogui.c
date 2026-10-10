@@ -11,8 +11,6 @@
 #define BAR_TRIM 18.0f /* ends the scrollbar with the last line of text, not the text box */
 #define WIN_X 2.0f   /* the window's place (geometry bind) */
 #define WIN_Y 2.0f
-#define HIT_TOP 22.0f /* NUI's offsets inside the window, measured from screenshots (hit tests) */
-#define HIT_ROWS -10.0f
 #define ROWS 6       /* reply rows when they scroll (4 replies + "..." rows) */
 #define ROW_GAP 4.0f /* NUI's spacing between rows */
 #define QUICKBAR_H 60.0f /* keep clear of the quickbar at the bottom */
@@ -23,10 +21,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Two tokens, alternated per rebuild: a window destroyed and recreated under one
- * token in consecutive frames didn't come back (the destroy lands after). */
+/* Four tokens in turn: a new window waits off screen for a few frames (the mouse,
+ * F37) while the one it replaces stays up, and a window destroyed and recreated
+ * under one token in consecutive frames didn't come back (the destroy lands after). */
 #define TOKEN_BASE (NWPAD_NUI_TOKEN_BASE + 0x200)
-#define TOKEN (TOKEN_BASE + ui.flip)
+#define SLOTS 4
+#define TOKEN_OF(slot) (TOKEN_BASE + (slot))
+#define TOKEN TOKEN_OF(ui.slot)
 #define WIDTH 360.0f      /* covers the game's window (~350 wide at (5,5), F36) */
 #define PORTRAIT_W 64.0f
 #define PORTRAIT_H 100.0f
@@ -41,14 +42,18 @@
 static struct {
     bool open;
     bool preview;         /* debug: a made-up conversation is shown */
-    int flip;             /* which of the two tokens is current */
+    int slot;             /* the newest window's token (TOKEN) */
+    int shown;            /* the slot whose window is placed on screen (-1 none) */
+    uint32_t frame, gone[SLOTS]; /* frame count; when each slot's window was destroyed */
     int first, last;      /* the replies shown (more than fit on screen scroll) */
     float rh[NWPAD_DIALOG_REPLIES]; /* each reply's row height */
     float room;           /* height available for the replies */
     int nrows, row_kind[ROWS + 2]; /* the rows: a reply index, or -1 for "..." */
     float row_h[ROWS + 2];
     int bound_kind[ROWS + 2], bound_colour[ROWS + 2]; /* what each row's binds hold (-2 nothing) */
-    float win_h, text_y0, text_y1, rows_y0; /* the layout, GUI units from the window's top (hit tests) */
+    bool mouse;           /* the rows and the text take NUI's mouse input (F37) */
+    int press;            /* the row a left button went down on (-1 none) */
+    int mouse_tries;      /* frames spent waiting for the elements */
     char wrapped[4200];   /* the NPC's line, wrapped by nwpad: lines separated by '\n' */
     int line_at[512], lines, top, visible; /* line starts in wrapped; the shown range */
     uint32_t seq;
@@ -56,10 +61,13 @@ static struct {
     nwpad_dialog d;
     float nav_dir;        /* the stick's held direction (-1, 0, +1) */
     uint64_t nav_next_ms; /* when a held stick steps again */
-} ui = {.highlight = -1};
+} ui = {.highlight = -1, .press = -1, .shown = -1};
+
+#define TAG_TEXT 100 /* input tags: a row's index, or the NPC's text */
 
 bool nwpad_dialogui_open(void) { return ui.open; }
 int nwpad_dialogui_highlight(void) { return ui.open ? ui.highlight : -1; }
+bool nwpad_dialogui_mouse(void) { return ui.open && ui.mouse; }
 int nwpad_dialogui_text_top(void) { return ui.open ? ui.top : -1; }
 void nwpad_dialogui_range(int *first, int *last) {
     *first = ui.open ? ui.first : -1;
@@ -286,6 +294,39 @@ static float screen_h(void) {
     return (float)h / (s > 0 ? s : 1.0f);
 }
 
+/* The mouse (F37). NUI only takes a window's input if the definition says so, and an
+ * element with an id whose callbacks are still the game's would send its events to
+ * the server. So the window is made off screen, every element with an id is taken
+ * (the game builds them after the create message: tried again on the next frames),
+ * and only then is it placed. If they can't be taken, the window is made again the
+ * old way (no input, no ids) for the rest of the session. */
+#define MOUSE_TRIES 30
+static void rebuild(void);
+static bool mouse_broken;
+static void place(void);
+unsigned nwpad_dialogui_place_tries, nwpad_dialogui_place_tries_max; /* debug: frames until placed */
+static char placed[96]; /* the geometry bind for the window's place */
+
+static void take_mouse(void) {
+    if (ui.mouse || mouse_broken || ui.mouse_tries >= MOUSE_TRIES) return;
+    ui.mouse_tries++;
+    bool all = nwpad_nui_take_input(TOKEN, "line", TAG_TEXT);
+    for (int k = 0; all && k < ui.nrows; k++) {
+        char id[16];
+        snprintf(id, sizeof id, "r%d", k);
+        all = nwpad_nui_take_input(TOKEN, id, k);
+    }
+    if (all) {
+        ui.mouse = true;
+        place();
+        nwpad_dialogui_place_tries = (unsigned)ui.mouse_tries; /* debug */
+        if (nwpad_dialogui_place_tries > nwpad_dialogui_place_tries_max) nwpad_dialogui_place_tries_max = nwpad_dialogui_place_tries;
+    } else if (ui.mouse_tries >= MOUSE_TRIES) {
+        mouse_broken = true;
+        rebuild();
+    }
+}
+
 static bool build(void) {
     static char json[65536];
     float text_w = WIDTH - PORTRAIT_W - 3 * PAD, char_w = big_font ? BIG_CHAR_W : CHAR_W,
@@ -315,18 +356,15 @@ static bool build(void) {
         "{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":1,\"text_valign\":0,\"height\":%.1f,"
         "\"foreground_color\":{\"r\":125,\"g\":180,\"b\":255,\"a\":255}},"
         "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
-        "{\"type\":\"text\",\"label\":null,\"value\":{\"bind\":\"body\"},\"border\":false,\"scrollbars\":0,"
+        "{\"type\":\"text\",\"label\":null,%s\"value\":{\"bind\":\"body\"},\"border\":false,\"scrollbars\":0,"
         "\"height\":%.1f%s}%s]}]}]},"
         /* a subtle line between the NPC's text and the replies */
         "{\"type\":\"spacer\",\"label\":null,\"value\":null,\"height\":%.1f,\"draw_list_scissor\":false,"
         "\"draw_list\":[{\"type\":6,\"enabled\":true,\"color\":{\"r\":173,\"g\":142,\"b\":96,\"a\":110},"
         "\"fill\":null,\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,"
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
-        ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
+        ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, mouse_broken ? "" : "\"id\":\"line\",", body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
         scrolls ? scrollbar(body_h - BAR_TRIM) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
-    ui.text_y0 = HIT_TOP + LINE_H;           /* the NPC's text, under the name */
-    ui.text_y1 = ui.text_y0 + body_h;
-    ui.rows_y0 = h + HIT_ROWS;               /* the first reply row */
     ui.room = screen_h() - h - 2 * PAD - QUICKBAR_H;
     for (int i = 0; i < ui.d.count; i++) {
         char numbered[600];
@@ -335,20 +373,27 @@ static bool build(void) {
     }
     layout();
     for (int k = 0; k < ui.nrows && n < sizeof json; k++) {
+        char id[24];
+        snprintf(id, sizeof id, "\"id\":\"r%d\",", k);
         h += ui.row_h[k];
         n += (size_t)snprintf(json + n, sizeof json - n,
-            ",{\"type\":\"text\",\"label\":null,\"value\":{\"bind\":\"t%d\"},\"border\":false,\"scrollbars\":0,"
-            "\"height\":%.1f,\"foreground_color\":{\"bind\":\"c%d\"}}", k, ui.row_h[k] - ROW_GAP, k);
+            ",{\"type\":\"text\",\"label\":null,%s\"value\":{\"bind\":\"t%d\"},\"border\":false,"
+            "\"scrollbars\":0,\"height\":%.1f,\"foreground_color\":{\"bind\":\"c%d\"}}", mouse_broken ? "" : id, k,
+            ui.row_h[k] - ROW_GAP, k);
     }
     if (ui.d.panel_h + 4 > h) h = ui.d.panel_h + 4; /* never smaller than the game's window */
-    ui.win_h = h;
     static char window[70000];
     int w = snprintf(window, sizeof window,
         "{\"version\":1,\"title\":false,\"resizable\":false,\"collapsed\":false,\"closable\":false,"
-        "\"transparent\":false,\"border\":true,\"accepts_input\":false,\"size_constraint\":null,"
+        "\"transparent\":false,\"border\":true,\"accepts_input\":%s,\"size_constraint\":null,"
         "\"edge_constraint\":null,\"font\":\"\",\"geometry\":{\"bind\":\"geo\"},"
-        "\"root\":{\"type\":\"col\",\"label\":null,\"value\":null,\"children\":[%s]}}",
-        json);
+        /* an opaque backdrop: the skin's window background lets the game's own
+         * dialog window show through (and it highlights rows under the mouse) */
+        "\"root\":{\"type\":\"col\",\"label\":null,\"value\":null,\"draw_list_scissor\":false,\"draw_list\":["
+        "{\"type\":2,\"enabled\":true,\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":255},\"fill\":true,\"line_thickness\":1.0,"
+        "\"order\":-1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"x\":-10.0,\"y\":-10.0,\"w\":%.1f,\"h\":%.1f}}],"
+        "\"children\":[%s]}}",
+        mouse_broken ? "false" : "true", WIDTH, h, json);
     if (w <= 0 || (size_t)w >= sizeof window || n >= sizeof json) return false;
 #ifdef NWPAD_DEBUG_SURFACES
     FILE *f = fopen("/tmp/nwpad_dialog.json", "w"); /* research: the last definition */
@@ -356,12 +401,23 @@ static bool build(void) {
 #endif
     /* The id alternates with the token: a new window whose id is still taken by the
      * closing one is placed elsewhere (centred) by NUI. */
-    if (!nwpad_nui_create(TOKEN, ui.flip ? "nwpad_dialog_b" : "nwpad_dialog_a", window)) return false;
+    char wid[24];
+    snprintf(wid, sizeof wid, "nwpad_dialog_%d", ui.slot);
+    if (!nwpad_nui_create(TOKEN, wid, window)) return false;
     /* Placed by a bind: a window created right after another one closes was
      * sometimes centred by NUI when the geometry was in the definition. */
-    char geo[96];
-    snprintf(geo, sizeof geo, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", WIN_X, WIN_Y, WIDTH, h);
-    nwpad_nui_bind(TOKEN, "geo", geo);
+    snprintf(placed, sizeof placed, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", WIN_X, WIN_Y, WIDTH, h);
+    ui.mouse = false;
+    ui.mouse_tries = 0;
+    ui.press = -1;
+    if (mouse_broken) {
+        place();
+    } else { /* off screen until its elements are nwpad's */
+        char away[96];
+        snprintf(away, sizeof away, "{\"x\":-10000.0,\"y\":%.1f,\"w\":%.1f,\"h\":%.1f}", WIN_Y, WIDTH, h);
+        nwpad_nui_bind(TOKEN, "geo", away);
+        take_mouse();
+    }
     for (int k = 0; k < ROWS + 2; k++) ui.bound_kind[k] = ui.bound_colour[k] = -2;
     for (int k = 0; k < ui.nrows; k++) bind_row(k);
     show_body();
@@ -378,13 +434,49 @@ void nwpad_dialogui_scroll(int lines) {
     show_body();
 }
 
+static void drop(int slot) {
+    nwpad_nui_destroy(TOKEN_OF(slot));
+    ui.gone[slot] = ui.frame;
+}
+
+/* The new window is on screen: the one it replaces goes. */
+static void place(void) {
+    nwpad_nui_bind(TOKEN, "geo", placed);
+    if (ui.shown >= 0 && ui.shown != ui.slot) drop(ui.shown);
+    ui.shown = ui.slot;
+}
+
+/* Both windows (the shown one and a newer one still off screen). */
+static void close_windows(void) {
+    if (ui.open) drop(ui.slot);
+    if (ui.shown >= 0 && ui.shown != ui.slot) drop(ui.shown);
+    ui.shown = -1;
+    ui.open = false;
+}
+
+/* A new window for the current state; the shown one stays until it's placed. A
+ * newer one not yet placed is dropped (it was never seen). */
+static void replace(void) {
+    if (ui.open && ui.slot != ui.shown) drop(ui.slot);
+    int next = -1;
+    for (int i = 1; i <= SLOTS && next < 0; i++) {
+        int s = (ui.slot + i) % SLOTS;
+        if (s != ui.shown && ui.frame - ui.gone[s] >= 2) next = s;
+    }
+    if (next < 0) next = (ui.slot + 1) % SLOTS == ui.shown ? (ui.slot + 2) % SLOTS : (ui.slot + 1) % SLOTS; /* never expected */
+    ui.slot = next;
+    ui.open = build();
+    if (!ui.open && ui.shown >= 0) {
+        drop(ui.shown);
+        ui.shown = -1;
+    }
+}
+
 /* Show the window again after the highlight left the visible replies. */
 unsigned nwpad_dialogui_builds; uint64_t nwpad_dialogui_build_ns, nwpad_dialogui_build_max_ns; /* debug */
 static void rebuild(void) {
     uint64_t t0 = nwpad_now_ns(), g0 = nwpad_nui_take_game_ns();
-    nwpad_nui_destroy(TOKEN);
-    ui.flip ^= 1;
-    ui.open = build();
+    replace();
     uint64_t game = nwpad_nui_take_game_ns(), own = nwpad_now_ns() - t0 - game;
     nwpad_game_ns_add(g0 + game); /* put the game time back for the frame's account */
     nwpad_dialogui_builds++;
@@ -420,34 +512,6 @@ void nwpad_dialogui_move(int step) {
     for (int k = 0; k < ui.nrows; k++) bind_row(k); /* scrolled or not: just the binds */
 }
 
-/* GUI units per window pixel (NUI geometry is in GUI units). */
-static float gui_scale(void) {
-    float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
-    float s = scale ? scale() : 1.0f;
-    return s > 0 ? s : 1.0f;
-}
-
-int nwpad_dialogui_hit(int px, int py) {
-    if (!ui.open) return NWPAD_DLG_OUTSIDE;
-    float s = gui_scale(), x = (float)px / s - WIN_X, y = (float)py / s - WIN_Y;
-    if (x < 0 || y < 0 || x >= WIDTH || y >= ui.win_h) return NWPAD_DLG_OUTSIDE;
-    if (y >= ui.text_y0 && y < ui.text_y1 && x >= PORTRAIT_W) return NWPAD_DLG_TEXT;
-    float top = ui.rows_y0;
-    for (int k = 0; k < ui.nrows; k++) {
-        if (y >= top && y < top + ui.row_h[k]) return k;
-        top += ui.row_h[k];
-    }
-    return NWPAD_DLG_OTHER;
-}
-
-void nwpad_dialogui_hover(int row) {
-    if (!ui.open || row < 0 || row >= ui.nrows) return;
-    int i = ui.row_kind[row];
-    if (i < 0 || i == ui.highlight || !ui.d.replies[i].selectable) return;
-    ui.highlight = i; /* it's on screen: only colours change */
-    for (int k = 0; k < ui.nrows; k++) bind_row(k);
-}
-
 void nwpad_dialogui_click(int row) {
     if (!ui.open || row < 0 || row >= ui.nrows) return;
     int i = ui.row_kind[row];
@@ -460,10 +524,29 @@ void nwpad_dialogui_click(int row) {
     nwpad_dialogui_confirm();
 }
 
-void nwpad_dialogui_wheel(int hit, int notches) {
-    if (!ui.open || !notches) return;
-    if (hit == NWPAD_DLG_TEXT) nwpad_dialogui_scroll(-3 * notches); /* wheel up: earlier lines */
-    else nwpad_dialogui_move(notches > 0 ? -1 : 1);
+/* NUI's mouse input on the window (taken in the game's NUI pass, F37): a press and
+ * release on the same row answers with it; the wheel scrolls the text over the
+ * text, else moves the highlight. */
+bool nwpad_dialogui_dry;                  /* debug: clicks are recorded, not answered */
+nwpad_nui_input nwpad_dialogui_last_input; /* debug */
+unsigned nwpad_dialogui_inputs;           /* debug */
+static void mouse_input(void) {
+    nwpad_nui_input in;
+    while (nwpad_nui_next_input(&in)) {
+        if (in.token != TOKEN || !ui.open || nwpad_dialog_seq() != ui.seq) continue; /* a window already gone */
+        nwpad_dialogui_last_input = in;
+        nwpad_dialogui_inputs++;
+        if (in.kind == NWPAD_NUI_SCROLL && in.y != 0) {
+            if (in.tag == TAG_TEXT) nwpad_dialogui_scroll(in.y > 0 ? -3 : 3); /* wheel up: earlier lines */
+            else nwpad_dialogui_move(in.y > 0 ? -1 : 1);
+        } else if (in.button == 0 && in.kind == NWPAD_NUI_DOWN) {
+            ui.press = in.tag;
+        } else if (in.button == 0 && in.kind == NWPAD_NUI_UP) {
+            int row = ui.press;
+            ui.press = -1;
+            if (row == in.tag && row != TAG_TEXT && !nwpad_dialogui_dry) nwpad_dialogui_click(row);
+        }
+    }
 }
 
 void nwpad_dialogui_confirm(void) {
@@ -485,8 +568,8 @@ static void unescape(char *s) { /* "\n" -> newline, in place */
 }
 
 bool nwpad_dialogui_preview(const char *path) {
-    if (ui.open) nwpad_nui_destroy(TOKEN);
-    ui.open = ui.preview = false;
+    close_windows();
+    ui.preview = false;
     if (!path) return true;
     FILE *f = fopen(path, "r");
     if (!f) return false;
@@ -507,20 +590,24 @@ bool nwpad_dialogui_preview(const char *path) {
     snprintf(ui.d.speaker_name, sizeof ui.d.speaker_name, "%s", "Preview");
     snprintf(ui.d.portrait, sizeof ui.d.portrait, "%s", "po_dw_m_01_M");
     ui.d.panel_h = 254;
-    ui.flip ^= 1;
     ui.highlight = first_selectable();
     ui.first = ui.top = 0;
-    ui.open = ui.preview = build();
+    replace();
+    ui.preview = ui.open;
     return ui.open;
 }
 #endif
 
 bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
-    if (ui.preview) return true;
+    ui.frame++;
+    if (ui.preview) {
+        take_mouse();
+        return true;
+    }
+    mouse_input(); /* last frame's, on the window as it was shown */
     uint32_t seq = enabled ? nwpad_dialog_seq() : 0;
     if (!seq) {
-        if (ui.open) nwpad_nui_destroy(TOKEN);
-        ui.open = false;
+        close_windows();
         ui.highlight = -1;
         return false;
     }
@@ -535,14 +622,11 @@ bool nwpad_dialogui_frame(bool enabled, float nav, uint64_t now_ms) {
         }
         ui.first = 0;
         ui.top = 0;
-        if (ui.open) {
-            nwpad_nui_destroy(TOKEN);
-            ui.flip ^= 1;
-        }
         ui.highlight = first_selectable();
-        ui.open = build();
+        replace();
         if (!ui.open) return false;
     }
+    take_mouse();
     /* The sticks scroll the NPC's text: a held stick steps a line, then repeats. */
     float dir = nav > 0.5f ? -1.0f : nav < -0.5f ? 1.0f : 0.0f; /* stick up = earlier lines */
     if (dir != ui.nav_dir) {

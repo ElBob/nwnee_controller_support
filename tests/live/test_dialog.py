@@ -172,9 +172,10 @@ def test_test_conversation(game, ctl, tmp_path):
 
 
 def test_mouse(game, ctl):
-    """The mouse on nwpad's conversation window: hovering a reply highlights it, a
-    click answers with it (and reaches neither the game's hidden window nor the
-    world), the wheel scrolls the replies or, over the text, the text."""
+    """The mouse on nwpad's conversation window (F37): NUI does the hit testing and
+    nwpad takes the rows' input, so a click answers with the reply under it and the
+    wheel moves the highlight; nothing reaches the server, the game's covered
+    window or the world."""
     import os
     import subprocess
     from conftest import ROOT
@@ -185,32 +186,59 @@ def test_mouse(game, ctl):
 
     def mouse(x, y, *args):
         subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(wx + x), str(wy + y),
-                        "--settle", "0.6", *args], env=env, check=True, capture_output=True)
-        time.sleep(0.4)
+                        "--settle", "0.4", *args], env=env, check=True, capture_output=True)
+        time.sleep(0.3)
 
-    def row_y(k):  # the middle of row k, as nwpad's hit test sees it
-        ys = [y for y in range(0, 700, 2) if ctl("dialog_hit", x=100, y=y)["hit"] == k]
-        assert ys, f"no row {k}"
-        return (ys[0] + ys[-1]) // 2
+    def row_y(k):
+        """Where row k is, as NUI reports it: dry clicks (recorded, not answered)
+        down the window until one lands on row k."""
+        ctl("dialog_ui", dry=1)
+        # Motion first, as a real mouse sends: NUI (Nuklear) knows where the pointer
+        # is only from motion events, and a click it doesn't see goes to the world.
+        # A new virtual tablet's first jump can arrive as the click alone (F37).
+        mouse(100, 40, "--jiggle", "2")
+        assert ctl("state")["events"]["mouse_motion"] > 0
+        try:
+            for y in range(40, 500, 12):
+                n = ctl("dialog_ui")["inputs"]
+                mouse(100, y, "--jiggle", "2", "--click")
+                ui = ctl("dialog_ui")
+                if ui["inputs"] > n and ui["last_input"]["tag"] == k:
+                    return y
+            pytest.fail(f"no row {k}")
+        finally:
+            ctl("dialog_ui", dry=0)
 
     if ctl("dialog")["dialog"]:
         ctl("dialog_select", end=1)
         _dialog(ctl, want=lambda d: d is None)
+    leaks = open(os.path.join(game, "game.log"), errors="replace").read().count("window does not exist")
     dlg = os.path.join("/tmp", "nwpadtest.dlg")
     subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
     assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
     ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
     d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
     time.sleep(0.5)
-    mouse(100, row_y(2), "--jiggle", "4")
-    assert ctl("dialog_ui")["highlight"] == 2
-    filtered = ctl("state")["events"]["filtered"]
+    assert ctl("dialog_ui")["mouse"]
+    where = ctl("state").get("client")
+    y = row_y(1)
+    assert ctl("dialog")["dialog"]["seq"] == d["seq"]  # the dry clicks answered nothing, here or in the game's window
+    for x, yy in ((5, 4), (40, 60), (357, 128), (357, 280)):  # the frame, the portrait, the line, a corner
+        mouse(x, yy, "--jiggle", "2", "--click")
+        assert ctl("dialog")["dialog"] and ctl("state").get("client") == where, (x, yy)  # not the world's
     seq = d["seq"]
-    mouse(100, row_y(1), "--click")  # "Many replies."
+    mouse(100, y, "--jiggle", "2", "--click")  # "Many replies."
     d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 83)
-    assert ctl("state")["events"]["filtered"] >= filtered + 2  # press and release were nwpad's
     time.sleep(0.5)
-    mouse(100, row_y(0), "--wheel", "-3")  # hover row 0, then three down
+    deadline = time.monotonic() + 3
+    while not ctl("dialog_ui")["mouse"]:  # the new window's rows
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    assert ctl("dialog_ui")["highlight"] == 0
+    mouse(100, y, "--jiggle", "2", "--wheel", "-3")  # three down
     assert ctl("dialog_ui")["highlight"] == 3
+    assert ctl("state").get("client") == where  # no click reached the world
     ctl("dialog_select", end=1)
     _dialog(ctl, want=lambda d: d is None)
+    log = open(os.path.join(game, "game.log"), errors="replace").read()
+    assert log.count("window does not exist") == leaks  # nothing of nwpad's reached the server
