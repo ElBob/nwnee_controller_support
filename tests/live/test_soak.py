@@ -90,6 +90,14 @@ def test_overhead(ctl):
     it calls (walk, keys, camera), which the mouse and keyboard trigger too, is
     reported but not held to it (Robert, provisional; plan decision log)."""
     cost = ctl("state")["frame_cost_us"]
+    if cost["frames"] <= 1000:
+        # Run on its own: the histogram holds only the game's first frames (one-off
+        # setup: hooks, fonts, resources). Start it again and let it fill.
+        assert ctl("cost_reset")["ok"]
+        deadline = time.monotonic() + 120
+        while (cost := ctl("state")["frame_cost_us"])["frames"] <= 1000:
+            assert time.monotonic() < deadline, cost
+            time.sleep(1.0)
     print(f"frame cost: {cost}")
     assert cost["frames"] > 1000, cost
     assert cost["own_p99"] <= BUDGET_P99_US, cost

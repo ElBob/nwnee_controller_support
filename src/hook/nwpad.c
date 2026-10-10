@@ -328,6 +328,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
             ok = nwpad_nui_destroy((int)token);
         snprintf(out, cap, "{\"ok\":%s,\"events_pending\":%s,\"windows\":%d,\"size\":%u}", ok ? "true" : "false",
                  nwpad_nui_events_pending() ? "true" : "false", nwpad_nui_window_count(), nwpad_nui_last_size);
+    } else if (strcmp(cmd, "cost_reset") == 0) {
+        /* {"cmd":"cost_reset"}: start the frame-cost histogram again (the overhead
+         * test on its own: leave out the game's first frames) */
+        memset(g.cost.bucket, 0, sizeof g.cost.bucket);
+        memset(g.cost.own_bucket, 0, sizeof g.cost.own_bucket);
+        g.cost.frames = g.cost.max_ns = g.cost.own_max_ns = 0;
+        snprintf(out, cap, "{\"ok\":true}");
     } else if (strcmp(cmd, "nuklear") == 0) {
         /* {"cmd":"nuklear"}: Nuklear's windows and whether a click would stay off the world (research, F37) */
         static char desc[4096];
