@@ -2,16 +2,11 @@
 shows the quickbar banks as wheels, the right stick highlights a button, confirming
 uses it; the right stick doesn't move the camera meanwhile, and nothing reaches the
 server."""
-import os
-import subprocess
 import time
 
+from conftest import server_heard_nwpad, xkey
+
 STEALTH = 3  # the test character's slot 3 (test_quickbar.py); ring slot 3 is due right
-
-
-def _server_heard_nwpad(game):
-    log = open(os.path.join(game, "game.log"), errors="replace").read()
-    return "window does not exist: 18532" in log  # nwpad tokens 0x6e77xxxx
 
 
 def _stealth_off(ctl):
@@ -44,7 +39,7 @@ def test_pick_and_use(game, ctl):
     assert during["selected"] == STEALTH, during
     assert not after["open"] and after["last_used"] == STEALTH, after
     _stealth_off(ctl)
-    assert not _server_heard_nwpad(game)
+    assert not server_heard_nwpad(game)
 
 
 def test_confirm_without_pick_uses_nothing(game, ctl):
@@ -59,13 +54,7 @@ def test_confirm_without_pick_uses_nothing(game, ctl):
 
 def _key(action, key="Scroll_Lock"):
     """action: keydown, keyup or key (a tap)."""
-    """Press/release a key through X (XTEST keyboard events reach the game)."""
-    env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
-    win = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=env,
-                         capture_output=True, text=True).stdout.split()
-    if win:
-        subprocess.run(["xdotool", "windowactivate", "--sync", win[0]], env=env, capture_output=True)
-    subprocess.run(["xdotool", action, key], env=env, check=True)
+    xkey(key, action)
 
 
 def test_picker_key_toggle(game, ctl):
@@ -104,7 +93,7 @@ def test_picker_key_toggle(game, ctl):
         time.sleep(0.5)
         p = ctl("state")["picker"]
         assert not p["open"] and p["last_used"] == before, (close, p)
-    assert not _server_heard_nwpad(game)
+    assert not server_heard_nwpad(game)
 
 
 def test_bank_wheels(game, ctl):
@@ -121,7 +110,7 @@ def test_bank_wheels(game, ctl):
         ctl("picker", action="open")
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 1
-        _key("key", "bracketright")  # open: next bank (wraps to 2)
+        _key("key", "bracketright")  # open: the next bank
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 2
         assert ctl("state")["events"]["filtered"] >= filtered0 + 2  # its down and up
@@ -140,4 +129,4 @@ def test_bank_wheels(game, ctl):
         ctl("picker", action="cancel")
         ctl("quickbar_bank", bank=0)
         _stealth_off(ctl)
-    assert not _server_heard_nwpad(game)
+    assert not server_heard_nwpad(game)

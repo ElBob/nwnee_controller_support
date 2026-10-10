@@ -4,7 +4,7 @@ Analog controller support for the native Linux client of **Neverwinter Nights: E
 
 The left stick moves your character in any direction relative to the camera, turning to face where it walks the way holding the mouse button on the ground does, or strafing and backpedaling when pushed straight sideways or back. The right stick turns and pitches the camera smoothly. Nothing is remapped to keystrokes. The library, `libnwpad.so`, loads into the game with `LD_PRELOAD` and drives the game's own movement and camera, and the game files on disk are never modified.
 
-> **Status: beta.** Camera and movement work in the native Linux client (build 8193.37-17). Steam Input layouts and Steam Deck validation are still to come. See [`docs/plan.md`](docs/plan.md).
+> **Status: beta.** Camera and movement, the quickbar picker, conversations, and native Options entries work in the native Linux client (build 8193.37-17), with Steam Input layouts for the Xbox controller. Steam Deck validation is still to come. See [`docs/plan.md`](docs/plan.md).
 
 ## How it fits with Steam Input
 
@@ -132,9 +132,10 @@ nwpad is always active, including on remote servers. Some persistent worlds proh
 ## Repository layout
 
 ```
-src/core/            pure logic (deadzone, heading, walk/run, send-rate, camera, arbitration, config)
-src/hook/            LD_PRELOAD entry point, SDL interposition, game backend
-signatures/ee.yaml   byte signatures for game functions, each backed by docs/re-notes.md
+src/core/            pure logic (deadzone, heading, walk/run, send-rate, camera, arbitration, config, settings, JSON)
+src/hook/            LD_PRELOAD entry point, SDL interposition, and the game side: camera and movement,
+                     settings, quickbar and picker, NUI windows, conversations, icons
+signatures/ee.yaml   game symbols (and byte patterns where there is no symbol), each backed by docs/re-notes.md
 tests/unit/          C unit tests and the preload smoke test (run anywhere)
 tests/live/          pytest scenarios against the running game (test box only)
 tools/               remote execution, launch/lock, sigcheck, Ghidra and Frida helpers

@@ -146,6 +146,7 @@ The library has few settings, because tuning lives in Steam Input. Since the set
 | `strafe_window` | 10° | Half-width of the strafe/backpedal windows around 90/180/270° (§3). |
 | `strafe_exit_ms` | 150 | How long the stick must stay outside a strafe/backpedal window before it becomes a drag, so a released stick springing back doesn't turn the character around. |
 | `hide_cursor` | 1 | Hide the mouse cursor while the sticks are in use; the first mouse motion brings it back (re-notes F24). |
+| `cursor_rehide_ms` | 2000 | After mouse motion, how long the mouse must be still and a stick held before the cursor hides again. |
 
 The safety deadzone is fixed at 0.15 raw magnitude and isn't configurable. It was 0.05 until Robert's Xbox Series pad test: after a small push the left stick can settle at 0.084 and keep the character walking until the pad is bumped. The values above are starting points, confirmed during feel sign-off (M4).
 
@@ -204,19 +205,23 @@ The test save holds a fixed test character. It's created locally and never commi
 
 The socket is `$XDG_RUNTIME_DIR/nwpad.sock`, mode 0600, and exists only when `NWPAD_SOCKET=1` is set. It is compiled out of release builds. The protocol is JSON lines. From the agent's machine, it's reached through `ssh -L` socket forwarding, or `nwpadctl` runs on the box over SSH.
 
+The commands as built (the handler in `src/hook/nwpad.c` documents each one's arguments):
+
 | Command | Purpose |
 |---|---|
 | `ping` | Liveness, version, and frame counter. |
-| `status` | Readiness, enabled features, and signature resolution results. |
-| `state` | Creature position, orientation, drive mode, and cutscene mode, read from the in-process server `CNWSCreature` (R4) as ground truth. Also camera yaw, pitch, and locks; Always Run; which device has control; text-input-active; and frame dt. |
+| `status` | Readiness, enabled features, config, settings, and signature resolution results. |
+| `state` | Creature position and facing from the in-process server `CNWSCreature` (R4, ground truth) and the client; camera yaw, pitch, and locks; drive style and mode; which device has the camera; the cursor; event counters; the picker; per-frame cost (`reset_cost` clears it). |
 | `stick` / `release` | Sets or clears virtual stick input, with optional `hold_ms`. |
-| `wait_frames` / `wait_ms` | Waits inside the game loop, then returns state. |
-| `screenshot` | PNG via `glReadPixels` in the swap hook. |
-| `msglog` | Logs player-to-server input messages (minor, bytes, timestamp) from a hook on the in-process server's `HandlePlayerToServerInputMessage`. |
-| `load_save` | Loads the test save (if approach 2 in §8.2 is used). |
-| `script` | Runs a named test-module script (camera locks, cutscene toggle, dialog start). |
-| `read` / `scan` | Memory read and scan, for RE sessions. |
-| `log` | Sets the telemetry level and path. |
+| `script_chunk` | Runs NWScript on the local server, as the cheat console does (F17): test setup such as starting a conversation. |
+| `read` | Memory read, for RE sessions. |
+| `walk_to`, `always_run` | The game's own walk and Always Run option, for reference measurements. |
+| `quickbar`, `quickbar_bank`, `quickbar_use`, `equipped_icon` | Quickbar contents, bank, use, and an equipped item's icon (F31, F34). |
+| `picker`, `picker_shift` | Open, select in, and close the quickbar picker; change its bank. |
+| `nui_create` / `nui_bind` / `nui_destroy` | Client-side NUI windows (F32). |
+| `resource_publish` | Serve a file as a game resource (F35), e.g. the test conversation. |
+| `dialog`, `dialog_select` | The open conversation, and answering or ending it (F36). |
+| `dialog_ui`, `dialog_preview` | nwpad's conversation window: keys, a dry-run mouse, its state (F37); a made-up conversation to look at. |
 
 ### 8.4 Tools
 
@@ -226,14 +231,17 @@ The socket is `$XDG_RUNTIME_DIR/nwpad.sock`, mode 0600, and exists only when `NW
 | `tools/run_game.sh` | box | Takes the session lock, launches the game with the preload library and the isolated user directory, waits for `ready`, and enforces a timeout. |
 | `tools/lock.sh` | box | Robert's manual hold and release of the session lock. |
 | `tools/nwpadctl` | box or local | CLI over the control socket. |
-| `tools/collect_crash.sh` | box | Core dump, `gdb -batch` backtrace, and the telemetry tail. |
+| `tools/collect_crash.sh` | box | Core dump, `gdb -batch` backtrace, and the telemetry tail, for a run directory. |
 | `tools/fetch_server.sh` | box | Downloads and unpacks the dedicated server package and records its hash. |
 | `tools/ghidra/` | box | Headless Ghidra: `decompile_fn` by symbol name, version tracking and name export, xref search, and signature generation. Outputs go to `re-work/` (gitignored). |
 | `tools/frida/` | box | Trace scripts, run with `frida -q` and a timeout. |
 | `tools/sigcheck` | box | Offline signature resolution against the installed binary. |
-| `tools/uinput_pad.py` | box | Virtual gamepad for end-to-end tests through SDL. |
-| `tools/uinput_mouse.py` | box | Virtual absolute mouse for arbitration tests (XTEST pointer motion doesn't reach XWayland clients). |
-| `tools/xinput.sh` | box | xdotool wrappers for mouse and keyboard, used in arbitration tests. |
+| `tools/uinput_mouse.py` | box | Virtual absolute mouse for arbitration and conversation-window tests (XTEST pointer motion doesn't reach XWayland clients). Keys go through `xdotool` (`conftest.xkey`). |
+| `tools/gen_signatures.py` | box | Compiles `signatures/ee.yaml` into the library's header (CMake runs it). |
+| `tools/m5_checks.sh` | box | The release build in the game with every signature resolved, and a build with every signature broken (features off, nothing crashes). |
+| `tools/settings_checks.sh` | box | The native Options entries and `settings.tml`, end to end (settings plan). |
+| `tools/make_test_dlg.py` | box | Writes nwpad's own test conversation (dialog plan). |
+| `tools/install.sh`, `tools/install_hooks.sh` | box / local | Release install; the repo's git hooks. |
 
 ### 8.5 The loop
 
@@ -290,7 +298,7 @@ The agent stops and asks Robert:
 
 ### 8.8 Failure handling
 
-- **Crash:** `collect_crash.sh` runs automatically. After three crashes on the same change, the agent stops and reports.
+- **Crash:** the library's crash handler writes a backtrace into the run's `game.log`; `collect_crash.sh <run-dir>` adds the core dump and a `gdb` backtrace. After three crashes on the same change, the agent stops and reports.
 - **Hang or never ready:** the launch is killed at the timeout and reported as an environment failure, separate from test failures.
 - **Flaky test:** at most two reruns. Persistent flakiness is reported, never hidden.
 

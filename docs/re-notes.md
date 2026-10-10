@@ -81,7 +81,7 @@ Every function, global, offset, and signature the library uses must have an entr
 - Binary / hash: nwmain-linux 6d19c39b
 - What: the client parses a `-userdirectory <path>` option (`SetUpUserDirectory(int, char**)`, string `-userdirectory`).
 - Evidence: launched with `-userdirectory ~/.nwpad/userdir`; the game created `nwn.ini`, `logs/`, `modules/`, and the rest there, and `find` found nothing modified in Robert's `~/.local/share/Neverwinter Nights`.
-- Use: isolation approach 1 (plan §8.2); the `run_game.sh` default. Answers the user-directory half of Q7; loading a module or save is still open.
+- Use: isolation approach 1 (plan §8.2); the `run_game.sh` default. Answers the user-directory half of Q7 (loading a module: F13).
 - Confidence: confirmed.
 
 ### F11: No dormant controller code in the client
@@ -195,8 +195,8 @@ Every function, global, offset, and signature the library uses must have an entr
 - What: `CClientExoAppInternal::HandleInputEvent(int action, int pressed, int, int)` (Ghidra) handles the movement actions: 0x57 Q → `+0x1c8`, 0x58 E → `+0x1cc`, 0x59 → `+0x1b4`, 0x5a W → `+0x1b8`, 0x5b S → `+0x1bc`, 0x5c A → `+0x1c0`, 0x5d D → `+0x1c4`. Each press stores `pressed`, stamps timers (`+0x198`, `+0x1a8`), and sets `+0x1b0` = 1 so the next `UpdateDriveMode` sends at once. Releasing Q / E / S / W sends `SendPlayerToServerInput_AbortDriveControl`. The preamble drops events while a UI text field has focus, but only when the 4th argument is nonzero.
 - Runtime (gdb breakpoint, xdotool S held): real key events arrive as `(0x5b, 1, 0, 0)` repeated by autorepeat (11 in 1.2 s), then `(0x5b, 0, 0, 0)`.
 - Facing: neither a real S nor setting the fields turns the character toward the camera. Q / E / S move relative to the creature's own facing (camera forward 80.5°, facing 89°: S moved at facing + 180°). This is what the M2 option (b) builds on.
-- Setting the fields directly (socket `drive_keys`) moves the character exactly like the keys (S: 3.6 m at facing + 180°; Q / E: 3.2 m at facing ± 90°; facing unchanged), but skips the release's AbortDriveControl, so the library calls `HandleInputEvent` instead.
-- Also measured: `WalkPlayerToPoint` mode 1 walks (1.85 m/s steady) and mode 2 runs (3.85 m/s); mode 0 follows the game default. Where the game keeps Always Run is still open (M4); `client_internal+0x184` read 0 here.
+- Setting the fields directly (socket `drive_keys`, since removed) moves the character exactly like the keys (S: 3.6 m at facing + 180°; Q / E: 3.2 m at facing ± 90°; facing unchanged), but skips the release's AbortDriveControl, so the library calls `HandleInputEvent` instead.
+- Also measured: `WalkPlayerToPoint` mode 1 walks (1.85 m/s steady) and mode 2 runs (3.85 m/s); mode 0 follows the game default. Where the game keeps Always Run was answered later (F23); `client_internal+0x184` read 0 here.
 - Confidence: confirmed.
 
 ### F22: Mouse drag mode and how it ends
@@ -315,7 +315,7 @@ Every function, global, offset, and signature the library uses must have an entr
 - **Centring:** NUI geometry is in GUI units: screen size (`g_pGuiMan+0xb8/+0xbc`, pixels) over `CAurora::GetGUIScale()` (static, returns float).
 - **Using a button:** `CGuiQuickButton::HandleLeftButton` on any of the 36 buttons acts as clicking it: modes toggle at once (Stealth Mode, runtime), targeted spells enter the game's targeting mode as a click would.
 - **Runtime:** the ring (12 icons in a client-side NUI window, draw-list images, circles and text, `accepts_input: false`, transparent, no title) renders natively and updates through binds; no NUI message for nwpad's tokens reaches the local server across open, selection changes and close (live test `test_picker.py`).
-- **Animation spike (2026-10-01):** a bind costs ~5 µs (worst 19 µs; debug `nui_bench`); moving a window by its bound `geometry` once per frame for 2 s ran at 61 updates/s with nwpad's frame cost unchanged and nothing sent to the server. But NUI clamps windows to the screen: geometry at x = −120 or past the right edge is drawn fully on screen at the edge. `edge_constraint` only adds margins (`nw_inc_nui`), so a window can't slide off-screen; sliding rings must move inside one window (draw-list rects by bind) instead.
+- **Animation spike (2026-10-01):** a bind costs ~5 µs (worst 19 µs; debug `nui_bench`, since removed); moving a window by its bound `geometry` once per frame for 2 s ran at 61 updates/s with nwpad's frame cost unchanged and nothing sent to the server. But NUI clamps windows to the screen: geometry at x = −120 or past the right edge is drawn fully on screen at the edge. `edge_constraint` only adds margins (`nw_inc_nui`), so a window can't slide off-screen; sliding rings must move inside one window (draw-list rects by bind) instead.
 - Confidence: runtime on the test box (Xbox-pad path emulated by the control socket's virtual stick).
 
 ### F34: Item icons
@@ -387,8 +387,8 @@ Every function, global, offset, and signature the library uses must have an entr
 | Q1 | ~~Full `DriveControl` payload layout~~ F16 | R1 |
 | Q2 | ~~Does the server honor an arbitrary bearing, and can facing differ from movement direction?~~ Settled by the M2 decision (plan decision log); F16 | R1, R8, M2 |
 | Q3 | ~~Does `nwmain-linux` export symbols?~~ Yes (F9) | R2 |
-| Q4 | Where does the client store camera yaw, pitch, limits, and locks? (Static answer in F14; runtime confirmation pending) | R7 |
-| Q5 | Where does the client store Always Run state? | R7 |
+| Q4 | ~~Where does the client store camera yaw, pitch, limits, and locks?~~ F14, confirmed at runtime in F15 | R7 |
+| Q5 | ~~Where does the client store Always Run state?~~ F23 | R7 |
 | Q6 | ~~Is there dormant controller code from the console builds?~~ No (F11) | R6 |
 | Q7 | ~~Command-line options for loading a save or module?~~ `+TestNewModule` (F13); user directory: `-userdirectory` (F10) | R5 |
 | Q8 | What does `m_fDriveModeMoveFactor` control? | R1 |

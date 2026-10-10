@@ -7,11 +7,11 @@ nwpad is an `LD_PRELOAD` library that adds analog stick movement and camera cont
 - **Local build and tests:** `cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
 - **Test box:** `tools/remote.sh build` (sync, build, unit tests) or `tools/remote.sh test` (plus sigcheck and live tests, with artifacts pulled back)
 - **Hooks:** run `tools/install_hooks.sh` once per clone.
-- **Where things live:** the library code is split between `src/core/` (pure logic, unit-tested) and `src/hook/` (SDL hooks via the dynamic API jump table, the signature resolver in `sigs.c`, the control socket, and `backend.c`, the only code that touches game functions or memory). Signatures are in `signatures/ee.yaml`, findings in `docs/re-notes.md`, and the plan in `docs/plan.md`.
+- **Where things live:** the library code is split between `src/core/` (pure logic, unit-tested) and `src/hook/` (SDL hooks via the dynamic API jump table, the signature resolver in `sigs.c`, the control socket, and the code that touches game functions or memory: `backend.c` for camera and movement, `game.c` for the shared client lookups, and one file per feature such as `settings.c`, `quickbar.c`, `nui.c`, `picker.c`, `dialog.c`, `dialogui.c` and `icons.c`). Signatures are in `signatures/ee.yaml`, findings in `docs/re-notes.md`, and the plan in `docs/plan.md`.
 
 ## Topology
 
-You run on Robert's local machine. The game runs on a dedicated Linux test box reached over SSH (host alias `nwpad-box`). You have full access to that box, but Robert also plays on it. Everything that touches the game goes through the tools in `tools/`, which handle syncing, the session lock, and pulling artifacts back into `artifacts/<run-id>/`.
+You run on Robert's local machine. The game runs on a dedicated Linux test box reached over SSH (host alias `nwpad-box` by default; set `NWPAD_HOST` to use another, as for the BC-250, `bc250`). You have full access to that box, but Robert also plays on it. Everything that touches the game goes through the tools in `tools/`, which handle syncing, the session lock, and pulling artifacts back into `artifacts/<run-id>/`.
 
 ## Hard rules
 
@@ -49,7 +49,7 @@ Use the cheapest tier that answers the question.
 
 ## Failure handling
 
-- **Crash:** `tools/collect_crash.sh` runs automatically. Read the backtrace and telemetry before retrying.
+- **Crash:** the crash handler writes a backtrace into the run's `game.log`; run `tools/collect_crash.sh <run-dir>` for the core dump and a `gdb` backtrace. Read them before retrying.
 - **Launch timeout or never ready:** treat it as an environment failure and report it separately from test failures.
 - **Flaky test:** at most two reruns. Report persistent flakiness; don't hide it with longer timeouts.
 
@@ -57,7 +57,7 @@ Use the cheapest tier that answers the question.
 
 - C11. Build with `-Wall -Wextra -Werror`. The library depends only on libc, libdl, and the game's SDL2.
 - Don't allocate memory, block, or do I/O in the per-frame path, apart from telemetry buffered to a background writer. The budget is under 0.1 ms per frame.
-- All debug-only surfaces (control socket, `read`, `scan`, `msglog`) sit behind a build flag and are absent from release builds.
+- All debug-only surfaces (the control socket and its commands, their counters and helpers) sit behind `NWPAD_DEBUG_SURFACES` and are absent from release builds. It defaults to ON for development; `tools/install.sh` and `tools/m5_checks.sh` build with it OFF.
 - Stick tuning belongs to Steam Input. Don't add deadzone or curve options to the library beyond the fixed safety deadzone (plan §6.3).
 - Keep commits small and focused, and reference the milestone or research task ID in the message (for example `M1: resolve camera ChangeLocation handler`).
 

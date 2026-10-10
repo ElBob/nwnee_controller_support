@@ -5,6 +5,7 @@ tools/remote.sh test sets NWPAD_LIVE=1 on the box.
 """
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -51,8 +52,8 @@ class Ctl:
         self.sock.close()
 
 
-# The library config the tests assume: explicit defaults (plan §6.3), so Robert's
-# own ~/.config/nwpad/config.toml never affects a run. run_game.sh passes this file
+# The library config the tests assume: explicit values (the defaults of plan §6.3,
+# but a shorter cursor_rehide_ms), so Robert's own config.toml never affects a run. run_game.sh passes this file
 # through NWPAD_CONFIG.
 TEST_CONFIG = """# written by tests/live/conftest.py
 camera_yaw_speed = 180
@@ -101,15 +102,54 @@ def ctl(game):
     c.close()
 
 
-def game_window_center():
-    """X-screen coordinates of the middle of the game window (xdotool)."""
-    env = {**os.environ, "DISPLAY": os.environ.get("NWPAD_DISPLAY", ":0")}
-    wid = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights"], env=env,
-                         capture_output=True, text=True, check=True).stdout.split()[0]
+X_ENV = {**os.environ, "DISPLAY": os.environ.get("NWPAD_DISPLAY", ":0")}
+
+
+def _game_window_id():
+    return subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=X_ENV,
+                          capture_output=True, text=True, check=True).stdout.split()[0]
+
+
+def game_window():
+    """The game window's X-screen position and size: (x, y, w, h) (xdotool)."""
     geo = dict(line.split("=", 1) for line in subprocess.run(
-        ["xdotool", "getwindowgeometry", "--shell", wid], env=env,
+        ["xdotool", "getwindowgeometry", "--shell", _game_window_id()], env=X_ENV,
         capture_output=True, text=True, check=True).stdout.split())
-    return int(geo["X"]) + int(geo["WIDTH"]) // 2, int(geo["Y"]) + int(geo["HEIGHT"]) // 2
+    return int(geo["X"]), int(geo["Y"]), int(geo["WIDTH"]), int(geo["HEIGHT"])
+
+
+def game_window_center():
+    """X-screen coordinates of the middle of the game window."""
+    x, y, w, h = game_window()
+    return x + w // 2, y + h // 2
+
+
+def xkey(key, action="key"):
+    """Tap (action "key"), press ("keydown") or release ("keyup") a key through X
+    (XTEST keyboard events reach the game), with the game window focused."""
+    subprocess.run(["xdotool", "windowactivate", "--sync", _game_window_id()], env=X_ENV, capture_output=True)
+    subprocess.run(["xdotool", action, key], env=X_ENV, check=True)
+
+
+def mouse(x, y, *args):
+    """tools/uinput_mouse.py at (x, y) in the game window, then a moment to settle.
+    args as the tool takes them (--click, --wheel N, --jiggle N ...)."""
+    wx, wy, _, _ = game_window()
+    subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(wx + x), str(wy + y),
+                    "--settle", "0.4", *args], env=X_ENV, check=True, capture_output=True)
+    time.sleep(0.3)
+
+
+def server_heard(game):
+    """The NUI window tokens the local server got a message for but doesn't know (it
+    logs each), which is what a remote server would see."""
+    log = open(os.path.join(game, "game.log"), errors="replace").read()
+    return [int(t) for t in re.findall(r"window does not exist: (\d+)", log)]
+
+
+def server_heard_nwpad(game):
+    """As server_heard, nwpad's own tokens only (0x6e77xxxx): never expected."""
+    return [t for t in server_heard(game) if t >> 16 == 0x6E77]
 
 
 def stop_game(pid, grace_s=15.0):

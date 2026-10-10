@@ -1,12 +1,16 @@
 """NPC conversations (dialog plan D1, re-notes F36): nwpad reads the NPC's line and
 the replies of the open conversation, and answers it the way the number keys do."""
+import os
+import subprocess
 import time
 
 import pytest
 
+from conftest import ROOT, mouse, server_heard_nwpad, xkey
+
 # The nearest NPC to the test character, Rules Enforcer D, has a conversation.
 START = ('object pc=GetFirstPC(); object n=GetNearestCreature(CREATURE_TYPE_PLAYER_CHAR, PLAYER_CHAR_NOT_PC, pc, 1);'
-         ' AssignCommand(n, ClearAllActions()); AssignCommand(n, ActionStartConversation(pc, "", FALSE, FALSE));')
+         ' AssignCommand(n, ClearAllActions()); AssignCommand(n, ActionStartConversation(pc, "%s", FALSE, FALSE));')
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +19,7 @@ def npc_home(ctl):
     tests' way: put it back where it started afterwards."""
     ctl("script_chunk", code='object n=GetNearestCreature(CREATURE_TYPE_PLAYER_CHAR, PLAYER_CHAR_NOT_PC, GetFirstPC(), 1);'
                              ' SetLocalObject(GetModule(), "nwpad_npc", n); SetLocalLocation(GetModule(), "nwpad_npc_home", GetLocation(n));')
+    _end(ctl)
     yield
     if ctl("dialog")["dialog"]:
         ctl("dialog_select", end=1)
@@ -22,6 +27,15 @@ def npc_home(ctl):
                              ' AssignCommand(n, JumpToLocation(GetLocalLocation(GetModule(), "nwpad_npc_home")));'
                              ' DestroyObject(GetObjectByTag("nwpad_speaker"));')
     time.sleep(1.0)
+
+
+@pytest.fixture
+def test_dlg(ctl, tmp_path):
+    """nwpad's own test conversation (tools/make_test_dlg.py), served to the game."""
+    dlg = str(tmp_path / "nwpadtest.dlg")
+    subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
+    assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
+    return "nwpadtest"
 
 
 def _dialog(ctl, timeout=5.0, want=lambda d: d is not None):
@@ -34,11 +48,20 @@ def _dialog(ctl, timeout=5.0, want=lambda d: d is not None):
         time.sleep(0.2)
 
 
-def test_read_and_answer(game, ctl):
+def _end(ctl):
+    """End the open conversation, if any."""
     if ctl("dialog")["dialog"]:
         ctl("dialog_select", end=1)
         _dialog(ctl, want=lambda d: d is None)
-    ctl("script_chunk", code=START)
+
+
+def _key(key):
+    xkey(key)
+    time.sleep(0.4)
+
+
+def test_read_and_answer(game, ctl):
+    ctl("script_chunk", code=START % "")
     d = _dialog(ctl, want=lambda d: d and d["replies"])
     assert d["line"] == "Welcome to the Contest Of Champions!", d
     assert [r["text"] for r in d["replies"]] == ["What is the Contest Of Champions?", "CONTINUE"], d
@@ -51,28 +74,13 @@ def test_read_and_answer(game, ctl):
     _dialog(ctl, want=lambda d: d is None)
 
 
-def _key(key):
-    import os
-    import subprocess
-    env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
-    win = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced"], env=env,
-                         capture_output=True, text=True).stdout.split()
-    if win:
-        subprocess.run(["xdotool", "windowactivate", "--sync", win[0]], env=env, capture_output=True)
-    subprocess.run(["xdotool", "key", key], env=env, check=True)
-    time.sleep(0.4)
-
-
 def test_window_keys(game, ctl):
     """nwpad's conversation window (D2): the arrow keys move the highlight, Enter
     answers, Escape ends the conversation; the game sees none of them meanwhile."""
-    if ctl("dialog")["dialog"]:
-        ctl("dialog_select", end=1)
-        _dialog(ctl, want=lambda d: d is None)
     filtered0 = ctl("state")["events"]["filtered"]
     _key("Down")  # no conversation: the game's key
     assert ctl("state")["events"]["filtered"] == filtered0
-    ctl("script_chunk", code=START)
+    ctl("script_chunk", code=START % "")
     _dialog(ctl, want=lambda d: d and d["replies"])
     time.sleep(0.5)
     ui = ctl("dialog_ui")
@@ -86,30 +94,20 @@ def test_window_keys(game, ctl):
     assert ctl("dialog_ui")["highlight"] == 0
     seq = ctl("dialog")["dialog"]["seq"]
     _key("Return")  # answers reply 1
-    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The Contest Of Champions is"))
+    _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The Contest Of Champions is"))
     assert ctl("dialog_ui")["open"]
     _key("Escape")  # ends it
     _dialog(ctl, want=lambda d: d is None)
     assert not ctl("dialog_ui")["open"]
-    log = open(__import__("os").path.join(game, "game.log"), errors="replace").read()
-    assert "window does not exist: 18532" not in log  # nwpad's NUI tokens never reach the server
+    assert not server_heard_nwpad(game)  # nwpad's NUI tokens never reach the server
 
 
-def test_test_conversation(game, ctl, tmp_path):
-    """nwpad's own test conversation (tools/make_test_dlg.py), shaped like the
-    official campaigns' extremes: markup (the client turns <StartCheck> etc. into
-    colour codes; nwpad's window strips them), an 83-reply list that scrolls with
-    the highlight, a ~1000-character line and a long reply."""
-    import os
-    import subprocess
-    from conftest import ROOT
-    dlg = str(tmp_path / "nwpadtest.dlg")
-    subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
-    assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
-    if ctl("dialog")["dialog"]:
-        ctl("dialog_select", end=1)
-        _dialog(ctl, want=lambda d: d is None)
-    ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
+def test_test_conversation(game, ctl, test_dlg):
+    """nwpad's own test conversation, shaped like the official campaigns' extremes:
+    markup (the client turns <StartCheck> etc. into colour codes; nwpad's window
+    strips them), an 83-reply list that scrolls with the highlight, a ~1000-character
+    line and a long reply."""
+    ctl("script_chunk", code=START % test_dlg)
     d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
     assert d["line"].startswith("<c") and "[Nods]</c> Hello, " in d["line"], d  # tokens filled in, colour codes
     assert ctl("dialog_ui")["open"]
@@ -143,8 +141,7 @@ def test_test_conversation(game, ctl, tmp_path):
     ctl("release")
     ui = ctl("dialog_ui")
     assert ui["text_top"] > 2 and ui["highlight"] == 0, ui
-    ctl("dialog_select", end=1)
-    _dialog(ctl, want=lambda d: d is None)
+    _end(ctl)
     # Another speaker (the campaigns' Speaker tags), cp1252 text, an empty reply and
     # a line without replies (the game fills in "Continue" / "End Dialog")
     ctl("script_chunk", code='object pc=GetFirstPC(); vector v=GetPosition(pc);'
@@ -165,29 +162,15 @@ def test_test_conversation(game, ctl, tmp_path):
     ctl("dialog_select", index=0)
     d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The end"))
     assert [r["text"] for r in d["replies"]] == ["End Dialog"], d
-    ctl("dialog_select", end=1)
-    _dialog(ctl, want=lambda d: d is None)
-    log = open(os.path.join(game, "game.log"), errors="replace").read()
-    assert "window does not exist: 18532" not in log
+    _end(ctl)
+    assert not server_heard_nwpad(game)
 
 
-def test_mouse(game, ctl):
+def test_mouse(game, ctl, test_dlg):
     """The mouse on nwpad's conversation window (F37): NUI does the hit testing and
     nwpad takes the rows' input, so a click answers with the reply under it and the
     wheel moves the highlight; nothing reaches the server, the game's covered
     window or the world."""
-    import os
-    import subprocess
-    from conftest import ROOT
-    env = dict(os.environ, DISPLAY=os.environ.get("NWPAD_DISPLAY", ":0"))
-    geo = subprocess.run(["xdotool", "search", "--name", "Neverwinter Nights: Enhanced", "getwindowgeometry"],
-                         env=env, capture_output=True, text=True).stdout
-    wx, wy = [int(v) for v in geo.split("Position: ")[1].split()[0].split(",")]
-
-    def mouse(x, y, *args):
-        subprocess.run([os.path.join(ROOT, "tools", "uinput_mouse.py"), "--to", str(wx + x), str(wy + y),
-                        "--settle", "0.4", *args], env=env, check=True, capture_output=True)
-        time.sleep(0.3)
 
     def row_y(k):
         """Where row k is, as NUI reports it: dry clicks (recorded, not answered)
@@ -209,14 +192,7 @@ def test_mouse(game, ctl):
         finally:
             ctl("dialog_ui", dry=0)
 
-    if ctl("dialog")["dialog"]:
-        ctl("dialog_select", end=1)
-        _dialog(ctl, want=lambda d: d is None)
-    leaks = open(os.path.join(game, "game.log"), errors="replace").read().count("window does not exist")
-    dlg = os.path.join("/tmp", "nwpadtest.dlg")
-    subprocess.run([os.path.join(ROOT, "tools", "make_test_dlg.py"), dlg], check=True)
-    assert ctl("resource_publish", src=dlg, name="nwpadtest.dlg")["ok"]
-    ctl("script_chunk", code=START.replace('ActionStartConversation(pc, ""', 'ActionStartConversation(pc, "nwpadtest"'))
+    ctl("script_chunk", code=START % test_dlg)
     d = _dialog(ctl, want=lambda d: d and len(d["replies"]) == 5)
     time.sleep(0.5)
     assert ctl("dialog_ui")["mouse"]
@@ -228,7 +204,7 @@ def test_mouse(game, ctl):
         assert ctl("dialog")["dialog"] and ctl("state").get("client") == where, (x, yy)  # not the world's
     seq = d["seq"]
     mouse(100, y, "--jiggle", "2", "--click")  # "Many replies."
-    d = _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 83)
+    _dialog(ctl, want=lambda d: d and d["seq"] != seq and len(d["replies"]) == 83)
     time.sleep(0.5)
     deadline = time.monotonic() + 3
     while not ctl("dialog_ui")["mouse"]:  # the new window's rows
@@ -238,7 +214,5 @@ def test_mouse(game, ctl):
     mouse(100, y, "--jiggle", "2", "--wheel", "-3")  # three down
     assert ctl("dialog_ui")["highlight"] == 3
     assert ctl("state").get("client") == where  # no click reached the world
-    ctl("dialog_select", end=1)
-    _dialog(ctl, want=lambda d: d is None)
-    log = open(os.path.join(game, "game.log"), errors="replace").read()
-    assert log.count("window does not exist") == leaks  # nothing of nwpad's reached the server
+    _end(ctl)
+    assert not server_heard_nwpad(game)  # nothing of nwpad's reached the server

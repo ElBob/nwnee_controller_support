@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from conftest import ROOT
 
 
 def test_library_loaded(game):
