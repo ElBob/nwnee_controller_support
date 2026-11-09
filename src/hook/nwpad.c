@@ -160,7 +160,7 @@ static struct {
         uint64_t last_mouse_ms;   /* last mouse motion (0: none yet) */
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
-    struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes; } events; /* seen by the PollEvent hook */
+    struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes, pad_buttons; } events; /* seen by the PollEvent hook */
     struct {        /* nwpad's keys: the picker's (Steam Input maps a grip or button to the
                      * picker key, cfg.picker_key), and the conversation window's, which
                      * share confirm / cancel with it */
@@ -414,7 +414,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"virtual_stick\":%s,\"camera_owner\":\"%s\","
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
                          "\"filtered\":%llu,\"right_edge_fixes\":%llu,\"right_edge_pinned\":%s,"
-                         "\"last_motion_x\":%d,\"last_motion_xrel\":%d}",
+                         "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -422,7 +422,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.total, (unsigned long long)g.events.mouse_motion,
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered,
                          (unsigned long long)g.events.right_edge_fixes,
-                         g.right_edge_pinned ? "true" : "false", g.last_motion_x, g.last_motion_xrel);
+                         g.right_edge_pinned ? "true" : "false", g.last_motion_x, g.last_motion_xrel,
+                         (unsigned long long)g.events.pad_buttons);
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -750,6 +751,20 @@ static int nwpad_ShowCursor(int toggle) {
     return sdl.ShowCursor(toggle);
 }
 
+/* A pad button the picker uses, straight from the controller (a Steam Input layout can
+ * pass LB / RB through as gamepad buttons instead of sending [ and ]; either way works,
+ * and the keys' settings are unchanged). Only a press while the picker is open counts,
+ * as with the keys. */
+static void pad_button(const SDL_Event *event) {
+    if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
+    int step = event->cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER   ? -1
+               : event->cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1
+                                                                              : 0;
+    if (!step) return;
+    g.events.pad_buttons++;
+    if (nwpad_picker_open()) g.picker.shift += step;
+}
+
 static int nwpad_PollEvent(SDL_Event *event) {
     for (;;) {
         int r = sdl.PollEvent(event);
@@ -758,7 +773,8 @@ static int nwpad_PollEvent(SDL_Event *event) {
         g.events.total++;
         if (type >= SDL_CONTROLLER_FIRST && type <= SDL_CONTROLLER_LAST) {
             g.events.filtered++;
-            continue; /* the game never sees controller events; Steam Input covers buttons */
+            pad_button(event);
+            continue; /* the game never sees controller events; buttons are nwpad's or Steam Input's keys */
         }
         if (type == SDL_MOUSEMOTION) {
             g.last_motion_x = event->motion.x;

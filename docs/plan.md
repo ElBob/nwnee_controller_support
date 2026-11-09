@@ -27,7 +27,7 @@ Add true analog stick control of character movement and camera to the native Lin
 
 Steam Input is the controller layer. The library does not replace it, and the project does not remap sticks to keystrokes.
 
-- **Steam Input owns** buttons, trackpads, gyro, action sets, keystroke and mouse bindings, and all stick tuning: deadzones, response curves, inversion, and outer-ring behavior.
+- **Steam Input owns** buttons, trackpads, gyro, action sets, keystroke and mouse bindings, and all stick tuning: deadzones, response curves, inversion, and outer-ring behavior. (Robert, 2026-11-08: nwpad also reads the pad's own buttons for its features, starting with the picker's bumpers; the keystroke bindings keep working. The Console Port layout passed LB / RB through as `xinput_button`; the picker bindings replaced that with keys. Both work.)
 - **The Steam Input layout must output both sticks as gamepad sticks** ("Joystick Move" and "Joystick Camera"), not as mouse or keys. Otherwise the library sees no analog input.
 - **The library reads raw stick values** through the game's SDL GameController API and applies only a small fixed safety deadzone (§6.3) to absorb drift.
 - **The project ships recommended Steam Input layouts** for the Xbox controller and the Steam Deck, published as community layouts and documented in the README (M5).

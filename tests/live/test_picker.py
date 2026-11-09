@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from conftest import server_heard_nwpad, xkey
+from conftest import focus_game, server_heard_nwpad, xkey
 
 STEALTH = 3  # the test character's slot 3 (test_quickbar.py); ring slot 3 is due right
 
@@ -158,4 +158,44 @@ def test_bank_wheels(game, ctl):
         ctl("picker", action="cancel")
         ctl("quickbar_bank", bank=0)
         _stealth_off(ctl)
+    assert not server_heard_nwpad(game)
+
+
+def test_pad_bumpers(game, ctl, virtual_pad):
+    """LB / RB straight from the controller (gamepad buttons, no keys) move the picker's
+    big wheel just as [ and ] do, and do nothing while the picker is closed."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()  # SDL gives a pad's buttons only to the focused window
+    assert ctl("status")["controller"] == "open"
+    n0 = ctl("state")["events"]["pad_buttons"]
+    pad.press("rb")  # closed: nothing to move
+    time.sleep(0.3)
+    assert ctl("state")["events"]["pad_buttons"] == n0 + 1  # nwpad saw it ...
+    ctl("picker", action="open")
+    time.sleep(0.5)
+    assert ctl("state")["picker"]["bank"] == 0  # ... and it moved nothing
+    pad.press("rb")  # Plain -> Ctrl
+    time.sleep(0.5)
+    assert ctl("state")["picker"]["bank"] == 2
+    pad.press("rb")  # the right end
+    time.sleep(0.4)
+    assert ctl("state")["picker"]["bank"] == 2
+    pad.press("lb,lb")  # Ctrl -> Plain -> Shift
+    time.sleep(0.6)
+    assert ctl("state")["picker"]["bank"] == 1
+    pad.press("lb")  # the left end
+    time.sleep(0.4)
+    assert ctl("state")["picker"]["bank"] == 1
+    pad.press("rb")  # back to Plain, where Stealth Mode is
+    time.sleep(0.5)
+    assert ctl("state")["picker"]["bank"] == 0
+    ctl("stick", rx=1.0)
+    time.sleep(0.5)
+    ctl("release")
+    ctl("picker", action="confirm")
+    time.sleep(0.6)
+    assert ctl("state")["picker"]["last_used"] == STEALTH
+    assert ctl("state")["events"]["pad_buttons"] == n0 + 7
     assert not server_heard_nwpad(game)

@@ -68,8 +68,42 @@ cursor_rehide_ms = 1000
 TEST_CONFIG_KEYS = 8
 
 
+class VirtualPad:
+    """A virtual Xbox pad (tools/uinput_pad.py) the game's SDL opens like a real one."""
+
+    def __init__(self):
+        self.proc = subprocess.Popen([os.path.join(ROOT, "tools", "uinput_pad.py"), "--stdin", "--settle", "1.0"],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        self.ok = self.proc.stdout.readline().strip() == "ready"
+
+    def press(self, steps):
+        """Tap / press / release buttons (the tool's SPEC), and wait until they are played."""
+        self.proc.stdin.write(steps + "\n")
+        self.proc.stdin.flush()
+        assert self.proc.stdout.readline().strip() == "done"
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.stdin.close()
+            self.proc.wait(timeout=10)
+
+
 @pytest.fixture(scope="session")
-def game():
+def virtual_pad():
+    """A virtual pad that exists before the game starts: the game's SDL opens a pad that
+    is already there (one plugged in after the game started wasn't opened in a 20 s
+    wait here). None if it can't be made (python-evdev, /dev/uinput)."""
+    pad = VirtualPad()
+    if not pad.ok:
+        pad.close()
+        yield None
+        return
+    yield pad
+    pad.close()
+
+
+@pytest.fixture(scope="session")
+def game(virtual_pad):
     """Launch the game into TEST_MODULE once per session and stop it afterwards."""
     state = os.environ.get("NWPAD_STATE", os.path.expanduser("~/.nwpad"))
     os.makedirs(state, exist_ok=True)
@@ -130,6 +164,14 @@ def game_window_center():
     """X-screen coordinates of the middle of the game window."""
     x, y, w, h = game_window()
     return x + w // 2, y + h // 2
+
+
+def focus_game():
+    """Raise and focus the game's window. SDL delivers pad (and key) events only to a
+    focused window, so a test that plays pad buttons does this first."""
+    subprocess.run(["xdotool", "windowactivate", "--sync", _game_window_id()], env=X_ENV, check=True,
+                   capture_output=True)
+    time.sleep(0.5)
 
 
 def xkey(key, action="key"):

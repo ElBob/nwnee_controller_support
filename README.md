@@ -45,6 +45,11 @@ other two smaller; `[` and `]` (LB / RB) make the wheel to the left or right the
 active one, sliding the wheels over (nothing happens past either end).
 Enter, Escape, `[` and `]` are only nwpad's while the picker is open.
 
+The bumpers also work straight from the controller: a Steam Input layout can leave
+LB / RB as plain gamepad buttons (the Xbox pad's own, passed through) and nwpad moves
+the wheels itself, with no `[` / `]` keystrokes involved. The keys keep working, so
+use whichever your layout sends.
+
 ## Conversations
 
 While you talk to an NPC, nwpad shows the conversation in its own window over the
