@@ -70,6 +70,9 @@ steam-input/deck_a_confirms.py <controller_neptune.vdf>
 - `deck_add_picker.py`: RT opens and closes nwpad's quickbar picker (Scroll Lock), LB /
   RB send `[` and `]` (previous / next bank while it is open), the right stick's click
   sends Enter (use the highlighted button). View is already Escape.
+- `deck_pad_buttons.py` (optional, reversible with `--keys`): LB, RB and A go back to
+  plain gamepad buttons, which nwpad reads itself (wheels, use, answer), instead of
+  keystrokes; the keys keep working either way.
 - `deck_a_confirms.py`: A sends Enter too (it was a raw controller button, which the
   game never sees). Enter is the picker's confirm key; outside the picker it is the
   game's (the chat bar).

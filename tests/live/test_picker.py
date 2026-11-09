@@ -199,3 +199,37 @@ def test_pad_bumpers(game, ctl, virtual_pad):
     assert ctl("state")["picker"]["last_used"] == STEALTH
     assert ctl("state")["events"]["pad_buttons"] == n0 + 7
     assert not server_heard_nwpad(game)
+
+
+def test_pad_confirm_and_cancel(game, ctl, virtual_pad):
+    """A uses the highlighted button and Back (View) closes the picker, straight from the
+    controller, like Enter and Escape; with the picker closed they do nothing of nwpad's."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+    n0 = ctl("state")["events"]["pad_buttons"]
+    pad.press("a,back")  # closed: nwpad takes no action
+    time.sleep(0.3)
+    assert not ctl("state")["picker"]["open"]
+    assert ctl("state")["events"]["pad_buttons"] == n0 + 2
+    ctl("picker", action="open")  # Back closes it without using anything
+    time.sleep(0.4)
+    last = ctl("state")["picker"]["last_used"]
+    ctl("stick", rx=1.0)
+    time.sleep(0.4)
+    ctl("release")
+    pad.press("back")
+    time.sleep(0.5)
+    p = ctl("state")["picker"]
+    assert not p["open"] and p["last_used"] == last, p
+    ctl("picker", action="open")  # A uses the highlighted button: Stealth Mode
+    time.sleep(0.4)
+    ctl("stick", rx=1.0)
+    time.sleep(0.5)
+    ctl("release")
+    pad.press("a")
+    time.sleep(0.6)
+    p = ctl("state")["picker"]
+    assert not p["open"] and p["last_used"] == STEALTH, p
+    assert not server_heard_nwpad(game)

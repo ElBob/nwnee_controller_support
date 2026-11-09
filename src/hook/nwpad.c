@@ -751,18 +751,25 @@ static int nwpad_ShowCursor(int toggle) {
     return sdl.ShowCursor(toggle);
 }
 
-/* A pad button the picker uses, straight from the controller (a Steam Input layout can
- * pass LB / RB through as gamepad buttons instead of sending [ and ]; either way works,
- * and the keys' settings are unchanged). Only a press while the picker is open counts,
- * as with the keys. */
+/* The pad buttons nwpad uses, straight from the controller (a Steam Input layout can pass
+ * them through as gamepad buttons instead of sending keys; either way works, and the
+ * keys' settings are unchanged). LB / RB move the picker's wheels ([ and ]); A is the
+ * confirm key (Enter) and Back (the Xbox pad's View) the cancel key (Escape): in the
+ * conversation window they answer / end the conversation, otherwise they use / close
+ * the picker. Only a press counts, and only while one of those windows is open. */
 static void pad_button(const SDL_Event *event) {
     if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
-    int step = event->cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER   ? -1
-               : event->cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1
-                                                                              : 0;
-    if (!step) return;
+    int button = event->cbutton.button;
+    int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
+    int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_BACK ? 2 : 0; /* 1 confirm, 2 cancel */
+    if (!step && !act) return;
     g.events.pad_buttons++;
-    if (nwpad_picker_open()) g.picker.shift += step;
+    if (nwpad_dialogui_open()) {
+        if (act) g.picker.dialog_action = act;
+    } else if (nwpad_picker_open()) {
+        if (step) g.picker.shift += step;
+        else g.picker.action = act;
+    }
 }
 
 static int nwpad_PollEvent(SDL_Event *event) {

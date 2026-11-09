@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from conftest import ROOT, mouse, server_heard, server_heard_nwpad, xkey
+from conftest import ROOT, focus_game, mouse, server_heard, server_heard_nwpad, xkey
 
 # The nearest NPC to the test character, Rules Enforcer D, has a conversation.
 START = ('object pc=GetFirstPC(); object n=GetNearestCreature(CREATURE_TYPE_PLAYER_CHAR, PLAYER_CHAR_NOT_PC, pc, 1);'
@@ -219,3 +219,21 @@ def test_mouse(game, ctl, test_dlg):
     # Nothing reached the server for any window: neither nwpad's nor (through a
     # click that fell through to it) the game's own.
     assert len(server_heard(game)) == heard, server_heard(game)
+
+
+def test_pad_answer_and_end(game, ctl, virtual_pad):
+    """In the conversation window, A answers with the highlighted reply and Back (View)
+    ends the conversation, straight from the controller, like Enter and Escape."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    focus_game()
+    ctl("script_chunk", code=START % "")
+    d = _dialog(ctl, want=lambda d: d and d["replies"])
+    time.sleep(0.5)
+    seq = d["seq"]
+    virtual_pad.press("a")  # answers reply 1
+    _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The Contest Of Champions is"))
+    virtual_pad.press("back")  # ends it
+    _dialog(ctl, want=lambda d: d is None)
+    assert not ctl("dialog_ui")["open"]
+    assert not server_heard_nwpad(game)

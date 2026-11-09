@@ -8,7 +8,7 @@ Creates a pad SDL's game controller database knows (Microsoft Xbox 360 pad, vend
 045e product 028e, with the usual evdev button and axis codes), waits for the
 compositor and the game to find it, then plays SPEC and keeps the device for
 --hold seconds. SPEC is comma-separated steps: a button name (a b x y lb rb back
-start ls rs) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
+start guide ls rs) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
 With --stdin the pad stays until stdin closes (a line "ready" is printed once it exists).
 The device disappears when the script ends.
 """
@@ -24,7 +24,7 @@ except ImportError:
 BUTTONS = {
     "a": e.BTN_SOUTH, "b": e.BTN_EAST, "x": e.BTN_NORTH, "y": e.BTN_WEST,
     "lb": e.BTN_TL, "rb": e.BTN_TR, "back": e.BTN_SELECT, "start": e.BTN_START,
-    "ls": e.BTN_THUMBL, "rs": e.BTN_THUMBR,
+    "guide": e.BTN_MODE, "ls": e.BTN_THUMBL, "rs": e.BTN_THUMBR,
 }
 
 
