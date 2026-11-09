@@ -14,6 +14,8 @@ bool nwpad_nui_create(int token, const char *id, const char *json);
 /* Set bind `name` of window `token` to a JSON value. Only binds the window's
  * definition uses can be set (others would reach the server, F32). */
 bool nwpad_nui_bind(int token, const char *name, const char *json_value);
+/* Several binds of one window in one message (one pass through the game's handler). */
+bool nwpad_nui_bind_many(int token, int count, const char *const *names, const char *const *json_values);
 bool nwpad_nui_destroy(int token);
 /* Mouse input on an element of one of nwpad's windows (F37). NUI does the hit
  * testing; nwpad takes over the element's event callbacks, so nothing is queued

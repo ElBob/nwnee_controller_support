@@ -442,7 +442,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           ",\"sticks\":{\"left\":%.3f,\"right\":%.3f},"
                           "\"cursor\":{\"hooked\":%s,\"stick_hidden\":%s,\"game_wants\":%s,\"shown\":%s,"
                           "\"nudges\":%llu,\"sticks_for_ms\":%lld,\"mouse_still_ms\":%lld},"
-                          "\"picker\":{\"open\":%s,\"bank\":%d,\"selected\":%d,\"last_used\":%d,\"key_held\":%s}",
+                          "\"picker\":{\"open\":%s,\"bank\":%d,\"selected\":%d,\"last_used\":%d,\"key_held\":%s,\"sliding\":%s}",
                           nwpad_magnitude(g.last_left), nwpad_magnitude(g.last_right),
                           sdl.ShowCursor ? "true" : "false", g.cursor.stick_hidden ? "true" : "false",
                           g.cursor.game_wants ? "true" : "false",
@@ -451,7 +451,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                           g.cursor.sticks_since_ms ? (long long)(now_ms() - g.cursor.sticks_since_ms) : -1LL,
                           g.cursor.last_mouse_ms ? (long long)(now_ms() - g.cursor.last_mouse_ms) : -1LL,
                           nwpad_picker_open() ? "true" : "false", nwpad_picker_bank(), nwpad_picker_selected(),
-                          nwpad_picker_last_used(), g.picker.held ? "true" : "false");
+                          nwpad_picker_last_used(), g.picker.held ? "true" : "false",
+                          nwpad_picker_animating() ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n, ",\"move_style\":\"%s\",\"move_mode\":\"%s\",\"always_run\":%s",
                           styles[g.move_style], modes[g.move_mode],

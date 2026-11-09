@@ -285,7 +285,7 @@ static bool deliver(void *msg, unsigned char subtype) {
  * server (DynamicBinding::NotifyParent, F32). So each window's bind names are
  * taken from its definition, and only those may be set. */
 #define MAX_WINDOWS 8
-#define MAX_BINDS 64
+#define MAX_BINDS 128
 static struct {
     int token;
     int count;
@@ -345,6 +345,21 @@ bool nwpad_nui_bind(int token, const char *name, const char *json_value) {
     put_int(msg, token);
     put_string(msg, name);
     if (!put_json(msg, json_value)) return false;
+    return deliver(msg, NUI_BINDS);
+}
+
+bool nwpad_nui_bind_many(int token, int count, const char *const *names, const char *const *json_values) {
+    if (!ready() || count <= 0) return false;
+    for (int i = 0; i < count; i++)
+        if (!bind_known(token, names[i])) return false;
+    void *msg = message();
+    begin(msg);
+    put_int(msg, count);
+    for (int i = 0; i < count; i++) {
+        put_int(msg, token);
+        put_string(msg, names[i]);
+        if (!put_json(msg, json_values[i])) return false;
+    }
     return deliver(msg, NUI_BINDS);
 }
 

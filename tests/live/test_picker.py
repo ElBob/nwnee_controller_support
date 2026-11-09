@@ -127,10 +127,19 @@ def test_bank_wheels(game, ctl):
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 2
         assert ctl("state")["events"]["filtered"] >= filtered0 + 2  # its down and up
+        filtered = ctl("state")["events"]["filtered"]
+        _key("key", "bracketright")  # the last bank: no wrap, and still the picker's key
+        time.sleep(0.4)
+        assert ctl("state")["picker"]["bank"] == 2
+        assert ctl("state")["events"]["filtered"] >= filtered + 2
         _key("key", "bracketleft")
         _key("key", "bracketleft")
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 0
+        _key("key", "bracketleft")  # the first bank: no wrap either
+        time.sleep(0.4)
+        assert ctl("state")["picker"]["bank"] == 0
+        assert not ctl("state")["picker"]["sliding"]
         ctl("stick", rx=1.0)  # bank 0, slot 3: Stealth Mode
         time.sleep(0.5)
         ctl("release")

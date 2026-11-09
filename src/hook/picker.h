@@ -20,9 +20,10 @@ bool nwpad_picker_frame(bool want, nwpad_vec2 right, bool in_game);
  * False if the picker isn't open (the key is then the game's). */
 bool nwpad_picker_shift(int direction);
 
-/* For status: the open picker's active bank (-1 closed) and highlighted ring slot
- * (-1 none), and whether open. */
+/* For status: the open picker's active bank (-1 closed), and whether the wheels are
+ * sliding to it. */
 int nwpad_picker_bank(void);
+bool nwpad_picker_animating(void);
 
 /* Close the open picker now, using the highlighted button if `use` (the confirm
  * key) or not (the cancel key). */

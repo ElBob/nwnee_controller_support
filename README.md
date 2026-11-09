@@ -38,9 +38,10 @@ the middle of the screen, with the game's own icons. Point with the right stick 
 trackpad set to act as the right stick) to highlight a button; its name shows in the
 centre. Press the confirm key (Enter; right stick click in the layout) to use it,
 exactly as clicking it would, or the cancel key (Escape; View) or the picker key
-again to close it. The other two banks show as smaller wheels on either side; `[`
-and `]` (LB / RB) make the previous or next one the active wheel. Enter, Escape, `[`
-and `]` are only nwpad's while the picker is open.
+again to close it. The three banks stay side by side in order, the active one at full
+size and the other two smaller; `[` and `]` (LB / RB) make the bank to the left or
+right the active one, sliding the wheels over (nothing happens past either end).
+Enter, Escape, `[` and `]` are only nwpad's while the picker is open.
 
 ## Conversations
 
