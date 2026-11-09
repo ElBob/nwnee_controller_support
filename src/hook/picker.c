@@ -1,5 +1,5 @@
-/* See picker.h. One window holds three wheels, one per quickbar bank, side by side in
- * bank order: the active bank's at full size, the other two at SMALL (no text). Two
+/* See picker.h. One window holds three wheels, one per quickbar bank, side by side
+ * (Shift, Plain, Ctrl): the active bank's at full size, the other two at SMALL (no text). Two
  * small wheels and a big one are the same total width in any order, so the row keeps
  * its width, stays centred, and changing the active bank just scales the wheels in
  * place over ANIM_NS (the neighbours slide to make room). Every wheel's rects are
@@ -26,14 +26,18 @@
 #define SMALL 0.5f      /* the other wheels' scale */
 #define GAP 24.0f       /* between wheels */
 #define BANKS 3
-#define START_BANK 1    /* the picker always opens on the middle bank, whatever the quickbar shows */
+/* The wheels, left to right, are Shift, Plain, Ctrl (banks 1, 0, 2); the picker always
+ * opens on the middle one (Plain), whatever the quickbar shows. Positions are
+ * 0 (left), 1, 2; everything on screen, and the binds' names, go by position. */
+static const int ORDER[BANKS] = {1, 0, 2};
+#define START_POS 1
 #define WIDTH (SIZE * (1 + 2 * SMALL) + 2 * GAP) /* the row: one big wheel, two small, any order */
 #define ANIM_NS 180000000ull
 #define BATCH 96        /* binds per message: 3 discs, 36 slots, 36 names, and flags */
 
 static struct {
     bool open, animating;
-    int bank, selected, last_used; /* last_used: quickbar slot 0-35, -1 none */
+    int pos, bank, selected, last_used; /* the big wheel's place, its bank; last_used: quickbar slot 0-35, -1 none */
     float scale[BANKS], from[BANKS]; /* each wheel's scale now, and when the slide began */
     float sent_scale[BANKS], sent_x[BANKS]; /* what each wheel's binds were last set to (-1: nothing yet) */
     uint64_t start_ns;
@@ -49,17 +53,18 @@ bool nwpad_picker_animating(void) { return pk.open && pk.animating; }
 static const nwpad_qb_slot *bank_slot(int bank, int i) { return &pk.slots[bank * NWPAD_PICKER_SLOTS + i]; }
 static bool has_icon(const nwpad_qb_slot *s) { return s->type != 0 && (s->icon[0] || s->parts[0][0]); }
 static bool name_only(const nwpad_qb_slot *s) { return s->type != 0 && !has_icon(s); } /* shown as its name */
+static int bank_at(int pos) { return ORDER[pos]; }
 
 /* Whether wheel w has a slot shown by its name (only then does the window define the
  * wheel's name / dot visibility binds; a bind the window doesn't use isn't sent). */
 static bool has_names(int w) {
     for (int i = 0; i < NWPAD_PICKER_SLOTS; i++)
-        if (name_only(bank_slot(w, i))) return true;
+        if (name_only(bank_slot(bank_at(w), i))) return true;
     return false;
 }
 
-static void rest_scale(int bank, float s[BANKS]) {
-    for (int w = 0; w < BANKS; w++) s[w] = w == bank ? 1.0f : SMALL;
+static void rest_scale(int pos, float s[BANKS]) {
+    for (int w = 0; w < BANKS; w++) s[w] = w == pos ? 1.0f : SMALL;
 }
 
 /* Wheel centres along the row (window content coordinates) for the given scales. */
@@ -133,7 +138,7 @@ static void apply_layout(const float s[BANKS], bool text) {
             slot_centre_at(i, cx[w], s[w], &x, &y);
             snprintf(name, sizeof name, "s%d_%d", w, i);
             put_rect(name, x, y, ICON * s[w]);
-            if (text && name_only(bank_slot(w, i))) {
+            if (text && name_only(bank_slot(bank_at(w), i))) {
                 char rect[96];
                 snprintf(name, sizeof name, "x%d_%d", w, i);
                 snprintf(rect, sizeof rect, "{\"x\":%.1f,\"y\":%.1f,\"w\":%.1f,\"h\":20.0}", x - ICON / 2 - 6, y - 10, ICON + 12);
@@ -169,7 +174,7 @@ static size_t draw_wheel(char *json, size_t n, size_t cap, int w) {
          "\"line_thickness\":1.0,\"order\":-1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"bind\":\"d%d\"}}",
          w ? "," : "", w);
     for (int i = 0; i < NWPAD_PICKER_SLOTS; i++) {
-        const nwpad_qb_slot *s = bank_slot(w, i);
+        const nwpad_qb_slot *s = bank_slot(bank_at(w), i);
         if (has_icon(s)) { /* one image, or an item's parts bottom to top (F34) */
             const char *refs[3] = {s->icon[0] ? s->icon : s->parts[0], s->icon[0] ? "" : s->parts[1],
                                    s->icon[0] ? "" : s->parts[2]};
@@ -224,11 +229,11 @@ static bool build(void) {
             ",{\"type\":2,\"enabled\":{\"bind\":\"hl_on\"},\"color\":{\"r\":235,\"g\":190,\"b\":80,\"a\":255},\"fill\":false,"
             "\"line_thickness\":3.0,\"order\":1,\"render\":0,\"arrayBinds\":false,\"rect\":{\"bind\":\"hl\"}}]}}");
     if (n >= sizeof json || !nwpad_nui_create(TOKEN, "nwpad_picker", json)) return false;
-    rest_scale(pk.bank, pk.scale);
+    rest_scale(pk.pos, pk.scale);
     pk.animating = false;
     for (int w = 0; w < BANKS; w++) pk.sent_scale[w] = pk.sent_x[w] = -1;
     apply_layout(pk.scale, true);
-    set_names(pk.bank);
+    set_names(pk.pos);
     nwpad_nui_bind(TOKEN, "hl_on", "false");
     nwpad_nui_bind(TOKEN, "hl", "{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0}");
     nwpad_nui_bind(TOKEN, "name", "\"\"");
@@ -240,17 +245,17 @@ static bool build(void) {
 static void show_selection(int previous, int now) {
     char rect[96], bind[16], esc[300], value[320];
     float cx[BANKS], x, y, s[BANKS];
-    rest_scale(pk.bank, s);
+    rest_scale(pk.pos, s);
     geometry(s, cx);
-    int w = pk.bank;
-    if (previous >= 0 && has_icon(bank_slot(w, previous))) {
+    int w = pk.pos;
+    if (previous >= 0 && has_icon(bank_slot(pk.bank, previous))) {
         slot_centre_at(previous, cx[w], 1.0f, &x, &y);
         rect_json(rect, sizeof rect, x, y, ICON);
         snprintf(bind, sizeof bind, "s%d_%d", w, previous);
         nwpad_nui_bind(TOKEN, bind, rect);
     }
     slot_centre_at(now, cx[w], 1.0f, &x, &y);
-    if (has_icon(bank_slot(w, now))) {
+    if (has_icon(bank_slot(pk.bank, now))) {
         rect_json(rect, sizeof rect, x, y, ICON_PICKED);
         snprintf(bind, sizeof bind, "s%d_%d", w, now);
         nwpad_nui_bind(TOKEN, bind, rect);
@@ -258,7 +263,7 @@ static void show_selection(int previous, int now) {
     rect_json(rect, sizeof rect, x, y, ICON_PICKED + 10);
     nwpad_nui_bind(TOKEN, "hl", rect);
     nwpad_nui_bind(TOKEN, "hl_on", "true");
-    const nwpad_qb_slot *slot = bank_slot(w, now);
+    const nwpad_qb_slot *slot = bank_slot(pk.bank, now);
     nwpad_game_json(esc, sizeof esc, slot->type ? slot->name : "");
     snprintf(value, sizeof value, "\"%s\"", esc);
     nwpad_nui_bind(TOKEN, "name", value);
@@ -274,7 +279,7 @@ static float ease(float t) {
 static void animate(void) {
     float rest[BANKS], s[BANKS];
     float t = (float)(nwpad_now_ns() - pk.start_ns) / (float)ANIM_NS;
-    rest_scale(pk.bank, rest);
+    rest_scale(pk.pos, rest);
     for (int w = 0; w < BANKS; w++) s[w] = pk.from[w] + (rest[w] - pk.from[w]) * ease(t);
     memcpy(pk.scale, s, sizeof s);
     if (t < 1) {
@@ -283,18 +288,19 @@ static void animate(void) {
     }
     pk.animating = false;
     apply_layout(rest, true); /* settled: the names, the highlight */
-    set_names(pk.bank);
+    set_names(pk.pos);
     if (pk.selected >= 0) show_selection(-1, pk.selected);
 }
 
-/* The banks keep their order (a b c, left to right): `[` and `]` make the neighbour on
- * that side the big one, and at either end do nothing (the key is still the picker's). */
+/* The wheels keep their places: `[` and `]` make the neighbour on that side the big
+ * one, and at either end do nothing (the key is still the picker's). */
 bool nwpad_picker_shift(int direction) {
     if (!pk.open) return false;
-    int next = pk.bank + (direction < 0 ? -1 : 1);
+    int next = pk.pos + (direction < 0 ? -1 : 1);
     if (next < 0 || next >= BANKS) return true;
     memcpy(pk.from, pk.scale, sizeof pk.from); /* from wherever the wheels are (a slide in progress) */
-    pk.bank = next;
+    pk.pos = next;
+    pk.bank = bank_at(next);
     pk.animating = true;
     pk.start_ns = nwpad_now_ns();
     nwpad_nui_bind(TOKEN, "hl_on", "false");
@@ -317,7 +323,8 @@ bool nwpad_picker_frame(bool want, nwpad_vec2 right, bool in_game) {
     if (!pk.open) {
         if (!want || !in_game) return false;
         if (!nwpad_quickbar_read(pk.slots)) return false; /* all three banks, shown or not */
-        pk.bank = START_BANK;
+        pk.pos = START_POS;
+        pk.bank = bank_at(START_POS);
         pk.selected = -1;
         pk.open = build();
         return pk.open;
