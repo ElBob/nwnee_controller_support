@@ -59,4 +59,19 @@ steam-input/deck_from_console_port.py \
   (nwpad camera). The companion menu currently has no other home.
 - Trackpads, triggers, buttons, back grips, and the quickbar radial are unchanged.
 
+Then two more steps, each with its own backup, in order (also with Steam closed, or
+at least the game):
+
+```
+steam-input/deck_add_picker.py <controller_neptune.vdf>
+steam-input/deck_a_confirms.py <controller_neptune.vdf>
+```
+
+- `deck_add_picker.py`: RT opens and closes nwpad's quickbar picker (Scroll Lock), LB /
+  RB send `[` and `]` (previous / next bank while it is open), the right stick's click
+  sends Enter (use the highlighted button). View is already Escape.
+- `deck_a_confirms.py`: A sends Enter too (it was a raw controller button, which the
+  game never sees). Enter is the picker's confirm key; outside the picker it is the
+  game's (the chat bar).
+
 The workshop layout itself isn't part of this repository.
