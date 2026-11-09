@@ -30,8 +30,11 @@
 #define TOKEN_OF(slot) (TOKEN_BASE + (slot))
 #define TOKEN TOKEN_OF(ui.slot)
 #define WIDTH 360.0f      /* covers the game's window (~350 wide at (5,5), F36) */
-#define PORTRAIT_W 64.0f
-#define PORTRAIT_H 100.0f
+#define PORTRAIT_SRC_W 64.0f /* the picture in the portrait texture (64 x 128, picture in the top 100 rows) */
+#define PORTRAIT_SRC_H 100.0f
+#define PORTRAIT_SCALE 1.25f /* drawn larger than the game's window draws it: easier to see on the Deck */
+#define PORTRAIT_W (PORTRAIT_SRC_W * PORTRAIT_SCALE)
+#define PORTRAIT_H (PORTRAIT_SRC_H * PORTRAIT_SCALE)
 #define LINE_H 20.0f      /* default NUI font (17 px) line */
 #define CHAR_W 7.6f       /* its average advance, for wrapping estimates */
 #define PAD 12.0f
@@ -344,9 +347,12 @@ static bool build(void) {
     n += (size_t)snprintf(json + n, sizeof json - n,
         /* (no row height: NUI's padding wouldn't fit around a full-height portrait) */
         "{\"type\":\"row\",\"label\":null,\"value\":null,\"children\":["
-        /* portrait textures are 64x128 with the picture in the top 100 rows */
-        "{\"type\":\"image\",\"label\":null,\"value\":\"%s\",\"image_aspect\":0,\"image_halign\":0,\"image_valign\":1,"
-        "\"image_region\":{\"x\":0,\"y\":0,\"w\":64,\"h\":100},\"width\":%.1f,\"height\":%.1f},"
+        /* The region is the picture (64 x 100 of the 64 x 128 texture); the box has its
+         * shape, scaled, so stretch (aspect 5) keeps the ratio. "Fit" drew the picture
+         * narrower than that shape (seen against the game's own window: a face too tall
+         * for its width). */
+        "{\"type\":\"image\",\"label\":null,\"value\":\"%s\",\"image_aspect\":5,\"image_halign\":0,\"image_valign\":1,"
+        "\"image_region\":{\"x\":0,\"y\":0,\"w\":%.0f,\"h\":%.0f},\"width\":%.1f,\"height\":%.1f},"
         "{\"type\":\"col\",\"label\":null,\"value\":null,\"children\":["
         "{\"type\":\"label\",\"label\":null,\"value\":\"%s\",\"text_halign\":1,\"text_valign\":0,\"height\":%.1f,"
         "\"foreground_color\":{\"r\":125,\"g\":180,\"b\":255,\"a\":255}},"
@@ -358,7 +364,7 @@ static bool build(void) {
         "\"draw_list\":[{\"type\":6,\"enabled\":true,\"color\":{\"r\":173,\"g\":142,\"b\":96,\"a\":110},"
         "\"fill\":null,\"line_thickness\":1.0,\"order\":1,\"render\":0,\"arrayBinds\":false,"
         "\"a\":{\"x\":0.0,\"y\":%.1f},\"b\":{\"x\":%.1f,\"y\":%.1f}}]}",
-        ui.d.portrait, PORTRAIT_W, PORTRAIT_H, name, LINE_H, mouse_broken ? "" : "\"id\":\"line\",", body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
+        ui.d.portrait, PORTRAIT_SRC_W, PORTRAIT_SRC_H, PORTRAIT_W, PORTRAIT_H, name, LINE_H, mouse_broken ? "" : "\"id\":\"line\",", body_h, big_font ? ",\"font\":\"" FONT "\"" : "",
         scrolls ? scrollbar(body_h - BAR_TRIM) : "", SEP_H, SEP_H / 2, WIDTH - 2 * PAD, SEP_H / 2);
     ui.room = screen_h() - h - 2 * PAD - QUICKBAR_H;
     for (int i = 0; i < ui.d.count; i++) {
