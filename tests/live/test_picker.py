@@ -19,9 +19,18 @@ def _stealth_off(ctl):
         time.sleep(0.5)
 
 
-def _pick(ctl, rx, ry):
+def _open_on_stealth_bank(ctl):
+    """Open the picker. It opens on the middle bank (1); Stealth Mode is in bank 0."""
     ctl("picker", action="open")
     time.sleep(0.4)
+    assert ctl("state")["picker"]["bank"] == 1
+    ctl("picker_shift", dir=-1)
+    time.sleep(0.5)
+    assert ctl("state")["picker"]["bank"] == 0
+
+
+def _pick(ctl, rx, ry):
+    _open_on_stealth_bank(ctl)
     p = ctl("state")["picker"]
     assert p["open"] and p["selected"] == -1, p
     yaw0 = ctl("state")["camera"]["yaw"]
@@ -81,10 +90,12 @@ def test_picker_key_toggle(game, ctl):
     assert ctl("state")["events"]["filtered"] == filtered0
     _key("key", "Escape")  # ... and closes it again
     time.sleep(0.3)
-    _key("key")  # open
+    _key("key")  # open: on the middle bank
     time.sleep(0.5)
     p = ctl("state")["picker"]
-    assert p["open"], p
+    assert p["open"] and p["bank"] == 1, p
+    _key("key", "bracketleft")  # Stealth Mode is in bank 0
+    time.sleep(0.5)
     ctl("stick", rx=1.0)  # pointing, as the trackpad would
     time.sleep(0.5)
     ctl("release")
@@ -98,6 +109,8 @@ def test_picker_key_toggle(game, ctl):
     for close in ("Escape", "Scroll_Lock"):  # cancel, or the picker key again
         before = ctl("state")["picker"]["last_used"]
         _key("key")
+        time.sleep(0.4)
+        _key("key", "bracketleft")
         time.sleep(0.4)
         ctl("stick", rx=1.0)
         time.sleep(0.4)
@@ -118,11 +131,11 @@ def test_bank_wheels(game, ctl):
     _key("key", "bracketright")  # picker closed: the game's key
     time.sleep(0.3)
     assert ctl("state")["events"]["filtered"] == filtered0
-    assert ctl("quickbar_bank", bank=1)["ok"]  # the quickbar shows bank 1
+    assert ctl("quickbar_bank", bank=2)["ok"]  # the quickbar shows bank 2 ...
     try:
         ctl("picker", action="open")
         time.sleep(0.4)
-        assert ctl("state")["picker"]["bank"] == 1
+        assert ctl("state")["picker"]["bank"] == 1  # ... and the picker still opens on the middle one
         _key("key", "bracketright")  # open: the next bank
         time.sleep(0.4)
         assert ctl("state")["picker"]["bank"] == 2

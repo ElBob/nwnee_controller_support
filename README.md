@@ -33,12 +33,13 @@ The game log shows `[nwpad] version ... loaded` when the library is active. Set 
 ## Quickbar picker
 
 Like Baldur's Gate 3's radial menu: press the picker key (default Scroll Lock; the
-nwpad Xbox layout puts it on RT) and a ring of the visible quickbar bank appears in
-the middle of the screen, with the game's own icons. Point with the right stick (or a
+nwpad Xbox layout puts it on RT) and the three quickbar banks appear in the middle of
+the screen as wheels, with the game's own icons. It always opens on the middle bank,
+whichever one the quickbar is showing. Point with the right stick (or a
 trackpad set to act as the right stick) to highlight a button; its name shows in the
 centre. Press the confirm key (Enter; right stick click in the layout) to use it,
 exactly as clicking it would, or the cancel key (Escape; View) or the picker key
-again to close it. The three banks stay side by side in order, the active one at full
+again to close it. The wheels stay side by side in bank order, the active one at full
 size and the other two smaller; `[` and `]` (LB / RB) make the bank to the left or
 right the active one, sliding the wheels over (nothing happens past either end).
 Enter, Escape, `[` and `]` are only nwpad's while the picker is open.

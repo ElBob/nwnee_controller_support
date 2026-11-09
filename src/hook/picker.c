@@ -26,6 +26,7 @@
 #define SMALL 0.5f      /* the other wheels' scale */
 #define GAP 24.0f       /* between wheels */
 #define BANKS 3
+#define START_BANK 1    /* the picker always opens on the middle bank, whatever the quickbar shows */
 #define WIDTH (SIZE * (1 + 2 * SMALL) + 2 * GAP) /* the row: one big wheel, two small, any order */
 #define ANIM_NS 180000000ull
 #define BATCH 96        /* binds per message: 3 discs, 36 slots, 36 names, and flags */
@@ -315,9 +316,8 @@ void nwpad_picker_close(bool use) {
 bool nwpad_picker_frame(bool want, nwpad_vec2 right, bool in_game) {
     if (!pk.open) {
         if (!want || !in_game) return false;
-        int bank = nwpad_quickbar_bank();
-        if (bank < 0 || !nwpad_quickbar_read(pk.slots)) return false;
-        pk.bank = bank;
+        if (!nwpad_quickbar_read(pk.slots)) return false; /* all three banks, shown or not */
+        pk.bank = START_BANK;
         pk.selected = -1;
         pk.open = build();
         return pk.open;
