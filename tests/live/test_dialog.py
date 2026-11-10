@@ -222,18 +222,22 @@ def test_mouse(game, ctl, test_dlg):
 
 
 def test_pad_answer_and_end(game, ctl, virtual_pad):
-    """In the conversation window, A answers with the highlighted reply and Back (View)
-    ends the conversation, straight from the controller, like Enter and Escape."""
+    """In the conversation window, A answers with the highlighted reply and B ends the
+    conversation, straight from the controller, like Enter and Escape. The bumpers open
+    no picker meanwhile (as the picker key doesn't)."""
     if virtual_pad is None:
         pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
     focus_game()
     ctl("script_chunk", code=START % "")
     d = _dialog(ctl, want=lambda d: d and d["replies"])
     time.sleep(0.5)
+    virtual_pad.press("lb,rb")
+    time.sleep(0.5)
+    assert not ctl("state")["picker"]["open"]
     seq = d["seq"]
     virtual_pad.press("a")  # answers reply 1
     _dialog(ctl, want=lambda d: d and d["seq"] != seq and d["line"].startswith("The Contest Of Champions is"))
-    virtual_pad.press("back")  # ends it
+    virtual_pad.press("b")  # ends it
     _dialog(ctl, want=lambda d: d is None)
     assert not ctl("dialog_ui")["open"]
     assert not server_heard_nwpad(game)

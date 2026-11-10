@@ -17,6 +17,7 @@
 
 #include "../core/nwpad_core.h"
 #include "backend.h"
+#include "game.h"
 #include "control.h"
 #include "sigs.h"
 #include "settings.h"
@@ -161,6 +162,7 @@ static struct {
         uint64_t nudges; /* edge nudges (re-notes F26) */
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes, pad_buttons; } events; /* seen by the PollEvent hook */
+    int pad_game_action;                 /* Start (1: the game menu) / Select (2: the map), for the next frame */
     struct {        /* nwpad's keys: the picker's (Steam Input maps a grip or button to the
                      * picker key, cfg.picker_key), and the conversation window's, which
                      * share confirm / cancel with it */
@@ -414,7 +416,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"virtual_stick\":%s,\"camera_owner\":\"%s\","
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
                          "\"filtered\":%llu,\"right_edge_fixes\":%llu,\"right_edge_pinned\":%s,"
-                         "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu}",
+                         "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu,"
+                         "\"game_menu_open\":%s,\"game_map_open\":%s}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -423,7 +426,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.keys, (unsigned long long)g.events.filtered,
                          (unsigned long long)g.events.right_edge_fixes,
                          g.right_edge_pinned ? "true" : "false", g.last_motion_x, g.last_motion_xrel,
-                         (unsigned long long)g.events.pad_buttons);
+                         (unsigned long long)g.events.pad_buttons,
+                         nwpad_game_menu_open() ? "true" : "false", nwpad_game_map_open() ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -628,6 +632,16 @@ static void nwpad_frame(void) {
         nwpad_dialog_init();
         if (g.cfg.dialog) nwpad_dialogui_setup_font();
     }
+    NWPAD_WHERE("pad game action");
+    if (g.pad_game_action) {
+        /* Start and Select are the game's menu and map, on the game thread; neither does
+         * anything while the picker or a conversation window of ours is up. */
+        if (!nwpad_picker_open() && !nwpad_dialogui_open() && nwpad_backend_in_game()) {
+            if (g.pad_game_action == 1) nwpad_backend_toggle_game_menu();
+            else nwpad_backend_toggle_map();
+        }
+        g.pad_game_action = 0;
+    }
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
@@ -751,24 +765,32 @@ static int nwpad_ShowCursor(int toggle) {
     return sdl.ShowCursor(toggle);
 }
 
-/* The pad buttons nwpad uses, straight from the controller (a Steam Input layout can pass
- * them through as gamepad buttons instead of sending keys; either way works, and the
- * keys' settings are unchanged). LB / RB move the picker's wheels ([ and ]); A is the
- * confirm key (Enter) and Back (the Xbox pad's View) the cancel key (Escape): in the
- * conversation window they answer / end the conversation, otherwise they use / close
- * the picker. Only a press counts, and only while one of those windows is open. */
+/* The pad buttons nwpad uses, straight from the controller (a Steam Input layout passes
+ * them through as gamepad buttons; the keys they stand for keep working too, and the
+ * keys' settings are unchanged). Either bumper opens the picker (the picker key); once
+ * it is open LB / RB move its wheels ([ and ]). A is the confirm key (Enter) and B the
+ * cancel key (Escape): in the conversation window they answer / end the conversation,
+ * in the picker they use the highlighted button / close it. Only a press counts; with
+ * neither window open only the bumpers do anything, and in a conversation there is no
+ * picker (as with the key). */
 static void pad_button(const SDL_Event *event) {
     if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
     int button = event->cbutton.button;
     int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
-    int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_BACK ? 2 : 0; /* 1 confirm, 2 cancel */
-    if (!step && !act) return;
+    int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_B ? 2 : 0; /* 1 confirm, 2 cancel */
+    if (!step && !act && button != SDL_CONTROLLER_BUTTON_START && button != SDL_CONTROLLER_BUTTON_BACK) return;
     g.events.pad_buttons++;
+    if (button == SDL_CONTROLLER_BUTTON_START || button == SDL_CONTROLLER_BUTTON_BACK) {
+        g.pad_game_action = button == SDL_CONTROLLER_BUTTON_START ? 1 : 2; /* 1 game menu, 2 map: the frame sends it */
+        return;
+    }
     if (nwpad_dialogui_open()) {
         if (act) g.picker.dialog_action = act;
     } else if (nwpad_picker_open()) {
         if (step) g.picker.shift += step;
         else g.picker.action = act;
+    } else if (step) {
+        g.picker.latched = true; /* the frame opens it, as it does for the picker key */
     }
 }
 

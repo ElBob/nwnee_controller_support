@@ -34,6 +34,10 @@ bool nwpad_backend_camera_set(const nwpad_camera *cam);
 
 bool nwpad_backend_send_move(const nwpad_move_intent *intent);
 bool nwpad_backend_send_stop(void);
+/* The game's own handling of its menu and map keys (F: the in-game options panel, D: the
+ * area map), so a pad button does what the key does, guards and all (re-notes F38). */
+bool nwpad_backend_toggle_game_menu(void);
+bool nwpad_backend_toggle_map(void);
 /* Once per frame, for timed follow-ups such as releasing the stop tap. */
 void nwpad_backend_tick(uint64_t now_ms);
 

@@ -45,12 +45,15 @@ other two smaller; `[` and `]` (LB / RB) make the wheel to the left or right the
 active one, sliding the wheels over (nothing happens past either end).
 Enter, Escape, `[` and `]` are only nwpad's while the picker is open.
 
-LB / RB, A and View also work straight from the controller: a Steam Input layout can
-leave them as plain gamepad buttons (the Xbox pad's own, passed through) and nwpad
-does it itself, with no keystrokes involved: LB / RB move the wheels (`[` / `]`), A
-uses the highlighted button (Enter) and View closes the picker (Escape). In a
-conversation, A answers with the highlighted reply and View ends it. The keys keep
-working, so use whichever your layout sends.
+The buttons also work straight from the controller: a Steam Input layout can leave
+them as plain gamepad buttons (the Xbox pad's own, passed through) and nwpad does it
+itself, with no keystrokes involved. Either bumper opens the picker; then LB / RB
+move the wheels (`[` / `]`), A uses the highlighted button (Enter) and B closes the
+picker (Escape). In a conversation, A answers with the highlighted reply and B ends
+it. Start opens and closes the game's menu and Select its map (the game's own key
+handling, so it acts as the key would; neither works while the picker or a
+conversation is up). The triggers are unused. The keys keep working too, so use
+whichever your layout sends.
 
 ## Conversations
 

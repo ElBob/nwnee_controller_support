@@ -1,6 +1,8 @@
 /* See game.h. */
 #include "game.h"
 
+#include <stdbool.h>
+
 #include "sigs.h"
 
 #define GUI_WIDTH 0xb8 /* int, on CGuiMan (height at +0xbc; re-notes F26) */
@@ -16,6 +18,19 @@ void *nwpad_in_game_gui(void) {
     void *app = get_gui ? nwpad_client_app() : NULL;
     return app ? get_gui(app) : NULL;
 }
+
+#ifdef NWPAD_DEBUG_SURFACES
+bool nwpad_game_menu_open(void) {
+    char *gui = nwpad_in_game_gui();
+    return gui && *(void **)(gui + 0xd8) != NULL;
+}
+
+bool nwpad_game_map_open(void) {
+    char *gui = nwpad_in_game_gui();
+    char *panel = gui ? *(char **)(gui + 0xb8) : NULL;
+    return panel && *(int *)(panel + 0xb8) == 1; /* the "active" state ToggleMap tests before it closes */
+}
+#endif
 
 void nwpad_gui_size(float *w, float *h) {
     float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);

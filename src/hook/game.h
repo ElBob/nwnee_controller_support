@@ -4,6 +4,7 @@
 #ifndef NWPAD_GAME_H
 #define NWPAD_GAME_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /* CExoString as the game lays it out: 16 bytes. */
@@ -16,6 +17,12 @@ typedef struct {
 void *nwpad_client_app(void);
 /* The in-game GUI (CGuiInGame), outside a module NULL. */
 void *nwpad_in_game_gui(void);
+#ifdef NWPAD_DEBUG_SURFACES
+/* Whether the game's options panel / area map is open (CGuiInGame+0xd8 non-null /
+ * the map panel at +0xb8 active; re-notes F38), for tests. */
+bool nwpad_game_menu_open(void);
+bool nwpad_game_map_open(void);
+#endif
 /* The screen's size in GUI units (NUI geometry): g_pGuiMan's size in pixels over
  * the GUI scale; 1280 x 720 if unknown. */
 void nwpad_gui_size(float *w, float *h);

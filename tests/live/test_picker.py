@@ -162,20 +162,27 @@ def test_bank_wheels(game, ctl):
 
 
 def test_pad_bumpers(game, ctl, virtual_pad):
-    """LB / RB straight from the controller (gamepad buttons, no keys) move the picker's
-    big wheel just as [ and ] do, and do nothing while the picker is closed."""
+    """Straight from the controller (gamepad buttons, no keys): either bumper opens the
+    picker, on the middle wheel (Plain); once it is open LB / RB move the big wheel one
+    place, and do nothing past either end."""
     if virtual_pad is None:
         pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
     pad = virtual_pad
     focus_game()  # SDL gives a pad's buttons only to the focused window
     assert ctl("status")["controller"] == "open"
     n0 = ctl("state")["events"]["pad_buttons"]
-    pad.press("rb")  # closed: nothing to move
-    time.sleep(0.3)
-    assert ctl("state")["events"]["pad_buttons"] == n0 + 1  # nwpad saw it ...
-    ctl("picker", action="open")
-    time.sleep(0.5)
-    assert ctl("state")["picker"]["bank"] == 0  # ... and it moved nothing
+    assert not ctl("state")["picker"]["open"]
+    pad.press("rb")  # either bumper opens it ...
+    time.sleep(0.6)
+    p = ctl("state")["picker"]
+    assert p["open"] and p["bank"] == 0, p  # ... on Plain, and the opening press moves nothing
+    ctl("picker", action="cancel")
+    time.sleep(0.4)
+    assert not ctl("state")["picker"]["open"]
+    pad.press("lb")
+    time.sleep(0.6)
+    p = ctl("state")["picker"]
+    assert p["open"] and p["bank"] == 0, p
     pad.press("rb")  # Plain -> Ctrl
     time.sleep(0.5)
     assert ctl("state")["picker"]["bank"] == 2
@@ -197,34 +204,39 @@ def test_pad_bumpers(game, ctl, virtual_pad):
     ctl("picker", action="confirm")
     time.sleep(0.6)
     assert ctl("state")["picker"]["last_used"] == STEALTH
-    assert ctl("state")["events"]["pad_buttons"] == n0 + 7
+    assert ctl("state")["events"]["pad_buttons"] == n0 + 8
     assert not server_heard_nwpad(game)
 
 
 def test_pad_confirm_and_cancel(game, ctl, virtual_pad):
-    """A uses the highlighted button and Back (View) closes the picker, straight from the
-    controller, like Enter and Escape; with the picker closed they do nothing of nwpad's."""
+    """A uses the highlighted button and B closes the picker without using anything,
+    straight from the controller, like Enter and Escape. With the picker closed they do
+    nothing of nwpad's. (Start and Select are the game's menu and map: another test.)"""
     if virtual_pad is None:
         pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
     pad = virtual_pad
     focus_game()
     n0 = ctl("state")["events"]["pad_buttons"]
-    pad.press("a,back")  # closed: nwpad takes no action
+    pad.press("a,b")  # closed: nwpad takes no action
     time.sleep(0.3)
     assert not ctl("state")["picker"]["open"]
     assert ctl("state")["events"]["pad_buttons"] == n0 + 2
-    ctl("picker", action="open")  # Back closes it without using anything
-    time.sleep(0.4)
+    pad.press("lb")  # open it with a bumper; B closes it without using anything
+    time.sleep(0.6)
+    assert ctl("state")["picker"]["open"]
     last = ctl("state")["picker"]["last_used"]
     ctl("stick", rx=1.0)
     time.sleep(0.4)
     ctl("release")
-    pad.press("back")
+    pad.press("back,start")  # Select and Start are not the picker's: it stays open
+    time.sleep(0.4)
+    assert ctl("state")["picker"]["open"]
+    pad.press("b")
     time.sleep(0.5)
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == last, p
-    ctl("picker", action="open")  # A uses the highlighted button: Stealth Mode
-    time.sleep(0.4)
+    pad.press("rb")  # A uses the highlighted button: Stealth Mode
+    time.sleep(0.6)
     ctl("stick", rx=1.0)
     time.sleep(0.5)
     ctl("release")
@@ -232,4 +244,48 @@ def test_pad_confirm_and_cancel(game, ctl, virtual_pad):
     time.sleep(0.6)
     p = ctl("state")["picker"]
     assert not p["open"] and p["last_used"] == STEALTH, p
+    assert not server_heard_nwpad(game)
+
+
+def test_pad_menu_and_map(game, ctl, virtual_pad):
+    """Start opens the game's menu and Select toggles its map, straight from the
+    controller (the game's own key handling, so its guards apply); a second press closes
+    each; neither does anything while the picker is open."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+
+    def state(key):
+        return ctl("state")["events"][key]
+
+    try:
+        assert not state("game_map_open") and not state("game_menu_open")
+        pad.press("back")  # Select: the map
+        time.sleep(1.0)
+        assert state("game_map_open"), "the map didn't open"
+        pad.press("back")
+        time.sleep(1.0)
+        assert not state("game_map_open"), "the map didn't close"
+        ctl("picker", action="open")  # with the picker open they do nothing
+        time.sleep(0.5)
+        pad.press("back,start")
+        time.sleep(0.8)
+        assert not state("game_map_open") and not state("game_menu_open")
+        assert ctl("state")["picker"]["open"]
+        ctl("picker", action="cancel")
+        time.sleep(0.5)
+        pad.press("start")  # Start: the game menu (the options panel)
+        time.sleep(1.5)
+        assert state("game_menu_open"), "the game menu didn't open"
+        pad.press("start")
+        time.sleep(1.5)
+        assert not state("game_menu_open"), "the game menu didn't close"
+    finally:  # leave nothing open for the next test
+        if state("game_menu_open"):
+            pad.press("start")
+            time.sleep(1.0)
+        if state("game_map_open"):
+            pad.press("back")
+            time.sleep(1.0)
     assert not server_heard_nwpad(game)

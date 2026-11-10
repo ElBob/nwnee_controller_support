@@ -377,6 +377,15 @@ Every function, global, offset, and signature the library uses must have an entr
 - **nwpad's window:** made with `accepts_input: true`, ids on the NPC's text (`line`) and the reply rows (`r0`..), and off screen (geometry bind x −10000) until every one of them is taken; then placed. If they can't be taken within 30 frames, the window is made again without ids or input for the rest of the session (the mouse then doesn't work on it). A left press and release on the same row answers with it ("...": moves the highlight that way); the wheel over the text scrolls it, elsewhere moves the highlight. An opaque backdrop (root draw list) keeps the game's window from showing through the skin's background. NUI has no hover event, so hovering doesn't highlight. Draw-list items with `render: 2` (mouse hover) showed for every row as soon as the mouse was anywhere over the window.
 - Confidence: Ghidra (disassembly) + runtime for all of the above.
 
+### F38: The game's menu and map, from the pad (Robert's scheme, 2026-11-09)
+
+- Binary / hash: nwmain-linux 6d19c39b (Ghidra, disassembly and runtime).
+- **The game's own key actions:** `CClientExoAppInternal::HandleInputEvent(action, pressed, ...)` handles the map as action `0x44` (on a press, when no modal panel is up and the in-game GUI is initialized → `CGuiInGame::HandleMapButton` → `ToggleMap`) and the options panel (Load / Save / Game Options / Exit to Main Menu / Resume Game) as `0x46` (→ `CGuiInGame::HandleOptionsButton`). The Escape key (`0x12`) reaches `HandleOptionsButton` too, when nothing else takes it. Both act on a press only and toggle: `ToggleMap` closes the map panel (`CGuiInGame+0xb8`, state at panel `+0xb8` = 1) if it is active, and `HandleOptionsButton` closes the options panel (`CGuiInGame+0xd8`, non-null while open) if there is one.
+- **nwpad calls `HandleInputEvent(0x44 / 0x46, 1)`** for the pad's Select (`SDL_CONTROLLER_BUTTON_BACK`) and Start, as the game's own key does, so its guards (a modal panel, an uninitialized GUI) apply and nothing is bypassed. Neither does anything while nwpad's picker or conversation window is up.
+- **The scheme:** either bumper opens the picker (the picker key's job), then LB / RB move its wheels; A confirms (use / answer), B cancels (close / end); Start and Select are the game's menu and map; the triggers do nothing. All through the controller's own buttons; the keys they stand for keep working.
+- Runtime (virtual pad): Select opens and closes the map panel, Start the options panel (screenshots: the map's minimap-style panel top-left; the Options dialog with Resume Game).
+- Confidence: Ghidra + runtime.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.
