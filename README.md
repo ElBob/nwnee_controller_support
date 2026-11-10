@@ -52,8 +52,11 @@ move the wheels (`[` / `]`), A uses the highlighted button (Enter) and B closes 
 picker (Escape). In a conversation, A answers with the highlighted reply and B ends
 it. Start opens and closes the game's menu and Select its map (the game's own key
 handling, so it acts as the key would; neither works while the picker or a
-conversation is up). The triggers are unused. The keys keep working too, so use
-whichever your layout sends.
+conversation is up). The right trigger opens a **shortcuts wheel** of the game's panels (Character,
+Inventory, Spellbook, Journal, Map, Rest, Party, Options): the right stick picks one,
+A does it (the game's own key action), B or another pull of the trigger closes the
+wheel. The left trigger is unused. The keys keep working too, so use whichever your
+layout sends.
 
 ## Conversations
 

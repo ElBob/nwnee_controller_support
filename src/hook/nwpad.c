@@ -27,6 +27,7 @@
 #include "icons.h"
 #include "dialog.h"
 #include "dialogui.h"
+#include "shortcuts.h"
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -163,6 +164,11 @@ static struct {
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes, pad_buttons; } events; /* seen by the PollEvent hook */
     int pad_game_action;                 /* Start (1: the game menu) / Select (2: the map), for the next frame */
+    struct {
+        bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
+        bool trigger_down;     /* the right trigger is past its press point */
+        int action;            /* 1 do the highlighted shortcut, 2 close: applied on the next frame */
+    } shortcuts;
     struct {        /* nwpad's keys: the picker's (Steam Input maps a grip or button to the
                      * picker key, cfg.picker_key), and the conversation window's, which
                      * share confirm / cancel with it */
@@ -382,6 +388,14 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else if (!strcmp(action, "confirm")) g.picker.action = 1;
         else if (!strcmp(action, "cancel")) g.picker.action = 2;
         snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
+    } else if (strcmp(cmd, "shortcuts") == 0) {
+        /* {"cmd":"shortcuts","action":"open"|"confirm"|"cancel"}: as the right trigger / A / B do */
+        char action[16] = "";
+        nwpad_json_get_string(request, "action", action, sizeof action);
+        if (!strcmp(action, "open")) g.shortcuts.latched = true;
+        else if (!strcmp(action, "confirm")) g.shortcuts.action = 1;
+        else if (!strcmp(action, "cancel")) g.shortcuts.action = 2;
+        snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
     } else if (strcmp(cmd, "picker_shift") == 0) {
         /* {"cmd":"picker_shift","dir":-1|1}: as the bank keys do */
         double v;
@@ -417,7 +431,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"events\":{\"total\":%llu,\"mouse_motion\":%llu,\"keys\":%llu,"
                          "\"filtered\":%llu,\"right_edge_fixes\":%llu,\"right_edge_pinned\":%s,"
                          "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu,"
-                         "\"game_menu_open\":%s,\"game_map_open\":%s}",
+                         "\"game_menu_open\":%s,\"game_map_open\":%s,"
+                         "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -427,7 +442,9 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.right_edge_fixes,
                          g.right_edge_pinned ? "true" : "false", g.last_motion_x, g.last_motion_xrel,
                          (unsigned long long)g.events.pad_buttons,
-                         nwpad_game_menu_open() ? "true" : "false", nwpad_game_map_open() ? "true" : "false");
+                         nwpad_game_menu_open() ? "true" : "false", nwpad_game_map_open() ? "true" : "false",
+                         nwpad_shortcuts_open() ? "true" : "false", nwpad_shortcuts_selected(),
+                         nwpad_shortcuts_last_action());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -632,20 +649,29 @@ static void nwpad_frame(void) {
         nwpad_dialog_init();
         if (g.cfg.dialog) nwpad_dialogui_setup_font();
     }
+    NWPAD_WHERE("shortcuts");
+    if (g.shortcuts.action) { /* A (do it) / B or the trigger again (close) */
+        nwpad_shortcuts_close(g.shortcuts.action == 1);
+        g.shortcuts.action = 0;
+        g.shortcuts.latched = false;
+    }
+    bool shortcutting = nwpad_shortcuts_frame(g.cfg.enabled && g.shortcuts.latched, right, nwpad_backend_in_game());
+    if (!shortcutting) g.shortcuts.latched = false;
+    if (shortcutting) right = (nwpad_vec2){0, 0};
     NWPAD_WHERE("pad game action");
     if (g.pad_game_action) {
         /* Start and Select are the game's menu and map, on the game thread; neither does
-         * anything while the picker or a conversation window of ours is up. */
-        if (!nwpad_picker_open() && !nwpad_dialogui_open() && nwpad_backend_in_game()) {
-            if (g.pad_game_action == 1) nwpad_backend_toggle_game_menu();
-            else nwpad_backend_toggle_map();
+         * anything while the picker, the shortcuts wheel or a conversation window of ours is up. */
+        if (!nwpad_picker_open() && !shortcutting && !nwpad_dialogui_open() && nwpad_backend_in_game()) {
+            nwpad_backend_game_action(g.pad_game_action == 1 ? NWPAD_GAME_OPTIONS : NWPAD_GAME_MAP);
         }
         g.pad_game_action = 0;
     }
     NWPAD_WHERE("picker");
     for (; g.picker.shift < 0; g.picker.shift++) nwpad_picker_shift(-1);
     for (; g.picker.shift > 0; g.picker.shift--) nwpad_picker_shift(1);
-    bool picking = nwpad_picker_frame(g.cfg.enabled && g.picker.latched, right, nwpad_backend_in_game());
+    bool picking = nwpad_picker_frame(g.cfg.enabled && g.picker.latched && !shortcutting, right,
+                                      nwpad_backend_in_game());
     if (!picking) g.picker.latched = false; /* e.g. left the game */
     if (picking) right = (nwpad_vec2){0, 0};
 
@@ -773,7 +799,24 @@ static int nwpad_ShowCursor(int toggle) {
  * in the picker they use the highlighted button / close it. Only a press counts; with
  * neither window open only the bumpers do anything, and in a conversation there is no
  * picker (as with the key). */
+/* The right trigger is an axis: a press once it passes 60% and a release below 30%, so one
+ * pull is one press however the value wobbles. It opens the shortcuts wheel, or closes it
+ * if it is open; nothing while the quickbar picker or a conversation window is up. */
+static void pad_trigger(const SDL_Event *event) {
+    if (event->type != SDL_CONTROLLERAXISMOTION || event->caxis.axis != SDL_CONTROLLER_AXIS_TRIGGERRIGHT) return;
+    int v = event->caxis.value;
+    if (!g.shortcuts.trigger_down && v > 32767 * 6 / 10) {
+        g.shortcuts.trigger_down = true;
+        g.events.pad_buttons++;
+        if (nwpad_shortcuts_open()) g.shortcuts.action = 2;
+        else if (!nwpad_picker_open() && !nwpad_dialogui_open()) g.shortcuts.latched = true;
+    } else if (g.shortcuts.trigger_down && v < 32767 * 3 / 10) {
+        g.shortcuts.trigger_down = false;
+    }
+}
+
 static void pad_button(const SDL_Event *event) {
+    pad_trigger(event);
     if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
     int button = event->cbutton.button;
     int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
@@ -784,7 +827,9 @@ static void pad_button(const SDL_Event *event) {
         g.pad_game_action = button == SDL_CONTROLLER_BUTTON_START ? 1 : 2; /* 1 game menu, 2 map: the frame sends it */
         return;
     }
-    if (nwpad_dialogui_open()) {
+    if (nwpad_shortcuts_open()) { /* A does the highlighted shortcut, B closes; the bumpers do nothing */
+        if (act) g.shortcuts.action = act == 1 ? 1 : 2;
+    } else if (nwpad_dialogui_open()) {
         if (act) g.picker.dialog_action = act;
     } else if (nwpad_picker_open()) {
         if (step) g.picker.shift += step;

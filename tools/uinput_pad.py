@@ -8,7 +8,7 @@ Creates a pad SDL's game controller database knows (Microsoft Xbox 360 pad, vend
 045e product 028e, with the usual evdev button and axis codes), waits for the
 compositor and the game to find it, then plays SPEC and keeps the device for
 --hold seconds. SPEC is comma-separated steps: a button name (a b x y lb rb back
-start guide ls rs) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
+start guide ls rs) or a trigger (lt rt) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
 With --stdin the pad stays until stdin closes (a line "ready" is printed once it exists).
 The device disappears when the script ends.
 """
@@ -26,6 +26,7 @@ BUTTONS = {
     "lb": e.BTN_TL, "rb": e.BTN_TR, "back": e.BTN_SELECT, "start": e.BTN_START,
     "guide": e.BTN_MODE, "ls": e.BTN_THUMBL, "rs": e.BTN_THUMBR,
 }
+TRIGGERS = {"lt": e.ABS_Z, "rt": e.ABS_RZ}  # axes, 0 to 255
 
 
 def main() -> int:
@@ -50,14 +51,18 @@ def main() -> int:
                     time.sleep(float(step[5:]))
                     continue
                 name = step.lstrip("+-")
-                if name not in BUTTONS:
+                if name in TRIGGERS:  # an axis: 255 pressed, 0 released
+                    code, press, release, kind = TRIGGERS[name], 255, 0, e.EV_ABS
+                elif name in BUTTONS:
+                    code, press, release, kind = BUTTONS[name], 1, 0, e.EV_KEY
+                else:
                     sys.exit(f"unknown button {name!r}")
                 if step[0] != "-":
-                    ui.write(e.EV_KEY, BUTTONS[name], 1)
+                    ui.write(kind, code, press)
                     ui.syn()
                 if step[0] != "+":
                     time.sleep(0.06)
-                    ui.write(e.EV_KEY, BUTTONS[name], 0)
+                    ui.write(kind, code, release)
                     ui.syn()
                 time.sleep(0.12)
 

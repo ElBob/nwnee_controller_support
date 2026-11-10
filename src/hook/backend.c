@@ -330,20 +330,14 @@ static void key(void *in, int action, int pressed) {
     ((handle_input_fn)nwpad_sig(NWPAD_SIG_CLIENT_HANDLE_INPUT_EVENT))(in, action, pressed, 0, 0);
 }
 
-/* The game's key actions for its panels: HandleInputEvent(0x44) → HandleMapButton,
- * (0x46) → HandleOptionsButton (re-notes F38). A press is all they act on. */
-#define ACTION_MAP 0x44
-#define ACTION_GAME_MENU 0x46
-
-static bool game_key(int action) {
+/* The game's key actions: HandleInputEvent(action, pressed) (re-notes F38, F39). A press
+ * is all they act on. */
+bool nwpad_backend_game_action(int action) {
     void *in = nwpad_sig(NWPAD_SIG_CLIENT_HANDLE_INPUT_EVENT) ? client_internal() : NULL;
     if (!in) return false;
     key(in, action, 1);
     return true;
 }
-
-bool nwpad_backend_toggle_game_menu(void) { return game_key(ACTION_GAME_MENU); }
-bool nwpad_backend_toggle_map(void) { return game_key(ACTION_MAP); }
 
 static void walk_to(void *in, void *pc, float x, float y, int mode) {
     ((walk_to_point_fn)nwpad_sig(NWPAD_SIG_CLIENT_WALK_PLAYER_TO_POINT))(

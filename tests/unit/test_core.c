@@ -328,6 +328,18 @@ static void test_picker_select(void) {
     CHECK(nwpad_picker_select((nwpad_vec2){-0.6f, 0.8f}, -1) == 11); /* ~37 degrees left of up */
     CHECK(nwpad_picker_select((nwpad_vec2){0.3f, 0}, 4) == 4);      /* thumb lifted: keep */
     CHECK(nwpad_picker_select((nwpad_vec2){0.6f, 0}, 4) == 3);
+    /* A ring of 8: slots 45 degrees apart, 0 at the top, clockwise. */
+    CHECK(nwpad_ring_select((nwpad_vec2){0, 1}, -1, 8) == 0);
+    CHECK(nwpad_ring_select((nwpad_vec2){0.7f, 0.7f}, -1, 8) == 1);
+    CHECK(nwpad_ring_select((nwpad_vec2){1, 0}, -1, 8) == 2);
+    CHECK(nwpad_ring_select((nwpad_vec2){0.7f, -0.7f}, -1, 8) == 3);
+    CHECK(nwpad_ring_select((nwpad_vec2){0, -1}, -1, 8) == 4);
+    CHECK(nwpad_ring_select((nwpad_vec2){-0.7f, -0.7f}, -1, 8) == 5);
+    CHECK(nwpad_ring_select((nwpad_vec2){-1, 0}, -1, 8) == 6);
+    CHECK(nwpad_ring_select((nwpad_vec2){-0.7f, 0.7f}, -1, 8) == 7);
+    CHECK(nwpad_ring_select((nwpad_vec2){-0.1f, 1}, -1, 8) == 0); /* just left of up: still the top slot */
+    CHECK(nwpad_ring_select((nwpad_vec2){0.3f, 0}, 5, 8) == 5);   /* thumb lifted: keep */
+    CHECK(nwpad_ring_select((nwpad_vec2){1, 0}, -1, 0) == -1);    /* no slots: nothing to pick */
 }
 
 static void test_ubjson(void) {

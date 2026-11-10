@@ -289,3 +289,75 @@ def test_pad_menu_and_map(game, ctl, virtual_pad):
             pad.press("back")
             time.sleep(1.0)
     assert not server_heard_nwpad(game)
+
+
+# The shortcuts wheel's slots, clockwise from the top, and the stick direction for each
+# (right, up positive): Character, Inventory, Spellbook, Journal, Map, Rest, Party, Options.
+SHORTCUT_STICK = [(0, 1), (0.7, 0.7), (1, 0), (0.7, -0.7), (0, -1), (-0.7, -0.7), (-1, 0), (-0.7, 0.7)]
+GAME_ACTION = {"character": 0x42, "inventory": 0x3f, "spellbook": 0x43, "journal": 0x41,
+               "map": 0x44, "rest": 0x6b, "party": 0x45, "options": 0x46}
+
+
+def _shortcut(ctl, slot, pad, button="a"):
+    """Point the right stick at a slot and press a pad button."""
+    x, y = SHORTCUT_STICK[slot]
+    ctl("stick", rx=x, ry=y)
+    time.sleep(0.5)
+    ctl("release")
+    pad.press(button)
+    time.sleep(0.8)
+
+
+def test_pad_shortcuts_wheel(game, ctl, virtual_pad):
+    """The right trigger opens the shortcuts wheel (it is a trigger axis, not a button);
+    the right stick picks one of eight, A does it (the game's own key action, so it
+    opens its panel), B closes the wheel without doing anything, and a second pull of the
+    trigger closes it too. The bumpers and Start / Select do nothing while it is open."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+
+    def sc():
+        return ctl("state")["events"]["shortcuts"]
+
+    assert not sc()["open"]
+    pad.press("rt")
+    time.sleep(0.7)
+    assert sc()["open"] and sc()["selected"] == -1, sc()
+    assert not ctl("state")["picker"]["open"]
+    pad.press("lb,rb,start,back")  # none of these is the wheel's
+    time.sleep(0.6)
+    assert sc()["open"] and not ctl("state")["picker"]["open"]
+    assert not ctl("state")["events"]["game_menu_open"] and not ctl("state")["events"]["game_map_open"]
+    x, y = SHORTCUT_STICK[0]
+    ctl("stick", rx=x, ry=y)  # Character: highlighted, and the camera stays put
+    time.sleep(0.5)
+    ctl("release")
+    assert sc()["selected"] == 0, sc()
+    pad.press("b")  # B closes it without doing the shortcut
+    time.sleep(0.6)
+    assert not sc()["open"] and sc()["last_action"] == 0, sc()
+    pad.press("rt")  # open again; the trigger closes it as well
+    time.sleep(0.6)
+    assert sc()["open"]
+    pad.press("rt")
+    time.sleep(0.6)
+    assert not sc()["open"] and sc()["last_action"] == 0, sc()
+    # A does the highlighted one: the map (slot 4) opens its panel, and so does Options (slot 7)
+    pad.press("rt")
+    time.sleep(0.6)
+    _shortcut(ctl, 4, pad)
+    assert not sc()["open"] and sc()["last_action"] == GAME_ACTION["map"], sc()
+    assert ctl("state")["events"]["game_map_open"]
+    pad.press("back")  # Select closes the map again
+    time.sleep(1.0)
+    pad.press("rt")
+    time.sleep(0.6)
+    _shortcut(ctl, 7, pad)
+    assert sc()["last_action"] == GAME_ACTION["options"], sc()
+    assert ctl("state")["events"]["game_menu_open"]
+    pad.press("start")
+    time.sleep(1.2)
+    assert not ctl("state")["events"]["game_menu_open"]
+    assert not server_heard_nwpad(game)

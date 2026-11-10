@@ -227,6 +227,8 @@ int nwpad_json_escape_utf8(char *out, size_t cap, const char *in);
  * sectors. Below NWPAD_PICKER_MIN, `current` is kept (lifting the thumb keeps the
  * highlight). -1 means nothing picked yet. */
 int nwpad_picker_select(nwpad_vec2 stick, int current);
+/* The same for a ring of `slots` equal sectors (the shortcuts wheel has 8). */
+int nwpad_ring_select(nwpad_vec2 stick, int current, int slots);
 
 /* ---- Game text ---- */
 /* Remove the game's inline colour codes ("<c" + 3 colour bytes + ">" ... "</c>",

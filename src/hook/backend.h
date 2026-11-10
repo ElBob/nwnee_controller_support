@@ -34,10 +34,20 @@ bool nwpad_backend_camera_set(const nwpad_camera *cam);
 
 bool nwpad_backend_send_move(const nwpad_move_intent *intent);
 bool nwpad_backend_send_stop(void);
-/* The game's own handling of its menu and map keys (F: the in-game options panel, D: the
- * area map), so a pad button does what the key does, guards and all (re-notes F38). */
-bool nwpad_backend_toggle_game_menu(void);
-bool nwpad_backend_toggle_map(void);
+/* The game's own handling of one of its key actions (re-notes F38, F39), so a pad button
+ * does what the key does, guards and all: a panel opens or closes, or the character
+ * rests. False if the game isn't ready for it. */
+enum {
+    NWPAD_GAME_INVENTORY = 0x3f,
+    NWPAD_GAME_JOURNAL = 0x41,
+    NWPAD_GAME_CHAR_SHEET = 0x42,
+    NWPAD_GAME_SPELLBOOK = 0x43,
+    NWPAD_GAME_MAP = 0x44,
+    NWPAD_GAME_PARTY = 0x45, /* the party / PvP panel */
+    NWPAD_GAME_OPTIONS = 0x46, /* the game menu */
+    NWPAD_GAME_REST = 0x6b,
+};
+bool nwpad_backend_game_action(int action);
 /* Once per frame, for timed follow-ups such as releasing the stop tap. */
 void nwpad_backend_tick(uint64_t now_ms);
 

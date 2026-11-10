@@ -386,6 +386,13 @@ Every function, global, offset, and signature the library uses must have an entr
 - Runtime (virtual pad): Select opens and closes the map panel, Start the options panel (screenshots: the map's minimap-style panel top-left; the Options dialog with Resume Game).
 - Confidence: Ghidra + runtime.
 
+### F39: The shortcuts wheel (Robert, 2026-11-10)
+
+- Binary / hash: nwmain-linux 6d19c39b (Ghidra and runtime).
+- **The game's key actions** (`CClientExoAppInternal::HandleInputEvent(action, 1)`; each acts on a press, behind the game's own guards: no modal panel up, the in-game GUI initialized): `0x3f` inventory (`HandleInvButton`), `0x41` journal (`HandleJournalButton`), `0x42` character sheet (`ToggleCharSheet`), `0x43` spellbook (`ToggleSpellBook`), `0x44` map, `0x45` party / PvP panel (`HandlePVPButton`), `0x46` the game menu, and `0x6b` **Rest**: it sends `SendPlayerToServerInput_Rest` if the module and player exist and neither the module's busy flag (`+0xf8`→`+0x100`) nor the creature's (`+0x440`) is set, else the game shows its own feedback message. Each toggles where the panel does.
+- **The wheel:** eight slots clockwise from the top: Character, Inventory, Spellbook, Journal, Map, Rest, Party, Options. The right trigger opens it (SDL gives a trigger as the axis `SDL_CONTROLLER_AXIS_TRIGGERRIGHT`; nwpad counts a press past 60% and a release below 30%, so a pull is one press); the right stick picks (`nwpad_ring_select`, the picker's sector maths for any number of slots); A calls the game action; B or another pull of the trigger closes it. Its own client-side NUI window (text labels, a rectangle highlight bound to the pick, the pick's name in the middle). It takes the right stick while open; the bumpers, Start and Select do nothing then; and it won't open over the quickbar picker or a conversation. Runtime: each of the six panel / rest actions fired from the virtual pad (screenshots: the character record, inventory, spellbook, journal, party panel; Rest is a server command).
+- Confidence: Ghidra + runtime on the test box.
+
 ## Conventions to confirm
 
 - **Core angle convention:** degrees, counter-clockwise from world +X, stick +y = forward (`src/core`). The game's camera yaw field (F15) is camera forward − 90° (F18), so the backend must add 90° before core bearing math (M3). Creature facing (F19) already uses the core convention.

@@ -673,10 +673,14 @@ int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap) {
 }
 
 int nwpad_picker_select(nwpad_vec2 stick, int current) {
-    if (nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return current;
+    return nwpad_ring_select(stick, current, NWPAD_PICKER_SLOTS);
+}
+
+int nwpad_ring_select(nwpad_vec2 stick, int current, int slots) {
+    if (slots < 1 || nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return current;
     /* Bearing clockwise from up (+y), in sectors centred on each slot. */
-    float deg = nwpad_stick_angle_cw(stick), sector = 360.0f / NWPAD_PICKER_SLOTS;
-    return (int)floorf((deg + sector / 2) / sector) % NWPAD_PICKER_SLOTS;
+    float deg = nwpad_stick_angle_cw(stick), sector = 360.0f / (float)slots;
+    return (int)floorf((deg + sector / 2) / sector) % slots;
 }
 
 void nwpad_strip_colour_codes(char *text) {
