@@ -20,6 +20,43 @@ void *nwpad_in_game_gui(void) {
 }
 
 #ifdef NWPAD_DEBUG_SURFACES
+#include <stdio.h>
+#include <string.h>
+
+/* The client's current area: CClientExoApp -> module (+0x30 of the internal app, as
+ * HandleTooltip reads it) -> area at module+0xf8 (re-notes F40). */
+static char *client_area(void) {
+    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
+    char *app = app_manager && *app_manager ? *(char **)*app_manager : NULL;
+    char *internal = app ? *(char **)(app + 0x8) : NULL;
+    char *module = internal ? *(char **)(internal + 0x30) : NULL;
+    return module ? *(char **)(module + 0xf8) : NULL;
+}
+
+void nwpad_game_debug_area_objects(char *out, size_t cap, int max) {
+    char *area = client_area();
+    void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
+    void *app = nwpad_client_app();
+    if (!area || !object || !app) {
+        snprintf(out, cap, "{\"error\":\"no area (%d) or lookup\"}", area != NULL);
+        return;
+    }
+    int count = *(int *)(area + 800);
+    uint32_t *ids = *(uint32_t **)(area + 0x318);
+    size_t n = (size_t)snprintf(out, cap, "{\"count\":%d,\"objects\":[", count);
+    int shown = 0;
+    for (int i = 0; ids && i < count && shown < max && n + 200 < cap; i++) {
+        void **g = object(app, ids[i]);
+        void **nwc = g ? ((void **(*)(void *))((void **)*g)[0x20 / 8])(g) : NULL; /* AsNWCObject */
+        if (!nwc) continue;
+        char *o = (char *)nwc;
+        n += (size_t)snprintf(out + n, cap - n, "%s{\"id\":\"%08x\",\"type\":%u,\"a8\":%u,\"f11c\":%d}", shown ? "," : "",
+                              ids[i], (unsigned)(uint8_t)o[0xc], (unsigned)(uint8_t)o[0xa8], *(int *)(o + 0x11c));
+        shown++;
+    }
+    if (n < cap) snprintf(out + n, cap - n, "],\"shown\":%d}", shown);
+}
+
 bool nwpad_game_menu_open(void) {
     char *gui = nwpad_in_game_gui();
     return gui && *(void **)(gui + 0xd8) != NULL;

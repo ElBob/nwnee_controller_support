@@ -388,6 +388,13 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else if (!strcmp(action, "confirm")) g.picker.action = 1;
         else if (!strcmp(action, "cancel")) g.picker.action = 2;
         snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
+    } else if (strcmp(cmd, "area_objects") == 0) {
+        /* {"cmd":"area_objects","max":200}: the client area's objects (research, F40) */
+        double m = 200;
+        nwpad_json_get_number(request, "max", &m);
+        static char list[24000];
+        nwpad_game_debug_area_objects(list, sizeof list, (int)m);
+        snprintf(out, cap, "{\"ok\":true,\"area\":%s}", list);
     } else if (strcmp(cmd, "shortcuts") == 0) {
         /* {"cmd":"shortcuts","action":"open"|"confirm"|"cancel"}: as the right trigger / A / B do */
         char action[16] = "";
