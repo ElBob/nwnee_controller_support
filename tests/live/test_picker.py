@@ -533,3 +533,27 @@ def test_stick_stays_dead_after_a_wheel(game, ctl):
     time.sleep(1.0)
     ctl("release")
     assert abs(ctl("state")["camera"]["yaw"] - yaw0) > 5.0, ctl("state")["camera"]
+
+
+def test_pad_button_skips_a_movie(game, ctl, virtual_pad):
+    """Any controller button skips a movie that plays in a game too (an ending or cutscene
+    movie), as a key does; with no movie it does not start one or stop anything."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    focus_game()
+
+    def playing():
+        return ctl("state")["events"]["intro"]["movie"]
+
+    assert not playing()
+    assert ctl("play_movie", name="Beamdog")["ok"]
+    deadline = time.monotonic() + 5
+    while not playing():
+        assert time.monotonic() < deadline, "the movie never started"
+        time.sleep(0.1)
+    virtual_pad.press("b")  # any button
+    deadline = time.monotonic() + 5
+    while playing():
+        assert time.monotonic() < deadline, "the pad button did not skip the movie"
+        time.sleep(0.1)
+    assert ctl("state")["in_game"]

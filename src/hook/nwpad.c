@@ -169,7 +169,7 @@ static struct {
     int pad_target_step;                 /* d-pad right (+1) / left (-1): step through the targets, for the next frame */
     struct { bool want; int action; } radial; /* A on a target opens the object's menu; A / B in it */
     bool stick_latch_left, stick_latch_right; /* a wheel took this stick: it does nothing else until let go */
-    bool pad_intro_skip;                 /* a pad button during the start-up intro: a key press, for the next frame */
+    bool pad_intro_skip;                 /* a pad button while the intro or a movie is on: a key press, for the next frame */
     bool pad_target_end;                 /* B in target selection: end it, for the next frame */
     struct {
         bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
@@ -409,6 +409,11 @@ static void control_handler(const char *request, char *out, size_t cap) {
         nwpad_json_get_string(request, "id", id, sizeof id);
         int t = nwpad_game_debug_radial((uint32_t)strtoul(id, NULL, 16));
         snprintf(out, cap, "{\"ok\":%s,\"type\":%d}", t >= 0 ? "true" : "false", t);
+    } else if (strcmp(cmd, "play_movie") == 0) {
+        /* {"cmd":"play_movie","name":"Beamdog"}: start a movie, to test the pad skipping it (F43) */
+        char name[64] = "";
+        nwpad_json_get_string(request, "name", name, sizeof name);
+        snprintf(out, cap, "{\"ok\":%s}", name[0] && nwpad_game_debug_play_movie(name) ? "true" : "false");
     } else if (strcmp(cmd, "radial") == 0) {
         /* {"cmd":"radial","action":"open"|"confirm"|"cancel","x":..,"y":..}: as A / B / the stick do */
         char action[16] = "";
@@ -492,7 +497,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
                          "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d,\"pending\":%s},"
                          "\"radial\":{\"depth\":%d,\"level\":%d,\"picked\":%d},"
-                         "\"intro\":{\"stage\":%d}}",
+                         "\"intro\":{\"stage\":%d,\"movie\":%s}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -508,7 +513,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned)nwpad_targets_selected(), nwpad_targets_count(),
                          nwpad_targets_pending() ? "true" : "false",
                          nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked(),
-                         nwpad_intro_stage());
+                         nwpad_intro_stage(), nwpad_movie_playing() ? "true" : "false");
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -734,7 +739,7 @@ static void nwpad_frame(void) {
     NWPAD_WHERE("intro skip");
     if (g.pad_intro_skip) { /* any controller button skips an intro movie / passes the legal screen, as a key does */
         int stage = nwpad_intro_stage();
-        if (stage >= 1 && stage <= 6) nwpad_intro_press_any_key();
+        if ((stage >= 1 && stage <= 6) || nwpad_movie_playing()) nwpad_intro_press_any_key();
         g.pad_intro_skip = false;
     }
     NWPAD_WHERE("radial");
@@ -942,7 +947,7 @@ static void pad_trigger(const SDL_Event *event) {
 static void pad_button(const SDL_Event *event) {
     pad_trigger(event);
     if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
-    g.pad_intro_skip = true; /* (the frame ignores it unless the start-up intro is running) */
+    g.pad_intro_skip = true; /* (the frame ignores it unless the start-up intro or a movie is running) */
     int button = event->cbutton.button;
     int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
     int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_B ? 2 : 0; /* 1 confirm, 2 cancel */

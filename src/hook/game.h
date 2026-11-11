@@ -16,11 +16,17 @@ typedef struct {
 
 /* The CClientExoApp (g_pAppManager's first field). */
 void *nwpad_client_app(void);
+/* A movie is playing (the start-up intro, an ending or credits movie, a cutscene). */
+bool nwpad_movie_playing(void);
+#ifdef NWPAD_DEBUG_SURFACES
+/* Start the named movie (no extension), as the intro does: tests only. */
+bool nwpad_game_debug_play_movie(const char *name);
+#endif
 /* The start-up intro's stage (CPregameIntro+0x98): 1-4 its movies, 5-6 the "press any key"
  * legal screen, later it hands over to the main menu; -1 when it isn't running (re-notes F43). */
 int nwpad_intro_stage(void);
-/* Press a key on the focused GUI control, as a keyboard key would: skips an intro movie and
- * passes the legal screen. */
+/* Press a key on the focused GUI control, as a keyboard key would: skips a movie (each one
+ * puts up a "press any key" control) and passes the intro's legal screen. */
 bool nwpad_intro_press_any_key(void);
 /* The in-game GUI (CGuiInGame), outside a module NULL. */
 void *nwpad_in_game_gui(void);

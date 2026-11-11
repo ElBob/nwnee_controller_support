@@ -100,6 +100,15 @@ int nwpad_game_debug_click_object(uint32_t id) {
     return (int)click(internal, nwc);
 }
 
+bool nwpad_game_debug_play_movie(const char *name) {
+    void (*play)(void *, nwpad_exo_string *) = (void (*)(void *, nwpad_exo_string *))nwpad_sig(NWPAD_SIG_CLIENT_PLAY_MOVIE);
+    void *app = nwpad_client_app();
+    if (!play || !app) return false;
+    nwpad_exo_string s = {(char *)name, (uint32_t)strlen(name), (uint32_t)strlen(name) + 1};
+    play(app, &s); /* the game copies it */
+    return true;
+}
+
 bool nwpad_game_menu_open(void) {
     char *gui = nwpad_in_game_gui();
     return gui && *(void **)(gui + 0xd8) != NULL;
@@ -120,6 +129,12 @@ void nwpad_gui_size(float *w, float *h) {
     if (s <= 0) s = 1.0f;
     *w = (gui ? (float)*(int32_t *)(gui + GUI_WIDTH) : 1280.0f * s) / s;
     *h = (gui ? (float)*(int32_t *)(gui + GUI_WIDTH + 4) : 720.0f * s) / s;
+}
+
+bool nwpad_movie_playing(void) {
+    int (*playing)(void *) = (int (*)(void *))nwpad_sig(NWPAD_SIG_CLIENT_IS_PLAYING_MOVIE);
+    void *app = nwpad_client_app();
+    return playing && app && playing(app) != 0;
 }
 
 int nwpad_intro_stage(void) {

@@ -183,6 +183,13 @@ signatures:
   action_target_cleanup:   # CActionTarget::Cleanup(): leaves targeting mode (what HandleLMouseDown does after a pick)
     note: F42
     symbol: _ZN13CActionTarget7CleanupEv
+  client_is_playing_movie: # int CClientExoApp::GetIsPlayingMovie(): a movie (intro, ending, cutscene) is playing
+    note: F43
+    symbol: _ZN13CClientExoApp17GetIsPlayingMovieEv
+  client_play_movie:       # CClientExoApp::PlayMovie(CExoString): plays a movie by name (passed as a pointer to a copy)
+    note: F43
+    debug: true                 # tests only: nwpad never starts a movie itself
+    symbol: _ZN13CClientExoApp9PlayMovieE10CExoString
   gui_handle_key_press:    # CGuiMan::HandleKeyPress(int): a key press to the focused GUI control (skips the intro movies)
     note: F43
     symbol: _ZN7CGuiMan14HandleKeyPressEi

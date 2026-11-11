@@ -67,7 +67,7 @@ too, so use whichever your layout sends.
 
 **Start-up intro:** any controller button (or the right trigger) counts as the key press
 that skips an intro movie and passes the "press any key" legal screen, so a pad alone gets
-you to the main menu.
+you to the main menu. The same goes for any movie that plays later (an ending, credits).
 
 ## Conversations
 
