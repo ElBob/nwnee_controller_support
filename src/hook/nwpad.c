@@ -169,6 +169,7 @@ static struct {
     int pad_target_step;                 /* d-pad right (+1) / left (-1): step through the targets, for the next frame */
     struct { bool want; int action; } radial; /* A on a target opens the object's menu; A / B in it */
     bool stick_latch_left, stick_latch_right; /* a wheel took this stick: it does nothing else until let go */
+    bool pad_intro_skip;                 /* a pad button during the start-up intro: a key press, for the next frame */
     bool pad_target_end;                 /* B in target selection: end it, for the next frame */
     struct {
         bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
@@ -490,7 +491,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"game_menu_open\":%s,\"game_map_open\":%s,"
                          "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
                          "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d,\"pending\":%s},"
-                         "\"radial\":{\"depth\":%d,\"level\":%d,\"picked\":%d}}",
+                         "\"radial\":{\"depth\":%d,\"level\":%d,\"picked\":%d},"
+                         "\"intro\":{\"stage\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -505,7 +507,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          nwpad_shortcuts_last_action(), nwpad_targets_active() ? "true" : "false",
                          (unsigned)nwpad_targets_selected(), nwpad_targets_count(),
                          nwpad_targets_pending() ? "true" : "false",
-                         nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked());
+                         nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked(),
+                         nwpad_intro_stage());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -728,6 +731,12 @@ static void nwpad_frame(void) {
     }
     g.pad_target_step = 0;
     nwpad_targets_frame();
+    NWPAD_WHERE("intro skip");
+    if (g.pad_intro_skip) { /* any controller button skips an intro movie / passes the legal screen, as a key does */
+        int stage = nwpad_intro_stage();
+        if (stage >= 1 && stage <= 6) nwpad_intro_press_any_key();
+        g.pad_intro_skip = false;
+    }
     NWPAD_WHERE("radial");
     if (g.radial.want) { /* A on a selected target: its menu, as a right click */
         uint32_t sel = nwpad_targets_selected();
@@ -921,6 +930,7 @@ static void pad_trigger(const SDL_Event *event) {
     int v = event->caxis.value;
     if (!g.shortcuts.trigger_down && v > 32767 * 6 / 10) {
         g.shortcuts.trigger_down = true;
+        g.pad_intro_skip = true;
         g.events.pad_buttons++;
         if (nwpad_shortcuts_open()) g.shortcuts.action = 2;
         else if (!nwpad_picker_open() && !nwpad_dialogui_open()) g.shortcuts.latched = true;
@@ -932,6 +942,7 @@ static void pad_trigger(const SDL_Event *event) {
 static void pad_button(const SDL_Event *event) {
     pad_trigger(event);
     if (event->type != SDL_CONTROLLERBUTTONDOWN) return;
+    g.pad_intro_skip = true; /* (the frame ignores it unless the start-up intro is running) */
     int button = event->cbutton.button;
     int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
     int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_B ? 2 : 0; /* 1 confirm, 2 cancel */

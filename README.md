@@ -65,6 +65,10 @@ a right click does. In the menu the right stick picks an entry, A does it, and B
 a level (a sub menu's centre; from the top menu it closes the menu). The keys keep working
 too, so use whichever your layout sends.
 
+**Start-up intro:** any controller button (or the right trigger) counts as the key press
+that skips an intro movie and passes the "press any key" legal screen, so a pad alone gets
+you to the main menu.
+
 ## Conversations
 
 While you talk to an NPC, nwpad shows the conversation in its own window over the

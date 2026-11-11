@@ -16,6 +16,12 @@ typedef struct {
 
 /* The CClientExoApp (g_pAppManager's first field). */
 void *nwpad_client_app(void);
+/* The start-up intro's stage (CPregameIntro+0x98): 1-4 its movies, 5-6 the "press any key"
+ * legal screen, later it hands over to the main menu; -1 when it isn't running (re-notes F43). */
+int nwpad_intro_stage(void);
+/* Press a key on the focused GUI control, as a keyboard key would: skips an intro movie and
+ * passes the legal screen. */
+bool nwpad_intro_press_any_key(void);
 /* The in-game GUI (CGuiInGame), outside a module NULL. */
 void *nwpad_in_game_gui(void);
 /* The client's current area (a CNWCArea*), or NULL: CClientExoApp -> the internal app ->

@@ -183,6 +183,12 @@ signatures:
   action_target_cleanup:   # CActionTarget::Cleanup(): leaves targeting mode (what HandleLMouseDown does after a pick)
     note: F42
     symbol: _ZN13CActionTarget7CleanupEv
+  gui_handle_key_press:    # CGuiMan::HandleKeyPress(int): a key press to the focused GUI control (skips the intro movies)
+    note: F43
+    symbol: _ZN7CGuiMan14HandleKeyPressEi
+  pregame_intro:           # CPregameIntro* g_pPregameIntro: the start-up intro's state machine (+0x98 = stage)
+    note: F43
+    symbol: g_pPregameIntro
   radial_menu_depth:       # int CRadialMenu::static_nMenuDepth: radial menus open (a sub menu counts)
     note: F41
     symbol: _ZN11CRadialMenu17static_nMenuDepthE

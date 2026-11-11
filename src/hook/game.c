@@ -121,3 +121,18 @@ void nwpad_gui_size(float *w, float *h) {
     *w = (gui ? (float)*(int32_t *)(gui + GUI_WIDTH) : 1280.0f * s) / s;
     *h = (gui ? (float)*(int32_t *)(gui + GUI_WIDTH + 4) : 720.0f * s) / s;
 }
+
+int nwpad_intro_stage(void) {
+    void **var = (void **)nwpad_sig(NWPAD_SIG_PREGAME_INTRO);
+    char *intro = var ? (char *)*var : NULL;
+    return intro ? *(int32_t *)(intro + 0x98) : -1;
+}
+
+bool nwpad_intro_press_any_key(void) {
+    uint64_t (*press)(void *, int) = (uint64_t (*)(void *, int))nwpad_sig(NWPAD_SIG_GUI_HANDLE_KEY_PRESS);
+    void **gui_var = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
+    void *gui = gui_var ? *gui_var : NULL;
+    if (!press || !gui) return false;
+    press(gui, 0); /* the focused control ignores which key */
+    return true;
+}
