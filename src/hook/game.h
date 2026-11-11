@@ -22,6 +22,9 @@ void *nwpad_in_game_gui(void);
 /* Research (F40): JSON list of the client area's objects: id, type byte, +0xa8 flag, +0x11c flag,
  * name, position when readable. */
 void nwpad_game_debug_area_objects(char *out, size_t cap, int max);
+/* Research (F40): do the game's click on the client object with this id, as a mouse click on it
+ * would (PerformDefaultActionOnObject). Returns the game's result, -1 if it couldn't try. */
+int nwpad_game_debug_click_object(uint32_t id);
 /* Whether the game's options panel / area map is open (CGuiInGame+0xd8 non-null /
  * the map panel at +0xb8 active; re-notes F38), for tests. */
 bool nwpad_game_menu_open(void);

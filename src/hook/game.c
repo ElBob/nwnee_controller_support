@@ -50,11 +50,24 @@ void nwpad_game_debug_area_objects(char *out, size_t cap, int max) {
         void **nwc = g ? ((void **(*)(void *))((void **)*g)[0x20 / 8])(g) : NULL; /* AsNWCObject */
         if (!nwc) continue;
         char *o = (char *)nwc;
-        n += (size_t)snprintf(out + n, cap - n, "%s{\"id\":\"%08x\",\"type\":%u,\"a8\":%u,\"f11c\":%d}", shown ? "," : "",
-                              ids[i], (unsigned)(uint8_t)o[0xc], (unsigned)(uint8_t)o[0xa8], *(int *)(o + 0x11c));
+        n += (size_t)snprintf(out + n, cap - n,
+                              "%s{\"id\":\"%08x\",\"type\":%u,\"a8\":%u,\"f11c\":%d,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f}",
+                              shown ? "," : "", ids[i], (unsigned)(uint8_t)o[0xc], (unsigned)(uint8_t)o[0xa8],
+                              *(int *)(o + 0x11c), *(float *)(o + 0x38), *(float *)(o + 0x3c), *(float *)(o + 0x40));
         shown++;
     }
     if (n < cap) snprintf(out + n, cap - n, "],\"shown\":%d}", shown);
+}
+
+int nwpad_game_debug_click_object(uint32_t id) {
+    void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
+    uint64_t (*click)(void *, void *) = (uint64_t (*)(void *, void *))nwpad_sig(NWPAD_SIG_CLIENT_DEFAULT_ACTION_ON_OBJECT);
+    void *app = nwpad_client_app();
+    char *internal = app ? *(char **)((char *)app + 0x8) : NULL;
+    void **g = object && internal ? object(app, id) : NULL;
+    void **nwc = g ? ((void **(*)(void *))((void **)*g)[0x20 / 8])(g) : NULL; /* AsNWCObject */
+    if (!nwc || !click) return -1;
+    return (int)click(internal, nwc);
 }
 
 bool nwpad_game_menu_open(void) {

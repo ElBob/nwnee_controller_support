@@ -388,6 +388,12 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else if (!strcmp(action, "confirm")) g.picker.action = 1;
         else if (!strcmp(action, "cancel")) g.picker.action = 2;
         snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
+    } else if (strcmp(cmd, "click_object") == 0) {
+        /* {"cmd":"click_object","id":"80000060"}: the game's click on an object (research, F40) */
+        char id[16] = "";
+        nwpad_json_get_string(request, "id", id, sizeof id);
+        int r = nwpad_game_debug_click_object((uint32_t)strtoul(id, NULL, 16));
+        snprintf(out, cap, "{\"ok\":%s,\"result\":%d}", r >= 0 ? "true" : "false", r);
     } else if (strcmp(cmd, "area_objects") == 0) {
         /* {"cmd":"area_objects","max":200}: the client area's objects (research, F40) */
         double m = 200;
