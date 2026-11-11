@@ -28,6 +28,10 @@ void nwpad_game_debug_area_objects(char *out, size_t cap, int max);
 /* Research (F40): light up (on) or un-light the client object with this id the way the game's
  * highlight-all does (vslot 0x160 / 0x168, with the creature's MouseOver). rgb 0-1. */
 int nwpad_game_debug_hilite(uint32_t id, bool on, float r, float g, float b);
+/* Research (F40): open the object's own radial menu, as a right click on it does
+ * (vslot 0x150 of the CNWCObject; the menu appears at the GUI's recorded mouse position).
+ * Returns the object's type byte, -1 if it couldn't try. */
+int nwpad_game_debug_radial(uint32_t id);
 /* Research (F40): do the game's click on the client object with this id, as a mouse click on it
  * would (PerformDefaultActionOnObject). Returns the game's result, -1 if it couldn't try. */
 int nwpad_game_debug_click_object(uint32_t id);

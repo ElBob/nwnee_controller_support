@@ -18,8 +18,8 @@ bool nwpad_targets_active(void);
 /* Per frame while active: ends the mode if the selected object is gone. */
 void nwpad_targets_frame(void);
 
-#ifdef NWPAD_DEBUG_SURFACES
 uint32_t nwpad_targets_selected(void); /* the selected object's id, 0 none */
+#ifdef NWPAD_DEBUG_SURFACES
 int nwpad_targets_count(void);         /* how many were in the list the last time it was made */
 #endif
 

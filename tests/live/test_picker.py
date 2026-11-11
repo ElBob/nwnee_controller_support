@@ -418,3 +418,47 @@ def test_pad_target_cycle(game, ctl, virtual_pad):
     ctl("shortcuts", action="cancel")
     time.sleep(0.4)
     assert not server_heard_nwpad(game)
+
+
+def test_pad_target_radial_menu(game, ctl, virtual_pad):
+    """A on a selected target opens the object's own radial menu, as a right click on it
+    does; the right stick picks an entry, B cancels (the target stays selected). A with no
+    target selected opens nothing, and the d-pad does not step targets while a menu is up."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+
+    def ev():
+        return ctl("state")["events"]
+
+    pad.press("a")  # no target selected: nothing
+    time.sleep(0.6)
+    assert ev()["radial"]["depth"] == 0
+    pad.press("dright")
+    time.sleep(0.6)
+    t = ev()["targets"]
+    assert t["active"], t
+    for kind in (5, 9):  # a creature's menu, then a placeable's
+        for _ in range(t["count"]):
+            if _target_ids(ctl)[ev()["targets"]["selected"]]["type"] == kind:
+                break
+            pad.press("dright")
+            time.sleep(0.4)
+        sel = ev()["targets"]["selected"]
+        assert _target_ids(ctl)[sel]["type"] == kind
+        pad.press("a")
+        time.sleep(0.8)
+        assert ev()["radial"]["depth"] >= 1, ev()
+        assert ctl("radial", action="aim", x=0.0, y=1.0)["picked"] >= 0  # straight up picks an entry
+        pad.press("dright")  # the d-pad does nothing while the menu is up
+        time.sleep(0.4)
+        assert ev()["targets"]["selected"] == sel
+        pad.press("b")
+        time.sleep(0.8)
+        assert ev()["radial"]["depth"] == 0, ev()
+        assert ev()["targets"]["active"] and ev()["targets"]["selected"] == sel
+    pad.press("b")
+    time.sleep(0.4)
+    assert not ev()["targets"]["active"]
+    assert not server_heard_nwpad(game)

@@ -79,6 +79,16 @@ int nwpad_game_debug_hilite(uint32_t id, bool on, float r, float g, float b) {
     return type;
 }
 
+int nwpad_game_debug_radial(uint32_t id) {
+    void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
+    void *app = nwpad_client_app();
+    void **g = object && app ? object(app, id) : NULL;
+    void **nwc = g ? ((void **(*)(void *))((void **)*g)[0x20 / 8])(g) : NULL; /* AsNWCObject */
+    if (!nwc) return -1;
+    ((void (*)(void *))((void **)*nwc)[0x150 / 8])(nwc);
+    return ((uint8_t *)nwc)[0xc];
+}
+
 int nwpad_game_debug_click_object(uint32_t id) {
     void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
     uint64_t (*click)(void *, void *) = (uint64_t (*)(void *, void *))nwpad_sig(NWPAD_SIG_CLIENT_DEFAULT_ACTION_ON_OBJECT);

@@ -180,6 +180,18 @@ signatures:
     note: F40
     debug: true                 # experiment only, for now; left out of release builds
     symbol: _ZN21CClientExoAppInternal28PerformDefaultActionOnObjectEP10CNWCObject
+  radial_menu_depth:       # int CRadialMenu::static_nMenuDepth: radial menus open (a sub menu counts)
+    note: F41
+    symbol: _ZN11CRadialMenu17static_nMenuDepthE
+  radial_menu_move:        # CRadialMenu::HandleMouseMoveCaptured(int x, int y): picks the entry at that pointer position
+    note: F41
+    symbol: _ZN11CRadialMenu23HandleMouseMoveCapturedEii
+  radial_menu_action:      # CRadialMenu::HandleMenuAction(): does the picked entry / opens its sub menu
+    note: F41
+    symbol: _ZN11CRadialMenu16HandleMenuActionEv
+  radial_menu_key:         # CRadialMenu::HandleKeyEvent(key, pressed): Escape (0x12) cancels
+    note: F41
+    symbol: _ZN11CRadialMenu14HandleKeyEventEjj
   nui_window_element_by_id: # Nui::JSON::JsonWindow::GetElementById(std::string const&) -> shared_ptr<Layoutable> (hidden return)
     note: F37
     symbol: _ZN3Nui4JSON10JsonWindow14GetElementByIdERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE

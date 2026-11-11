@@ -25,8 +25,8 @@ static struct {
 
 bool nwpad_targets_active(void) { return tg.active; }
 
-#ifdef NWPAD_DEBUG_SURFACES
 uint32_t nwpad_targets_selected(void) { return tg.active ? tg.selected : 0; }
+#ifdef NWPAD_DEBUG_SURFACES
 int nwpad_targets_count(void) { return tg.count; }
 #endif
 

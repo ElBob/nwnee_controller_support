@@ -28,6 +28,7 @@
 #include "dialog.h"
 #include "dialogui.h"
 #include "shortcuts.h"
+#include "radial.h"
 #include "targets.h"
 #include "crashtrace.h"
 #include "sdl_min.h"
@@ -166,6 +167,7 @@ static struct {
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes, pad_buttons; } events; /* seen by the PollEvent hook */
     int pad_game_action;                 /* Start (1: the game menu) / Select (2: the map), for the next frame */
     int pad_target_step;                 /* d-pad right (+1) / left (-1): step through the targets, for the next frame */
+    struct { bool want; int action; } radial; /* A on a target opens the object's menu; A / B in it */
     bool pad_target_end;                 /* B in target selection: end it, for the next frame */
     struct {
         bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
@@ -399,6 +401,24 @@ static void control_handler(const char *request, char *out, size_t cap) {
         nwpad_json_get_string(request, "action", action, sizeof action);
         if (!strcmp(action, "end")) g.pad_target_end = true;
         snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "radial_object") == 0) {
+        /* {"cmd":"radial_object","id":"80000060"}: the object's radial menu (research, F40) */
+        char id[16] = "";
+        nwpad_json_get_string(request, "id", id, sizeof id);
+        int t = nwpad_game_debug_radial((uint32_t)strtoul(id, NULL, 16));
+        snprintf(out, cap, "{\"ok\":%s,\"type\":%d}", t >= 0 ? "true" : "false", t);
+    } else if (strcmp(cmd, "radial") == 0) {
+        /* {"cmd":"radial","action":"open"|"confirm"|"cancel","x":..,"y":..}: as A / B / the stick do */
+        char action[16] = "";
+        double sx = 0, sy = 0;
+        nwpad_json_get_string(request, "action", action, sizeof action);
+        nwpad_json_get_number(request, "x", &sx);
+        nwpad_json_get_number(request, "y", &sy);
+        if (!strcmp(action, "open")) g.radial.want = true;
+        else if (!strcmp(action, "confirm")) g.radial.action = 1;
+        else if (!strcmp(action, "cancel")) g.radial.action = 2;
+        else if (!strcmp(action, "aim")) nwpad_radial_frame((nwpad_vec2){(float)sx, (float)sy});
+        snprintf(out, cap, "{\"ok\":true,\"depth\":%d,\"picked\":%d}", nwpad_radial_depth(), nwpad_radial_picked());
     } else if (strcmp(cmd, "hilite_object") == 0) {
         /* {"cmd":"hilite_object","id":"80000060","on":1,"r":1,"g":0.8,"b":0.2} (research, F40) */
         char id[16] = "";
@@ -468,7 +488,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu,"
                          "\"game_menu_open\":%s,\"game_map_open\":%s,"
                          "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
-                         "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d}}",
+                         "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d},"
+                         "\"radial\":{\"depth\":%d,\"picked\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -481,7 +502,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          nwpad_game_menu_open() ? "true" : "false", nwpad_game_map_open() ? "true" : "false",
                          nwpad_shortcuts_open() ? "true" : "false", nwpad_shortcuts_selected(),
                          nwpad_shortcuts_last_action(), nwpad_targets_active() ? "true" : "false",
-                         (unsigned)nwpad_targets_selected(), nwpad_targets_count());
+                         (unsigned)nwpad_targets_selected(), nwpad_targets_count(),
+                         nwpad_radial_depth(), nwpad_radial_picked());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -703,6 +725,20 @@ static void nwpad_frame(void) {
     }
     g.pad_target_step = 0;
     nwpad_targets_frame();
+    NWPAD_WHERE("radial");
+    if (g.radial.want) { /* A on a selected target: its menu, as a right click */
+        uint32_t sel = nwpad_targets_selected();
+        if (sel && g.cfg.enabled && nwpad_backend_in_game() && !nwpad_radial_open()) nwpad_radial_open_for(sel);
+        g.radial.want = false;
+    }
+    if (g.radial.action == 1) nwpad_radial_confirm();
+    else if (g.radial.action == 2) nwpad_radial_cancel();
+    g.radial.action = 0;
+    if (nwpad_radial_open()) { /* the stick picks the entry; nothing else moves */
+        nwpad_radial_frame(right.x || right.y ? right : left);
+        left = right = (nwpad_vec2){0, 0};
+        g.shortcuts.latched = g.picker.latched = false;
+    }
     NWPAD_WHERE("shortcuts");
     if (g.shortcuts.action) { /* A (do it) / B or the trigger again (close) */
         nwpad_shortcuts_close(g.shortcuts.action == 1);
@@ -878,6 +914,10 @@ static void pad_button(const SDL_Event *event) {
     int dpad = button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : 0;
     if (!step && !act && !dpad && button != SDL_CONTROLLER_BUTTON_START && button != SDL_CONTROLLER_BUTTON_BACK) return;
     g.events.pad_buttons++;
+    if (nwpad_radial_open()) { /* the game's radial menu: A does the picked entry, B cancels; nothing else */
+        if (act) g.radial.action = act;
+        return;
+    }
     if (dpad) { /* left / right start target selection and step through it, unless a window of ours is up */
         if (!nwpad_shortcuts_open() && !nwpad_dialogui_open() && !nwpad_picker_open()) g.pad_target_step += dpad;
         return;
@@ -897,6 +937,8 @@ static void pad_button(const SDL_Event *event) {
     } else if (nwpad_picker_open()) {
         if (step) g.picker.shift += step;
         else g.picker.action = act;
+    } else if (act == 1 && nwpad_targets_active()) {
+        g.radial.want = true; /* A on a target: the object's radial menu (the frame opens it) */
     } else if (step) {
         g.picker.latched = true; /* the frame opens it, as it does for the picker key */
     }

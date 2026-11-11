@@ -428,3 +428,11 @@ Every function, global, offset, and signature the library uses must have an entr
 | Q6 | ~~Is there dormant controller code from the console builds?~~ No (F11) | R6 |
 | Q7 | ~~Command-line options for loading a save or module?~~ `+TestNewModule` (F13); user directory: `-userdirectory` (F10) | R5 |
 | Q8 | What does `m_fDriveModeMoveFactor` control? | R1 |
+
+## F41. The radial menu from the controller (2026-11-10)
+
+- A on a selected target calls the object's vslot +0x150 `ActivateRadialMenu()` after recording the id at `CClientExoAppInternal+0x424`, as `PerformRButtonDownAction` does. The menu opens at `CGuiMan+0xd4/+0xd8` (the pointer the GUI last saw); nwpad sets that to the screen centre first.
+- Open menus are the GUI's modal panels (`CGuiMan+0x88`, count `+0x90`); `CRadialMenu::static_nMenuDepth` counts them but a sub menu *replaces* its parent in place, so the depth stays 1. The top modal is the menu a click would reach.
+- Picking: `HandleMouseMoveCaptured(x, y)` works from the menu centre (`+0x85c/+0x860`): the angle picks the entry (`+0x84c`, 0..7, 0 is down, 2 right, 4 up, 6 left) and the distance squared sets the state (`+0x848`: 2 entry, 3 sub menu entry, 5 outside). The stick is turned into a pointer 100 GUI units from the centre.
+- Doing it: `HandleMenuAction()` (state 2/3 only) runs the entry's callback or opens the sub menu. Cancel: `HandleKeyEvent(0x12, 1)` (Escape) closes the whole thing; there is no step back to the parent.
+- Proven on the test module: creature and placeable menus, picking all eight directions, a sub menu (Attack/other rings) opening and aiming inside it, B closing. Doors and items go through other menu classes and are untried.
