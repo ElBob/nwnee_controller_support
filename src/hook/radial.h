@@ -22,6 +22,7 @@ void nwpad_radial_cancel(void);
 
 #ifdef NWPAD_DEBUG_SURFACES
 int nwpad_radial_depth(void);
+int nwpad_radial_level(void);  /* 0 the top menu, 1 a sub menu, ...; -1 none open */
 int nwpad_radial_picked(void); /* the top menu's picked entry (0-7), -1 none */
 #endif
 

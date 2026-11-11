@@ -454,6 +454,14 @@ def test_pad_target_radial_menu(game, ctl, virtual_pad):
         pad.press("dright")  # the d-pad does nothing while the menu is up
         time.sleep(0.4)
         assert ev()["targets"]["selected"] == sel
+        if kind == 5:  # a sub menu: B goes up to the menu it came from, a second B closes
+            ctl("radial", action="aim", x=0.7071, y=0.7071)  # up-right: a sub menu entry
+            pad.press("a")
+            time.sleep(0.8)
+            assert ev()["radial"]["level"] == 1, ev()["radial"]
+            pad.press("b")
+            time.sleep(0.8)
+            assert ev()["radial"]["level"] == 0, ev()["radial"]
         pad.press("b")
         time.sleep(0.8)
         assert ev()["radial"]["depth"] == 0, ev()

@@ -13,6 +13,7 @@
 
 enum { GUI_MODALS = 0x88, GUI_MODAL_COUNT = 0x90, GUI_MOUSE_X = 0xd4, GUI_MOUSE_Y = 0xd8, GUI_WIDTH = 0xb8 };
 enum { MENU_CENTER_X = 0x85c, MENU_CENTER_Y = 0x860, MENU_STATE = 0x848, MENU_PICKED = 0x84c };
+enum { MENU_PARENT = 0x358 };
 enum { OBJ_VSLOT_RADIAL = 0x150, INTERNAL_RADIAL_TARGET = 0x424, KEY_ESCAPE = 0x12 };
 #define PICK_RADIUS 100.0f /* GUI units: the game's entry ring is 56..150 */
 
@@ -67,16 +68,33 @@ void nwpad_radial_confirm(void) {
     if (act && (state == 2 || state == 3)) act(m);
 }
 
+/* B: up one level, as the centre of a sub menu does (the game re-opens the parent when the
+ * pointer is in the centre and it is acted on, F41); from the top menu, close it (Escape). */
 void nwpad_radial_cancel(void) {
     char *m = top_menu();
+    void (*move)(void *, int, int) = (void (*)(void *, int, int))nwpad_sig(NWPAD_SIG_RADIAL_MENU_MOVE);
+    void (*act)(void *) = (void (*)(void *))nwpad_sig(NWPAD_SIG_RADIAL_MENU_ACTION);
     unsigned (*key)(void *, unsigned, unsigned) = (unsigned (*)(void *, unsigned, unsigned))nwpad_sig(NWPAD_SIG_RADIAL_MENU_KEY);
-    if (m && key) key(m, KEY_ESCAPE, 1);
+    if (!m) return;
+    if (*(void **)(m + MENU_PARENT) && move && act) {
+        move(m, *(int *)(m + MENU_CENTER_X), *(int *)(m + MENU_CENTER_Y));
+        act(m);
+    } else if (key) {
+        key(m, KEY_ESCAPE, 1);
+    }
 }
 
 #ifdef NWPAD_DEBUG_SURFACES
 int nwpad_radial_depth(void) {
     int *depth = (int *)nwpad_sig(NWPAD_SIG_RADIAL_MENU_DEPTH);
     return depth ? *depth : -1;
+}
+
+int nwpad_radial_level(void) { /* 0 the top menu, 1 a sub menu, ...; -1 none open */
+    char *m = top_menu();
+    int n = -1;
+    for (; m; m = *(char **)(m + MENU_PARENT)) n++;
+    return n;
 }
 
 int nwpad_radial_picked(void) {

@@ -418,7 +418,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else if (!strcmp(action, "confirm")) g.radial.action = 1;
         else if (!strcmp(action, "cancel")) g.radial.action = 2;
         else if (!strcmp(action, "aim")) nwpad_radial_frame((nwpad_vec2){(float)sx, (float)sy});
-        snprintf(out, cap, "{\"ok\":true,\"depth\":%d,\"picked\":%d}", nwpad_radial_depth(), nwpad_radial_picked());
+        snprintf(out, cap, "{\"ok\":true,\"depth\":%d,\"level\":%d,\"picked\":%d}", nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked());
     } else if (strcmp(cmd, "hilite_object") == 0) {
         /* {"cmd":"hilite_object","id":"80000060","on":1,"r":1,"g":0.8,"b":0.2} (research, F40) */
         char id[16] = "";
@@ -489,7 +489,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"game_menu_open\":%s,\"game_map_open\":%s,"
                          "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
                          "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d},"
-                         "\"radial\":{\"depth\":%d,\"picked\":%d}}",
+                         "\"radial\":{\"depth\":%d,\"level\":%d,\"picked\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -503,7 +503,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          nwpad_shortcuts_open() ? "true" : "false", nwpad_shortcuts_selected(),
                          nwpad_shortcuts_last_action(), nwpad_targets_active() ? "true" : "false",
                          (unsigned)nwpad_targets_selected(), nwpad_targets_count(),
-                         nwpad_radial_depth(), nwpad_radial_picked());
+                         nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
