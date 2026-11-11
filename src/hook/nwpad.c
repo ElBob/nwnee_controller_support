@@ -414,6 +414,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
         char name[64] = "";
         nwpad_json_get_string(request, "name", name, sizeof name);
         snprintf(out, cap, "{\"ok\":%s}", name[0] && nwpad_game_debug_play_movie(name) ? "true" : "false");
+    } else if (strcmp(cmd, "radial_entries") == 0) {
+        nwpad_radial_debug_entries(out, cap);
     } else if (strcmp(cmd, "radial") == 0) {
         /* {"cmd":"radial","action":"open"|"confirm"|"cancel","x":..,"y":..}: as A / B / the stick do */
         char action[16] = "";
@@ -954,8 +956,9 @@ static void pad_button(const SDL_Event *event) {
     int dpad = button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : 0;
     if (!step && !act && !dpad && button != SDL_CONTROLLER_BUTTON_START && button != SDL_CONTROLLER_BUTTON_BACK) return;
     g.events.pad_buttons++;
-    if (nwpad_radial_open()) { /* the game's radial menu: A does the picked entry, B cancels; nothing else */
+    if (nwpad_radial_open()) { /* the game's radial menu: A does the picked entry, B (or Start) cancels; nothing else */
         if (act) g.radial.action = act;
+        else if (button == SDL_CONTROLLER_BUTTON_START) g.radial.action = 2;
         return;
     }
     if (dpad) { /* left / right start target selection and step through it, unless a window of ours is up */

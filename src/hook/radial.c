@@ -6,6 +6,7 @@
 #include "radial.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "game.h"
@@ -13,7 +14,8 @@
 
 enum { GUI_MODALS = 0x88, GUI_MODAL_COUNT = 0x90, GUI_MOUSE_X = 0xd4, GUI_MOUSE_Y = 0xd8, GUI_WIDTH = 0xb8 };
 enum { MENU_CENTER_X = 0x85c, MENU_CENTER_Y = 0x860, MENU_STATE = 0x848, MENU_PICKED = 0x84c };
-enum { MENU_PARENT = 0x358 };
+enum { MENU_PARENT = 0x358, MENU_ENTRY_FLAGS = 0x238, MENU_ENTRY_ICONS = 0x760 };
+#define ENTRIES 8
 enum { OBJ_VSLOT_RADIAL = 0x150, INTERNAL_RADIAL_TARGET = 0x424, KEY_ESCAPE = 0x12 };
 #define PICK_RADIUS 100.0f /* GUI units: the game's entry ring is 56..150 */
 
@@ -55,11 +57,20 @@ void nwpad_radial_frame(nwpad_vec2 stick) {
     void (*move)(void *, int, int) = (void (*)(void *, int, int))nwpad_sig(NWPAD_SIG_RADIAL_MENU_MOVE);
     float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
     if (!m || !move || nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return;
-    /* Quantized: the pointer goes to the exact direction of the nearest of the eight entries
-     * (they sit at multiples of 45 degrees from up), so the stick only ever picks an entry.
-     * The GUI's y runs up, like the stick's (F41). */
-    float s = scale ? scale() : 1.0f;
-    float rad = (float)lround(nwpad_stick_angle_cw(stick) / 45.0f) * 45.0f * NWPAD_RAD_PER_DEG;
+    /* Quantized: the pointer goes to the exact direction of the nearest of the entries that
+     * exist (they sit at multiples of 45 degrees from up; a slot with no icon is empty and is
+     * skipped, so its sector goes to its neighbours), so the stick only ever picks a real
+     * entry. On a tie the entry already picked stays. The GUI's y runs up, like the stick's
+     * (F41). */
+    float s = scale ? scale() : 1.0f, deg = nwpad_stick_angle_cw(stick), best_d = 1e9f;
+    int state = *(int *)(m + MENU_STATE), current = state == 2 || state == 3 ? *(int *)(m + MENU_PICKED) : -1, best = -1;
+    for (int i = 0; i < ENTRIES; i++) {
+        if (!*(void **)(m + MENU_ENTRY_ICONS + i * 8)) continue;
+        float d = fabsf(nwpad_angle_diff(deg, (float)i * 45.0f));
+        if (d < best_d - 0.01f || (fabsf(d - best_d) <= 0.01f && i == current)) best_d = d, best = i;
+    }
+    if (best < 0) return;
+    float rad = (float)best * 45.0f * NWPAD_RAD_PER_DEG;
     int x = *(int *)(m + MENU_CENTER_X) + (int)lroundf(sinf(rad) * PICK_RADIUS * s);
     int y = *(int *)(m + MENU_CENTER_Y) + (int)lroundf(cosf(rad) * PICK_RADIUS * s);
     move(m, x, y);
@@ -69,7 +80,8 @@ void nwpad_radial_confirm(void) {
     char *m = top_menu();
     void (*act)(void *) = (void (*)(void *))nwpad_sig(NWPAD_SIG_RADIAL_MENU_ACTION);
     int state = m ? *(int *)(m + MENU_STATE) : 0;
-    if (act && (state == 2 || state == 3)) act(m);
+    /* a greyed-out entry (flag bit 0) does nothing */
+    if (act && (state == 2 || state == 3) && !(*(uint32_t *)(m + MENU_ENTRY_FLAGS + *(int *)(m + MENU_PICKED) * 4) & 1)) act(m);
 }
 
 /* B: up one level, as the centre of a sub menu does (the game re-opens the parent when the
@@ -92,6 +104,18 @@ void nwpad_radial_cancel(void) {
 int nwpad_radial_depth(void) {
     int *depth = (int *)nwpad_sig(NWPAD_SIG_RADIAL_MENU_DEPTH);
     return depth ? *depth : -1;
+}
+
+void nwpad_radial_debug_entries(char *out, size_t cap) {
+    char *m = top_menu();
+    size_t n = (size_t)snprintf(out, cap, "{\"ok\":%s,\"entries\":[", m ? "true" : "false");
+    for (int i = 0; m && i < 8 && n < cap; i++)
+        n += (size_t)snprintf(out + n, cap - n,
+                              "%s{\"i\":%d,\"flag\":%u,\"cb_obj\":\"%p\",\"cb_fn\":\"%p\",\"sub\":\"%p\",\"icon\":\"%p\",\"arg\":\"%p\"}",
+                              i ? "," : "", i, *(unsigned *)(m + 0x238 + i * 4), *(void **)(m + 0x138 + i * 0x18),
+                              *(void **)(m + 0x140 + i * 0x18), *(void **)(m + 0x318 + i * 8),
+                              *(void **)(m + 0x760 + i * 8), *(void **)(m + 0x1f8 + i * 8));
+    if (n < cap) snprintf(out + n, cap - n, "]}");
 }
 
 int nwpad_radial_level(void) { /* 0 the top menu, 1 a sub menu, ...; -1 none open */

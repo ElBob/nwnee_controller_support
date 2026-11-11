@@ -62,7 +62,8 @@ creature's name plate; B ends it. **A on the lit target** does what a click woul
 a spell is waiting for a target it casts on that object (a target the spell can't take is
 refused and the spell keeps waiting); otherwise it opens the object's own radial menu, as
 a right click does. In the menu the right stick picks an entry, A does it, and B goes up
-a level (a sub menu's centre; from the top menu it closes the menu). The keys keep working
+a level (a sub menu's centre; from the top menu it closes the menu); Start does what B does
+there. Empty slots are skipped, so the stick only ever lands on an entry that exists. The keys keep working
 too, so use whichever your layout sends.
 
 **Start-up intro:** any controller button (or the right trigger) counts as the key press

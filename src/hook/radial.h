@@ -22,6 +22,8 @@ void nwpad_radial_cancel(void);
 
 #ifdef NWPAD_DEBUG_SURFACES
 int nwpad_radial_depth(void);
+/* JSON of the top menu's eight entries' raw fields (research, F41). */
+void nwpad_radial_debug_entries(char *out, size_t cap);
 int nwpad_radial_level(void);  /* 0 the top menu, 1 a sub menu, ...; -1 none open */
 int nwpad_radial_picked(void); /* the top menu's picked entry (0-7), -1 none */
 #endif

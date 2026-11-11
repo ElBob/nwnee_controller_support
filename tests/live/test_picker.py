@@ -451,6 +451,15 @@ def test_pad_target_radial_menu(game, ctl, virtual_pad):
         time.sleep(0.8)
         assert ev()["radial"]["depth"] >= 1, ev()
         assert ctl("radial", action="aim", x=0.0, y=1.0)["picked"] >= 0  # straight up picks an entry
+        # An empty slot is skipped: the entries that exist are the ones with an icon, and the
+        # stick pushed toward an empty slot's angle picks a real one.
+        icons = {e["i"]: e["icon"] != "(nil)" for e in ctl("radial_entries")["entries"]}
+        assert any(icons.values()) and not all(icons.values()), icons
+        for empty in [i for i, has in icons.items() if not has]:
+            import math
+            a = math.radians(empty * 45)
+            picked = ctl("radial", action="aim", x=math.sin(a), y=math.cos(a))["picked"]
+            assert picked >= 0 and icons[picked] and picked != empty, (empty, picked, icons)
         pad.press("dright")  # the d-pad does nothing while the menu is up
         time.sleep(0.4)
         assert ev()["targets"]["selected"] == sel
@@ -462,9 +471,10 @@ def test_pad_target_radial_menu(game, ctl, virtual_pad):
             pad.press("b")
             time.sleep(0.8)
             assert ev()["radial"]["level"] == 0, ev()["radial"]
-        pad.press("b")
+        pad.press("b" if kind == 5 else "start")  # Start does what B does in the menu
         time.sleep(0.8)
         assert ev()["radial"]["depth"] == 0, ev()
+        assert not ev()["game_menu_open"], ev()  # (and does not also open the game menu)
         assert ev()["targets"]["active"] and ev()["targets"]["selected"] == sel
     pad.press("b")
     time.sleep(0.4)
