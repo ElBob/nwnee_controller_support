@@ -168,6 +168,7 @@ static struct {
     int pad_game_action;                 /* Start (1: the game menu) / Select (2: the map), for the next frame */
     int pad_target_step;                 /* d-pad right (+1) / left (-1): step through the targets, for the next frame */
     struct { bool want; int action; } radial; /* A on a target opens the object's menu; A / B in it */
+    bool stick_latch_left, stick_latch_right; /* a wheel took this stick: it does nothing else until let go */
     bool pad_target_end;                 /* B in target selection: end it, for the next frame */
     struct {
         bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
@@ -679,6 +680,7 @@ static void nwpad_frame(void) {
                 (nwpad_vec2){axis(SDL_CONTROLLER_AXIS_RIGHTX), -axis(SDL_CONTROLLER_AXIS_RIGHTY)});
         }
     }
+    const nwpad_vec2 raw_left = left, raw_right = right; /* before a wheel takes them */
     if (g.picker.up_ms && t - g.picker.up_ms >= PICKER_KEYUP_MS) {
         g.picker.held = false;
         g.picker.up_ms = 0;
@@ -742,7 +744,8 @@ static void nwpad_frame(void) {
     if (g.radial.action == 1) nwpad_radial_confirm();
     else if (g.radial.action == 2) nwpad_radial_cancel();
     g.radial.action = 0;
-    if (nwpad_radial_open()) { /* the stick picks the entry; nothing else moves */
+    bool radial = nwpad_radial_open();
+    if (radial) { /* the stick picks the entry; nothing else moves */
         nwpad_radial_frame(right.x || right.y ? right : left);
         left = right = (nwpad_vec2){0, 0};
         g.shortcuts.latched = g.picker.latched = false;
@@ -772,6 +775,19 @@ static void nwpad_frame(void) {
                                       nwpad_backend_in_game());
     if (!picking) g.picker.latched = false; /* e.g. left the game */
     if (picking) right = (nwpad_vec2){0, 0};
+    /* A stick that has driven a wheel (or the radial menu) stays dead for the game until it
+     * has been let go completely, so closing the wheel with the stick still over doesn't
+     * turn the camera or walk (Robert). */
+    if ((picking || shortcutting || radial) && nwpad_magnitude(raw_right) > 0) g.stick_latch_right = true;
+    if (radial && nwpad_magnitude(raw_left) > 0) g.stick_latch_left = true;
+    if (g.stick_latch_right) {
+        if (nwpad_magnitude(raw_right) > 0) right = (nwpad_vec2){0, 0};
+        else g.stick_latch_right = false;
+    }
+    if (g.stick_latch_left) {
+        if (nwpad_magnitude(raw_left) > 0) left = (nwpad_vec2){0, 0};
+        else g.stick_latch_left = false;
+    }
 
     g.last_left = left;
     g.last_right = right;

@@ -54,10 +54,14 @@ void nwpad_radial_frame(nwpad_vec2 stick) {
     char *m = top_menu();
     void (*move)(void *, int, int) = (void (*)(void *, int, int))nwpad_sig(NWPAD_SIG_RADIAL_MENU_MOVE);
     float (*scale)(void) = (float (*)(void))nwpad_sig(NWPAD_SIG_GUI_SCALE);
-    if (!m || !move || (stick.x == 0.0f && stick.y == 0.0f)) return;
-    float s = scale ? scale() : 1.0f, len = sqrtf(stick.x * stick.x + stick.y * stick.y);
-    int x = *(int *)(m + MENU_CENTER_X) + (int)lroundf(stick.x / len * PICK_RADIUS * s);
-    int y = *(int *)(m + MENU_CENTER_Y) - (int)lroundf(stick.y / len * PICK_RADIUS * s); /* screen y is down */
+    if (!m || !move || nwpad_magnitude(stick) < NWPAD_PICKER_MIN) return;
+    /* Quantized: the pointer goes to the exact direction of the nearest of the eight entries
+     * (they sit at multiples of 45 degrees from up), so the stick only ever picks an entry.
+     * The GUI's y runs up, like the stick's (F41). */
+    float s = scale ? scale() : 1.0f;
+    float rad = (float)lround(nwpad_stick_angle_cw(stick) / 45.0f) * 45.0f * NWPAD_RAD_PER_DEG;
+    int x = *(int *)(m + MENU_CENTER_X) + (int)lroundf(sinf(rad) * PICK_RADIUS * s);
+    int y = *(int *)(m + MENU_CENTER_Y) + (int)lroundf(cosf(rad) * PICK_RADIUS * s);
     move(m, x, y);
 }
 

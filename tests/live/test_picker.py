@@ -511,3 +511,25 @@ def test_pad_target_completes_pending_spell(game, ctl, virtual_pad):
     assert ev()["radial"]["depth"] == 0  # the spell took it; no menu
     assert not ev()["targets"]["active"]
     assert not server_heard_nwpad(game)
+
+
+def test_stick_stays_dead_after_a_wheel(game, ctl):
+    """A stick that drove a wheel does nothing else (camera, walking) until it has been let
+    go completely: closing the shortcuts wheel with the stick still pushed leaves the camera
+    alone, and the next push after a release turns it again."""
+    ctl("release")
+    time.sleep(0.5)
+    yaw0 = ctl("state")["camera"]["yaw"]
+    ctl("shortcuts", action="open")
+    time.sleep(0.5)
+    ctl("stick", rx=1.0)  # picks a slot, held
+    time.sleep(0.5)
+    ctl("shortcuts", action="cancel")  # closes with the stick still over
+    time.sleep(1.2)
+    assert abs(ctl("state")["camera"]["yaw"] - yaw0) < 0.5, ctl("state")["camera"]
+    ctl("release")
+    time.sleep(0.5)
+    ctl("stick", rx=1.0)  # a fresh push: the camera turns
+    time.sleep(1.0)
+    ctl("release")
+    assert abs(ctl("state")["camera"]["yaw"] - yaw0) > 5.0, ctl("state")["camera"]
