@@ -739,7 +739,7 @@ static void nwpad_frame(void) {
     NWPAD_WHERE("intro skip");
     if (g.pad_intro_skip) { /* any controller button skips an intro movie / passes the legal screen, as a key does */
         int stage = nwpad_intro_stage();
-        if ((stage >= 1 && stage <= 6) || nwpad_movie_playing()) nwpad_intro_press_any_key();
+        if ((stage >= 1 && stage <= 9) || nwpad_movie_playing()) nwpad_intro_press_any_key();
         g.pad_intro_skip = false;
     }
     NWPAD_WHERE("radial");

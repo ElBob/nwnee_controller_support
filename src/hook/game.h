@@ -22,8 +22,8 @@ bool nwpad_movie_playing(void);
 /* Start the named movie (no extension), as the intro does: tests only. */
 bool nwpad_game_debug_play_movie(const char *name);
 #endif
-/* The start-up intro's stage (CPregameIntro+0x98): 1-4 its movies, 5-6 the "press any key"
- * legal screen, later it hands over to the main menu; -1 when it isn't running (re-notes F43). */
+/* The start-up intro's stage (CPregameIntro+0x98): 1-4 its movies, 5-9 the "press any key"
+ * legal screen (fading in, holding at 7, fading out), later it hands over to the main menu; -1 when it isn't running (re-notes F43). */
 int nwpad_intro_stage(void);
 /* Press a key on the focused GUI control, as a keyboard key would: skips a movie (each one
  * puts up a "press any key" control) and passes the intro's legal screen. */
