@@ -488,7 +488,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu,"
                          "\"game_menu_open\":%s,\"game_map_open\":%s,"
                          "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
-                         "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d},"
+                         "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d,\"pending\":%s},"
                          "\"radial\":{\"depth\":%d,\"level\":%d,\"picked\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
@@ -503,6 +503,7 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          nwpad_shortcuts_open() ? "true" : "false", nwpad_shortcuts_selected(),
                          nwpad_shortcuts_last_action(), nwpad_targets_active() ? "true" : "false",
                          (unsigned)nwpad_targets_selected(), nwpad_targets_count(),
+                         nwpad_targets_pending() ? "true" : "false",
                          nwpad_radial_depth(), nwpad_radial_level(), nwpad_radial_picked());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
@@ -728,7 +729,14 @@ static void nwpad_frame(void) {
     NWPAD_WHERE("radial");
     if (g.radial.want) { /* A on a selected target: its menu, as a right click */
         uint32_t sel = nwpad_targets_selected();
-        if (sel && g.cfg.enabled && nwpad_backend_in_game() && !nwpad_radial_open()) nwpad_radial_open_for(sel);
+        if (sel && g.cfg.enabled && nwpad_backend_in_game() && !nwpad_radial_open()) {
+            /* a spell waiting for a target takes the object; otherwise it is the object's menu */
+            if (nwpad_targets_pending()) {
+                if (nwpad_targets_complete(sel)) nwpad_targets_end();
+            } else {
+                nwpad_radial_open_for(sel);
+            }
+        }
         g.radial.want = false;
     }
     if (g.radial.action == 1) nwpad_radial_confirm();

@@ -77,6 +77,57 @@ static void light(uint32_t id, bool on) {
     }
 }
 
+/* ---- A pending action target (re-notes F42) ----
+ * CActionTarget keeps the allowed object types at +0x148 (count +0x150) and member-function
+ * callbacks as {pointer, adjustment} pairs with the object before them: +0xd0 validates an
+ * object id (non-zero rejects), +0xa0 gets the id, +0xb8 gets the id's position, +0x118 is
+ * "done" (with +0x140). HandleLMouseDown calls them in that order and then Cleanup. */
+#define TARGET_PANEL_TYPE 0x41635467u
+
+static char *pending_panel(void) {
+    void **gv = (void **)nwpad_sig(NWPAD_SIG_GUI_MANAGER);
+    char *gui = gv ? (char *)*gv : NULL;
+    char *p = gui ? *(char **)(gui + 0x58) : NULL;
+    if (!p) return NULL;
+    int (*type)(void *) = (int (*)(void *))(*(void ***)p)[0x28 / 8];
+    return (unsigned)type(p) == TARGET_PANEL_TYPE ? p : NULL;
+}
+
+bool nwpad_targets_pending(void) { return pending_panel() != NULL; }
+
+/* The pointer to member function at `off` (pointer, adjustment at off+8, object at off-8). */
+static void *member_fn(char *panel, size_t off, char **self) {
+    uintptr_t fn = *(uintptr_t *)(panel + off);
+    *self = *(char **)(panel + off - 8) + *(intptr_t *)(panel + off + 8);
+    if (fn & 1) fn = *(uintptr_t *)(*(char **)*(char ***)self + fn - 1); /* virtual: the vtable slot */
+    return (void *)fn;
+}
+
+bool nwpad_targets_complete(uint32_t id) {
+    char *panel = pending_panel(), *o = object_of(id);
+    void (*cleanup)(void *) = (void (*)(void *))nwpad_sig(NWPAD_SIG_ACTION_TARGET_CLEANUP);
+    if (!panel || !o || !cleanup) return false;
+    uint32_t kind = (uint8_t)o[OBJ_TYPE];
+    const uint32_t *allowed = *(uint32_t **)(panel + 0x148);
+    int n = *(int *)(panel + 0x150), ok = 0;
+    char *self;
+    for (int i = 0; i < n && !ok; i++) {
+        if (allowed[i] != kind) continue;
+        int (*validate)(void *, uint32_t) = (int (*)(void *, uint32_t))member_fn(panel, 0xd0, &self);
+        ok = validate(self, id) == 0;
+    }
+    if (!ok) return false;
+    ((void (*)(void *, uint32_t))member_fn(panel, 0xa0, &self))(self, id);
+    ((void (*)(void *, vec3))member_fn(panel, 0xb8, &self))(self,
+        (vec3){*(float *)(o + OBJ_POS), *(float *)(o + OBJ_POS + 4), *(float *)(o + OBJ_POS + 8)});
+    char *released = *(char **)(panel + 0x170);
+    *(void **)(panel + 0x170) = NULL;
+    cleanup(panel);
+    ((void (*)(void *, void *))member_fn(panel, 0x118, &self))(self, *(void **)(panel + 0x140));
+    if (released) (*(void (***)(void *))released)[1](released);
+    return true;
+}
+
 bool nwpad_targets_step(int dir, float camera_forward_deg) {
     float px, py;
     if (!nwpad_backend_player_pos_world(&px, &py)) return false;

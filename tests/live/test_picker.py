@@ -470,3 +470,44 @@ def test_pad_target_radial_menu(game, ctl, virtual_pad):
     time.sleep(0.4)
     assert not ev()["targets"]["active"]
     assert not server_heard_nwpad(game)
+
+
+def test_pad_target_completes_pending_spell(game, ctl, virtual_pad):
+    """With a spell waiting for a target (Ray of Frost from the quickbar), A on a selected
+    creature targets it, as a click would, instead of opening its radial menu. A selected
+    object the spell can't take (a placeable) is refused and the spell stays waiting."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+
+    def ev():
+        return ctl("state")["events"]
+
+    def select(kind):
+        t = ev()["targets"]
+        for _ in range(t["count"] + 1):
+            if t["selected"] != "00000000" and _target_ids(ctl)[t["selected"]]["type"] == kind:
+                return t["selected"]
+            pad.press("dright")
+            time.sleep(0.4)
+            t = ev()["targets"]
+        pytest.fail(f"no target of type {kind}")
+
+    assert not ev()["targets"]["pending"]
+    ctl("quickbar_use", slot=12)  # Ray of Frost: asks for a target
+    time.sleep(0.8)
+    assert ev()["targets"]["pending"], ev()["targets"]
+    pad.press("dright")
+    time.sleep(0.6)
+    select(9)  # a placeable: not a target for the ray
+    pad.press("a")
+    time.sleep(0.8)
+    assert ev()["targets"]["pending"] and ev()["radial"]["depth"] == 0, ev()
+    select(5)
+    pad.press("a")
+    time.sleep(1.0)
+    assert not ev()["targets"]["pending"], ev()["targets"]
+    assert ev()["radial"]["depth"] == 0  # the spell took it; no menu
+    assert not ev()["targets"]["active"]
+    assert not server_heard_nwpad(game)

@@ -180,6 +180,9 @@ signatures:
     note: F40
     debug: true                 # experiment only, for now; left out of release builds
     symbol: _ZN21CClientExoAppInternal28PerformDefaultActionOnObjectEP10CNWCObject
+  action_target_cleanup:   # CActionTarget::Cleanup(): leaves targeting mode (what HandleLMouseDown does after a pick)
+    note: F42
+    symbol: _ZN13CActionTarget7CleanupEv
   radial_menu_depth:       # int CRadialMenu::static_nMenuDepth: radial menus open (a sub menu counts)
     note: F41
     symbol: _ZN11CRadialMenu17static_nMenuDepthE

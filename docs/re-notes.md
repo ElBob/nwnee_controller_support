@@ -436,3 +436,9 @@ Every function, global, offset, and signature the library uses must have an entr
 - Picking: `HandleMouseMoveCaptured(x, y)` works from the menu centre (`+0x85c/+0x860`): the angle picks the entry (`+0x84c`, 0..7, 0 is down, 2 right, 4 up, 6 left) and the distance squared sets the state (`+0x848`: 2 entry, 3 sub menu entry, 5 outside). The stick is turned into a pointer 100 GUI units from the centre.
 - Doing it: `HandleMenuAction()` (state 2/3 only) runs the entry's callback or opens the sub menu. Cancel: `HandleKeyEvent(0x12, 1)` (Escape) closes the whole thing; Escape closes the lot. Up one level is the sub menu's centre: pointing at the centre (state 0/1) and acting re-opens the parent (`+0x358`), so B does that in a sub menu and Escape only from the top menu (Robert).
 - Proven on the test module: creature and placeable menus, picking all eight directions, a sub menu (Attack/other rings) opening and aiming inside it, B closing. Doors and items go through other menu classes and are untried.
+
+## F42. Completing a pending spell target from the controller (2026-11-10)
+
+- A spell or action that asks for a target puts a `CActionTarget` panel at `CGuiMan+0x58`; `GetCurrentActionTargetObject` identifies it by the type word 0x41635467 from vslot +0x28.
+- `HandleLMouseDown` (what a click does) walks the allowed object types at `+0x148` (count `+0x150`), then calls member-function-pointer callbacks stored as {fn, adjustment} with the object pointer before them: `+0xd0` validates the id (non-zero rejects), `+0xa0` takes the id, `+0xb8` takes the id's position, then `Cleanup()` and the done callback `+0x118` (arg `+0x140`). nwpad does the same with the selected object.
+- Proven on the test module: Ray of Frost from the quickbar, A on a selected creature casts it ("casting Ray of Frost" in the log, target ring on the creature); A on a placeable is refused and the spell stays waiting.

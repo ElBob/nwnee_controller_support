@@ -9,6 +9,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* A spell (or other action) is waiting for a target: the game's modal "action target" panel
+ * (CGuiMan+0x58, type 0x41635467) is up (re-notes F42). */
+bool nwpad_targets_pending(void);
+/* Give the pending action the object as its target, as a click on it does (the allowed-types
+ * check, the pick callbacks, then leaving the mode). False if nothing is pending or the object
+ * isn't an allowed target (the mode stays up then). */
+bool nwpad_targets_complete(uint32_t id);
+
 /* Start the mode (if it is not on) and step to the next (+1) or previous (-1) target.
  * False if there is nothing to select or the game isn't ready. */
 bool nwpad_targets_step(int dir, float camera_forward_deg);
