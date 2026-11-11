@@ -32,8 +32,10 @@ CHANGES = [
     # RT the shortcuts wheel, the d-pad's left / right step through targets. Up / down stay
     # zoom keys. X and Y keep their key bindings.
     ("button_diamond", "button_b", "xinput_button B, , ", "key_press B, Spellbook, , "),
-    ("switch", "button_menu", "xinput_button START, , ", "key_press G, Play and Pause, , "),
-    ("switch", "button_escape", "xinput_button SELECT, , ", "key_press ESCAPE, Esc, , "),
+    # On the Deck these come out opposite to the group's names: the button Robert calls Start
+    # (the game menu) is Steam's button_escape, and Select (the map) is button_menu.
+    ("switch", "button_menu", "xinput_button SELECT, , ", "key_press G, Play and Pause, , "),
+    ("switch", "button_escape", "xinput_button START, , ", "key_press ESCAPE, Esc, , "),
     ("right_trigger", "click", "xinput_button TRIGGER_RIGHT, , ", "mouse_button RIGHT, Quickbar picker, , "),
     ("dpad", "dpad_east", "xinput_button DPAD_RIGHT, , ", "key_press J, Journal, , "),
     ("dpad", "dpad_west", "xinput_button DPAD_LEFT, , ", "key_press M, Show/Hide Map, , "),
