@@ -361,3 +361,60 @@ def test_pad_shortcuts_wheel(game, ctl, virtual_pad):
     time.sleep(1.2)
     assert not ctl("state")["events"]["game_menu_open"]
     assert not server_heard_nwpad(game)
+
+
+def _target_ids(ctl):
+    """The ids of the selectable objects, with their positions, from the debug area listing."""
+    return {o["id"]: o for o in ctl("area_objects", max=300)["area"]["objects"]}
+
+
+def test_pad_target_cycle(game, ctl, virtual_pad):
+    """The d-pad (left or right) starts target selection and steps through the creatures,
+    doors, placeables and items around the player, left to right as the camera looks:
+    right goes to the next, left to the previous, wrapping. B ends it. It does not start
+    while the shortcuts wheel or the spell wheels are up."""
+    if virtual_pad is None:
+        pytest.skip("no virtual pad (python-evdev or /dev/uinput missing)")
+    pad = virtual_pad
+    focus_game()
+
+    def tg():
+        return ctl("state")["events"]["targets"]
+
+    assert not tg()["active"]
+    pad.press("dright")
+    time.sleep(0.6)
+    t = tg()
+    assert t["active"] and t["count"] >= 3, t
+    first = t["selected"]
+    seen = [first]
+    for _ in range(t["count"]):  # right steps through the list and comes back round to the first
+        pad.press("dright")
+        time.sleep(0.4)
+        seen.append(tg()["selected"])
+    assert seen[-1] == first and len(set(seen)) == t["count"], seen
+    pad.press("dleft")  # left goes back one
+    time.sleep(0.4)
+    assert tg()["selected"] == seen[-2], (tg(), seen)
+    # left to right as the camera looks: the bearings of the selected ones rise along the list
+    objs = _target_ids(ctl)
+    me = ctl("state")["creature"]
+    import math
+    fwd = ctl("state")["camera"]["yaw"] + 90.0
+    rel = []
+    for oid in seen[:-1]:
+        o = objs[oid]
+        world = math.degrees(math.atan2(o["y"] - me["y"], o["x"] - me["x"]))
+        rel.append(((fwd - world + 180) % 360) - 180)
+    assert rel == sorted(rel), rel
+    pad.press("b")  # B ends it, and does not also close anything else
+    time.sleep(0.5)
+    assert not tg()["active"]
+    ctl("shortcuts", action="open")  # not while a wheel of ours is up
+    time.sleep(0.5)
+    pad.press("dright")
+    time.sleep(0.4)
+    assert not tg()["active"]
+    ctl("shortcuts", action="cancel")
+    time.sleep(0.4)
+    assert not server_heard_nwpad(game)

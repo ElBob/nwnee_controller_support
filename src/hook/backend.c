@@ -306,6 +306,14 @@ bool nwpad_backend_player_facing(float *facing_deg) {
     return true;
 }
 
+bool nwpad_backend_player_pos_world(float *x, float *y) {
+    void *pc = player_creature();
+    if (!pc) return false;
+    *x = read_float(pc, CLIENT_CREATURE_POS_X);
+    *y = read_float(pc, CLIENT_CREATURE_POS_Y);
+    return true;
+}
+
 #ifdef NWPAD_DEBUG_SURFACES
 bool nwpad_backend_player_pos(float *x, float *y) {
     void *pc = player_creature();

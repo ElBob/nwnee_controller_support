@@ -31,6 +31,8 @@ bool nwpad_backend_nudge_pointer_off_edge(void);
 /* The game's GUI width in pixels, or 0 if unknown (re-notes F26). */
 int nwpad_backend_gui_width(void);
 bool nwpad_backend_camera_set(const nwpad_camera *cam);
+/* The player character's client-side position (what's on screen), world x and y. */
+bool nwpad_backend_player_pos_world(float *x, float *y);
 
 bool nwpad_backend_send_move(const nwpad_move_intent *intent);
 bool nwpad_backend_send_stop(void);

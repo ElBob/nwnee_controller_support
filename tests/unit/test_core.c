@@ -318,6 +318,40 @@ static void test_picker_key(void) {
     CHECK(nwpad_settings_parse(&c, "[nwpad]\ndialog = true # on\n") == 1 && c.dialog);
 }
 
+static void test_targets(void) {
+    /* Player at the origin looking along +Y (forward 90 degrees in the core's convention):
+     * +X is to the right, -X to the left. */
+    nwpad_target in[] = {
+        {5, 5, 1, 0},     /* ahead-right, 45 degrees */
+        {-5, 5, 2, 0},    /* ahead-left */
+        {0, 8, 3, 0},     /* dead ahead */
+        {0, -6, 4, 0},    /* behind: outside the cone */
+        {40, 0, 5, 0},    /* out of range */
+        {0, 3, 6, 0},     /* dead ahead, nearer than 3 */
+        {10, 0, 7, 0},    /* straight right: 90 degrees, inside the cone */
+    };
+    nwpad_target out[16];
+    int n = nwpad_targets_sort(in, 7, 0, 0, 90, NWPAD_TARGET_RANGE, NWPAD_TARGET_CONE, out, 16);
+    CHECK(n == 5);                                              /* the one behind and the far one are out */
+    CHECK(out[0].id == 2 && out[1].id == 6 && out[2].id == 3);  /* left, then ahead nearer first, then ahead */
+    CHECK(out[3].id == 1 && out[4].id == 7);                    /* then right */
+    /* Looking along +X: the bearings turn with the camera. */
+    n = nwpad_targets_sort(in, 7, 0, 0, 0, NWPAD_TARGET_RANGE, NWPAD_TARGET_CONE, out, 16);
+    CHECK(out[0].id == 3 || out[0].id == 6);                    /* what was ahead is now at the left, 90 degrees */
+    CHECK(out[n - 1].id == 4);                                  /* behind us before is at the right now */
+    /* A narrow cone with nothing in it falls back to everything within range. */
+    nwpad_target one[] = {{0, -6, 9, 0}, {0, -9, 8, 0}};
+    n = nwpad_targets_sort(one, 2, 0, 0, 90, NWPAD_TARGET_RANGE, 30, out, 16);
+    CHECK(n == 2);
+    CHECK(nwpad_targets_sort(in, 0, 0, 0, 90, NWPAD_TARGET_RANGE, NWPAD_TARGET_CONE, out, 16) == 0);
+    /* Stepping: from nothing, right goes to the first and left to the last; it wraps. */
+    CHECK(nwpad_target_step(out, 2, 0, +1) == 0 && nwpad_target_step(out, 2, 0, -1) == 1);
+    CHECK(nwpad_target_step(out, 2, out[0].id, +1) == 1 && nwpad_target_step(out, 2, out[1].id, +1) == 0);
+    CHECK(nwpad_target_step(out, 2, out[0].id, -1) == 1 && nwpad_target_step(out, 2, out[1].id, -1) == 0);
+    CHECK(nwpad_target_step(out, 2, 12345, +1) == 0); /* a target that is gone: start over */
+    CHECK(nwpad_target_step(out, 0, 0, +1) == -1);
+}
+
 static void test_picker_select(void) {
     CHECK(nwpad_picker_select((nwpad_vec2){0, 0}, -1) == -1);       /* untouched */
     CHECK(nwpad_picker_select((nwpad_vec2){0, 1}, -1) == 0);        /* up: slot 0 */
@@ -453,6 +487,7 @@ int main(void) {
     test_strip_colour_codes();
     test_picker_key();
     test_picker_select();
+    test_targets();
     test_ubjson();
     test_json_escape();
     test_cursor_rehide();

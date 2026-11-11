@@ -55,7 +55,10 @@ handling, so it acts as the key would; neither works while the picker or a
 conversation is up). The right trigger opens a **shortcuts wheel** of the game's panels (Character,
 Inventory, Spellbook, Journal, Map, Rest, Party, Options): the right stick picks one,
 A does it (the game's own key action), B or another pull of the trigger closes the
-wheel. The left trigger is unused. The keys keep working too, so use whichever your
+wheel. The left trigger is unused. **D-pad left or right** starts target selection:
+it lights the creatures, doors, placeables and items around you one at a time, left to
+right as the camera looks (right: next, left: previous, wrapping), showing a
+creature's name plate; B ends it. The keys keep working too, so use whichever your
 layout sends.
 
 ## Conversations

@@ -28,6 +28,7 @@
 #include "dialog.h"
 #include "dialogui.h"
 #include "shortcuts.h"
+#include "targets.h"
 #include "crashtrace.h"
 #include "sdl_min.h"
 
@@ -164,6 +165,8 @@ static struct {
     } cursor;
     struct { uint64_t total, mouse_motion, keys, filtered, right_edge_fixes, pad_buttons; } events; /* seen by the PollEvent hook */
     int pad_game_action;                 /* Start (1: the game menu) / Select (2: the map), for the next frame */
+    int pad_target_step;                 /* d-pad right (+1) / left (-1): step through the targets, for the next frame */
+    bool pad_target_end;                 /* B in target selection: end it, for the next frame */
     struct {
         bool latched;          /* the shortcuts wheel is wanted (the right trigger opened it) */
         bool trigger_down;     /* the right trigger is past its press point */
@@ -388,6 +391,25 @@ static void control_handler(const char *request, char *out, size_t cap) {
         else if (!strcmp(action, "confirm")) g.picker.action = 1;
         else if (!strcmp(action, "cancel")) g.picker.action = 2;
         snprintf(out, cap, "{\"ok\":%s}", action[0] ? "true" : "false");
+    } else if (strcmp(cmd, "targets") == 0) {
+        /* {"cmd":"targets","step":1|-1} / {"action":"end"}: as the d-pad and B do */
+        double v;
+        char action[16] = "";
+        if (nwpad_json_get_number(request, "step", &v)) g.pad_target_step += v < 0 ? -1 : 1;
+        nwpad_json_get_string(request, "action", action, sizeof action);
+        if (!strcmp(action, "end")) g.pad_target_end = true;
+        snprintf(out, cap, "{\"ok\":true}");
+    } else if (strcmp(cmd, "hilite_object") == 0) {
+        /* {"cmd":"hilite_object","id":"80000060","on":1,"r":1,"g":0.8,"b":0.2} (research, F40) */
+        char id[16] = "";
+        double on = 1, r = 1, gr = 0.8, b = 0.2;
+        nwpad_json_get_string(request, "id", id, sizeof id);
+        nwpad_json_get_number(request, "on", &on);
+        nwpad_json_get_number(request, "r", &r);
+        nwpad_json_get_number(request, "g", &gr);
+        nwpad_json_get_number(request, "b", &b);
+        int t = nwpad_game_debug_hilite((uint32_t)strtoul(id, NULL, 16), on != 0, (float)r, (float)gr, (float)b);
+        snprintf(out, cap, "{\"ok\":%s,\"type\":%d}", t >= 0 ? "true" : "false", t);
     } else if (strcmp(cmd, "click_object") == 0) {
         /* {"cmd":"click_object","id":"80000060"}: the game's click on an object (research, F40) */
         char id[16] = "";
@@ -445,7 +467,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          "\"filtered\":%llu,\"right_edge_fixes\":%llu,\"right_edge_pinned\":%s,"
                          "\"last_motion_x\":%d,\"last_motion_xrel\":%d,\"pad_buttons\":%llu,"
                          "\"game_menu_open\":%s,\"game_map_open\":%s,"
-                         "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d}}",
+                         "\"shortcuts\":{\"open\":%s,\"selected\":%d,\"last_action\":%d},"
+                         "\"targets\":{\"active\":%s,\"selected\":\"%08x\",\"count\":%d}}",
                          (unsigned long long)g.frames, (unsigned long long)now_ms(),
                          nwpad_backend_in_game() ? "true" : "false",
                          g.virt.active ? "true" : "false",
@@ -457,7 +480,8 @@ static void control_handler(const char *request, char *out, size_t cap) {
                          (unsigned long long)g.events.pad_buttons,
                          nwpad_game_menu_open() ? "true" : "false", nwpad_game_map_open() ? "true" : "false",
                          nwpad_shortcuts_open() ? "true" : "false", nwpad_shortcuts_selected(),
-                         nwpad_shortcuts_last_action());
+                         nwpad_shortcuts_last_action(), nwpad_targets_active() ? "true" : "false",
+                         (unsigned)nwpad_targets_selected(), nwpad_targets_count());
         if (n > 0 && (size_t)n < cap)
             n += snprintf(out + n, cap - (size_t)n,
                           ",\"frame_cost_us\":{\"p50\":%u,\"p99\":%u,\"max\":%.1f,\"frames\":%llu,"
@@ -662,6 +686,23 @@ static void nwpad_frame(void) {
         nwpad_dialog_init();
         if (g.cfg.dialog) nwpad_dialogui_setup_font();
     }
+    NWPAD_WHERE("targets");
+    if (g.pad_target_end || nwpad_shortcuts_open() || nwpad_dialogui_open() || nwpad_picker_open()) {
+        nwpad_targets_end(); /* B, or a window of ours opened: put the highlight back */
+        g.pad_target_step = 0;
+    }
+    g.pad_target_end = false;
+    if (g.pad_target_step && g.cfg.enabled && nwpad_backend_in_game()) {
+        nwpad_camera tcam;
+        nwpad_camera_limits tlim;
+        if (nwpad_backend_camera_get(&tcam, &tlim)) {
+            int dir = g.pad_target_step < 0 ? -1 : 1;
+            for (int k = 0; k < (g.pad_target_step < 0 ? -g.pad_target_step : g.pad_target_step) && k < 4; k++)
+                nwpad_targets_step(dir, nwpad_backend_camera_forward(&tcam));
+        }
+    }
+    g.pad_target_step = 0;
+    nwpad_targets_frame();
     NWPAD_WHERE("shortcuts");
     if (g.shortcuts.action) { /* A (do it) / B or the trigger again (close) */
         nwpad_shortcuts_close(g.shortcuts.action == 1);
@@ -834,8 +875,17 @@ static void pad_button(const SDL_Event *event) {
     int button = event->cbutton.button;
     int step = button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? -1 : button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : 0;
     int act = button == SDL_CONTROLLER_BUTTON_A ? 1 : button == SDL_CONTROLLER_BUTTON_B ? 2 : 0; /* 1 confirm, 2 cancel */
-    if (!step && !act && button != SDL_CONTROLLER_BUTTON_START && button != SDL_CONTROLLER_BUTTON_BACK) return;
+    int dpad = button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : 0;
+    if (!step && !act && !dpad && button != SDL_CONTROLLER_BUTTON_START && button != SDL_CONTROLLER_BUTTON_BACK) return;
     g.events.pad_buttons++;
+    if (dpad) { /* left / right start target selection and step through it, unless a window of ours is up */
+        if (!nwpad_shortcuts_open() && !nwpad_dialogui_open() && !nwpad_picker_open()) g.pad_target_step += dpad;
+        return;
+    }
+    if (act == 2 && nwpad_targets_active()) { /* B ends target selection (and nothing else this press) */
+        g.pad_target_end = true;
+        return;
+    }
     if (button == SDL_CONTROLLER_BUTTON_START || button == SDL_CONTROLLER_BUTTON_BACK) {
         g.pad_game_action = button == SDL_CONTROLLER_BUTTON_START ? 1 : 2; /* 1 game menu, 2 map: the frame sends it */
         return;

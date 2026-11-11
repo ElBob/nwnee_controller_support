@@ -18,10 +18,16 @@ typedef struct {
 void *nwpad_client_app(void);
 /* The in-game GUI (CGuiInGame), outside a module NULL. */
 void *nwpad_in_game_gui(void);
+/* The client's current area (a CNWCArea*), or NULL: CClientExoApp -> the internal app ->
+ * module at +0x30 -> area at module+0xf8 (re-notes F40). */
+char *nwpad_client_area(void);
 #ifdef NWPAD_DEBUG_SURFACES
 /* Research (F40): JSON list of the client area's objects: id, type byte, +0xa8 flag, +0x11c flag,
  * name, position when readable. */
 void nwpad_game_debug_area_objects(char *out, size_t cap, int max);
+/* Research (F40): light up (on) or un-light the client object with this id the way the game's
+ * highlight-all does (vslot 0x160 / 0x168, with the creature's MouseOver). rgb 0-1. */
+int nwpad_game_debug_hilite(uint32_t id, bool on, float r, float g, float b);
 /* Research (F40): do the game's click on the client object with this id, as a mouse click on it
  * would (PerformDefaultActionOnObject). Returns the game's result, -1 if it couldn't try. */
 int nwpad_game_debug_click_object(uint32_t id);

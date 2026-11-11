@@ -19,22 +19,19 @@ void *nwpad_in_game_gui(void) {
     return app ? get_gui(app) : NULL;
 }
 
-#ifdef NWPAD_DEBUG_SURFACES
-#include <stdio.h>
-#include <string.h>
-
-/* The client's current area: CClientExoApp -> module (+0x30 of the internal app, as
- * HandleTooltip reads it) -> area at module+0xf8 (re-notes F40). */
-static char *client_area(void) {
-    void **app_manager = (void **)nwpad_sig(NWPAD_SIG_APP_MANAGER);
-    char *app = app_manager && *app_manager ? *(char **)*app_manager : NULL;
+char *nwpad_client_area(void) {
+    char *app = nwpad_client_app();
     char *internal = app ? *(char **)(app + 0x8) : NULL;
     char *module = internal ? *(char **)(internal + 0x30) : NULL;
     return module ? *(char **)(module + 0xf8) : NULL;
 }
 
+#ifdef NWPAD_DEBUG_SURFACES
+#include <stdio.h>
+#include <string.h>
+
 void nwpad_game_debug_area_objects(char *out, size_t cap, int max) {
-    char *area = client_area();
+    char *area = nwpad_client_area();
     void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
     void *app = nwpad_client_app();
     if (!area || !object || !app) {
@@ -51,12 +48,35 @@ void nwpad_game_debug_area_objects(char *out, size_t cap, int max) {
         if (!nwc) continue;
         char *o = (char *)nwc;
         n += (size_t)snprintf(out + n, cap - n,
-                              "%s{\"id\":\"%08x\",\"type\":%u,\"a8\":%u,\"f11c\":%d,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f}",
+                              "%s{\"id\":\"%08x\",\"type\":%u,\"a8\":%u,\"f11c\":%d,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f,"
+                              "\"flags120\":%u,\"anim\":\"%016llx\",\"f10c\":%.2f}",
                               shown ? "," : "", ids[i], (unsigned)(uint8_t)o[0xc], (unsigned)(uint8_t)o[0xa8],
-                              *(int *)(o + 0x11c), *(float *)(o + 0x38), *(float *)(o + 0x3c), *(float *)(o + 0x40));
+                              *(int *)(o + 0x11c), *(float *)(o + 0x38), *(float *)(o + 0x3c), *(float *)(o + 0x40),
+                              (unsigned)(*(uint8_t *)(o + 0x120)), (unsigned long long)*(uint64_t *)(o + 0x78),
+                              *(float *)(o + 0x10c));
         shown++;
     }
     if (n < cap) snprintf(out + n, cap - n, "],\"shown\":%d}", shown);
+}
+
+typedef struct { float x, y, z; } vec3; /* passed by value in two SSE registers, as the game's Vector */
+
+int nwpad_game_debug_hilite(uint32_t id, bool on, float r, float g, float b) {
+    void *(*object)(void *, uint32_t) = (void *(*)(void *, uint32_t))nwpad_sig(NWPAD_SIG_CLIENT_GET_GAME_OBJECT);
+    void *app = nwpad_client_app();
+    void **gobj = object && app ? object(app, id) : NULL;
+    void **nwc = gobj ? ((void **(*)(void *))((void **)*gobj)[0x20 / 8])(gobj) : NULL; /* AsNWCObject */
+    if (!nwc) return -1;
+    void **vt = (void **)*nwc;
+    int type = ((uint8_t *)nwc)[0xc];
+    if (on) {
+        if (type == 5) ((void (*)(void *, int))vt[0x110 / 8])(nwc, 1); /* creature MouseOver (its name) */
+        ((void (*)(void *, vec3, uint8_t, float, int))vt[0x160 / 8])(nwc, (vec3){r, g, b}, 2, 1.0f, 1);
+    } else {
+        if (type == 5) ((void (*)(void *))vt[0x118 / 8])(nwc); /* MouseOff */
+        ((void (*)(void *, uint8_t))vt[0x168 / 8])(nwc, 2);
+    }
+    return type;
 }
 
 int nwpad_game_debug_click_object(uint32_t id) {

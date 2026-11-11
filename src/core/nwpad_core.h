@@ -230,6 +230,26 @@ int nwpad_picker_select(nwpad_vec2 stick, int current);
 /* The same for a ring of `slots` equal sectors (the shortcuts wheel has 8). */
 int nwpad_ring_select(nwpad_vec2 stick, int current, int slots);
 
+/* ---- Target selection (Robert, 2026-11-10; re-notes F40) ---- */
+typedef struct {
+    float x, y;     /* world position */
+    uint32_t id;
+    int kind;       /* the caller's: creature, door, placeable, item */
+} nwpad_target;
+#define NWPAD_TARGET_RANGE 25.0f /* metres from the player */
+#define NWPAD_TARGET_CONE 100.0f /* degrees either side of the camera's forward: in front, widening */
+/* The targets worth cycling through, in `out` (up to `cap`), left to right as the
+ * camera looks: those within `range` of the player and within `cone_deg` either side of
+ * `forward_deg` (the camera's forward, the core's angle convention), ordered by their
+ * bearing from left (smallest) to right, nearer first when two are on one bearing.
+ * Returns how many. If nothing is in the cone, the nearest ones all round are used. */
+int nwpad_targets_sort(const nwpad_target *in, int n, float px, float py, float forward_deg, float range,
+                       float cone_deg, nwpad_target *out, int cap);
+/* The index in `list` (n entries) to go to from `current_id` (0: nothing selected yet)
+ * stepping `dir` (+1 right, -1 left), wrapping round; starting from nothing, right goes
+ * to the first and left to the last. */
+int nwpad_target_step(const nwpad_target *list, int n, uint32_t current_id, int dir);
+
 /* ---- Game text ---- */
 /* Remove the game's inline colour codes ("<c" + 3 colour bytes + ">" ... "</c>",
  * what conversation markup like <StartCheck> becomes, re-notes F36) in place,

@@ -8,7 +8,7 @@ Creates a pad SDL's game controller database knows (Microsoft Xbox 360 pad, vend
 045e product 028e, with the usual evdev button and axis codes), waits for the
 compositor and the game to find it, then plays SPEC and keeps the device for
 --hold seconds. SPEC is comma-separated steps: a button name (a b x y lb rb back
-start guide ls rs) or a trigger (lt rt) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
+start guide ls rs) a trigger (lt rt) or a d-pad direction (dleft dright dup ddown) taps it, "+name" presses it, "-name" releases it, "wait:SECONDS" waits.
 With --stdin the pad stays until stdin closes (a line "ready" is printed once it exists).
 The device disappears when the script ends.
 """
@@ -26,6 +26,7 @@ BUTTONS = {
     "lb": e.BTN_TL, "rb": e.BTN_TR, "back": e.BTN_SELECT, "start": e.BTN_START,
     "guide": e.BTN_MODE, "ls": e.BTN_THUMBL, "rs": e.BTN_THUMBR,
 }
+HAT = {"dleft": (e.ABS_HAT0X, -1), "dright": (e.ABS_HAT0X, 1), "dup": (e.ABS_HAT0Y, -1), "ddown": (e.ABS_HAT0Y, 1)}
 TRIGGERS = {"lt": e.ABS_Z, "rt": e.ABS_RZ}  # axes, 0 to 255
 
 
@@ -53,6 +54,8 @@ def main() -> int:
                 name = step.lstrip("+-")
                 if name in TRIGGERS:  # an axis: 255 pressed, 0 released
                     code, press, release, kind = TRIGGERS[name], 255, 0, e.EV_ABS
+                elif name in HAT:  # the d-pad is a hat: -1 / 1 pressed, 0 released
+                    (code, press), release, kind = HAT[name], 0, e.EV_ABS
                 elif name in BUTTONS:
                     code, press, release, kind = BUTTONS[name], 1, 0, e.EV_KEY
                 else:

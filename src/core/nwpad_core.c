@@ -672,6 +672,57 @@ int nwpad_ubjson_from_json(const char *json, uint8_t *out, size_t cap) {
     return u.ok ? (int)u.n : -1;
 }
 
+/* A target's bearing relative to the camera's forward, in degrees: negative to the left,
+ * positive to the right. World bearings run counter-clockwise, so a target to the right of
+ * forward has the smaller one, and forward - world is positive for it. */
+static float rel_bearing(const nwpad_target *t, float px, float py, float forward_deg) {
+    float world = atan2f(t->y - py, t->x - px) * NWPAD_DEG_PER_RAD;
+    return nwpad_angle_diff(forward_deg, world);
+}
+
+typedef struct { nwpad_target t; float rel, dist; } ranked;
+
+static int ranked_cmp(const void *a, const void *b) {
+    const ranked *x = a, *y = b;
+    if (x->rel != y->rel) return x->rel < y->rel ? -1 : 1;
+    if (x->dist != y->dist) return x->dist < y->dist ? -1 : 1;
+    return x->t.id < y->t.id ? -1 : x->t.id > y->t.id;
+}
+
+int nwpad_targets_sort(const nwpad_target *in, int n, float px, float py, float forward_deg, float range,
+                       float cone_deg, nwpad_target *out, int cap) {
+    ranked r[256];
+    int count = 0, near_count = 0;
+    for (int i = 0; i < n && count < 256; i++) {
+        float dist = hypotf(in[i].x - px, in[i].y - py);
+        if (dist > range || dist < 0.01f) continue; /* the player's own place is not a target */
+        r[count].t = in[i];
+        r[count].rel = rel_bearing(&in[i], px, py, forward_deg);
+        r[count].dist = dist;
+        if (fabsf(r[count].rel) <= cone_deg) near_count++;
+        count++;
+    }
+    if (near_count > 0) { /* only those in front */
+        int k = 0;
+        for (int i = 0; i < count; i++)
+            if (fabsf(r[i].rel) <= cone_deg) r[k++] = r[i];
+        count = k;
+    } /* else everything within range, all round */
+    qsort(r, (size_t)count, sizeof r[0], ranked_cmp);
+    int m = count < cap ? count : cap;
+    for (int i = 0; i < m; i++) out[i] = r[i].t;
+    return m;
+}
+
+int nwpad_target_step(const nwpad_target *list, int n, uint32_t current_id, int dir) {
+    if (n <= 0) return -1;
+    int at = -1;
+    for (int i = 0; i < n && current_id; i++)
+        if (list[i].id == current_id) at = i;
+    if (at < 0) return dir < 0 ? n - 1 : 0;
+    return (at + (dir < 0 ? n - 1 : 1)) % n;
+}
+
 int nwpad_picker_select(nwpad_vec2 stick, int current) {
     return nwpad_ring_select(stick, current, NWPAD_PICKER_SLOTS);
 }
